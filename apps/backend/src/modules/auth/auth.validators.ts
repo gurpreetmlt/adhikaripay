@@ -1,0 +1,142 @@
+import { z } from "zod";
+import { AUTH_PORTALS, USER_ROLES } from "@adhikaripay/shared-types";
+
+const mobileSchema = z
+  .string()
+  .regex(/^[6-9]\d{9}$/, "Must be a valid 10-digit Indian mobile number");
+
+const passwordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .regex(/[A-Za-z]/, "Password must contain a letter")
+  .regex(/\d/, "Password must contain a number");
+
+export const registerSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  mobile: mobileSchema,
+  email: z.string().trim().toLowerCase().email().optional(),
+  password: passwordSchema,
+  role: z.enum(USER_ROLES),
+  panNumber: z
+    .string()
+    .regex(/^[A-Z]{5}\d{4}[A-Z]$/, "Must be a valid PAN")
+    .optional(),
+  aadhaarNumber: z
+    .string()
+    .regex(/^\d{12}$/, "Must be a valid 12-digit Aadhaar number")
+    .optional(),
+});
+export type RegisterInput = z.infer<typeof registerSchema>;
+
+/** Agent: 10-digit mobile. Admin: username `admin` only (no OTP, no mobile login). */
+export const loginSchema = z
+  .object({
+    mobile: z.string().trim().optional(),
+    username: z.string().trim().optional(),
+    password: z.string().min(1),
+    portal: z.enum(AUTH_PORTALS).default("agent"),
+  })
+  .superRefine((data, ctx) => {
+    if (data.portal === "admin") {
+      const id = (data.username ?? data.mobile ?? "").trim().toLowerCase();
+      if (id !== "admin") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Admin login requires username `admin`",
+          path: ["username"],
+        });
+      }
+      return;
+    }
+    if (!data.mobile || !/^[6-9]\d{9}$/.test(data.mobile)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Must be a valid 10-digit Indian mobile number",
+        path: ["mobile"],
+      });
+    }
+  });
+export type LoginInput = z.infer<typeof loginSchema>;
+
+export const refreshSchema = z.object({
+  refreshToken: z.string().min(1),
+});
+export type RefreshInput = z.infer<typeof refreshSchema>;
+
+const AGENT_LOGIN_ROLES = ["retailer", "distributor", "master_distributor"] as const;
+
+export const otpRequestSchema = z.object({
+  mobile: mobileSchema,
+  portal: z.enum(AUTH_PORTALS).default("agent"),
+  /** UI "Continue as" — must match the account role when the number is registered. */
+  role: z.enum(AGENT_LOGIN_ROLES).optional(),
+});
+export type OtpRequestInput = z.infer<typeof otpRequestSchema>;
+
+export const otpVerifySchema = z.object({
+  mobile: mobileSchema,
+  otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
+  portal: z.enum(AUTH_PORTALS).default("agent"),
+  role: z.enum(AGENT_LOGIN_ROLES).optional(),
+});
+export type OtpVerifyInput = z.infer<typeof otpVerifySchema>;
+
+export const mpinLoginSchema = z.object({
+  mobile: mobileSchema,
+  mpin: z.string().regex(/^\d{4}$/, "MPIN must be 4 digits"),
+  portal: z.enum(AUTH_PORTALS).default("agent"),
+  role: z.enum(AGENT_LOGIN_ROLES).optional(),
+});
+export type MpinLoginInput = z.infer<typeof mpinLoginSchema>;
+
+export const setLoginMpinSchema = z.object({
+  mpin: z.string().regex(/^\d{4}$/, "MPIN must be 4 digits"),
+  /** Required only when changing an existing MPIN. */
+  currentMpin: z.string().regex(/^\d{4}$/).optional(),
+});
+export type SetLoginMpinInput = z.infer<typeof setLoginMpinSchema>;
+
+/** Public retailer self-signup under a distributor (sponsor UID). */
+export const signupRequestSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  mobile: mobileSchema,
+  sponsorUid: z.string().trim().min(6).max(20),
+  portal: z.enum(AUTH_PORTALS).default("agent"),
+});
+export type SignupRequestInput = z.infer<typeof signupRequestSchema>;
+
+export const signupVerifySchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  mobile: mobileSchema,
+  otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
+  sponsorUid: z.string().trim().min(6).max(20),
+  /** Optional login password; if omitted a strong random one is generated (OTP/PIN login). */
+  password: passwordSchema.optional(),
+  portal: z.enum(AUTH_PORTALS).default("agent"),
+});
+export type SignupVerifyInput = z.infer<typeof signupVerifySchema>;
+
+export const kycSubmitSchema = z.object({
+  fullName: z.string().trim().min(2).max(120).optional(),
+  panNumber: z
+    .string()
+    .regex(/^[A-Z]{5}\d{4}[A-Z]$/, "Must be a valid PAN"),
+  aadhaarNumber: z
+    .string()
+    .regex(/^\d{12}$/, "Must be a valid 12-digit Aadhaar number"),
+  email: z.string().trim().toLowerCase().email().optional(),
+  address: z.string().trim().max(250).optional(),
+  city: z.string().trim().max(80).optional(),
+  pincode: z
+    .string()
+    .regex(/^\d{6}$/)
+    .optional(),
+  bankAccountName: z.string().trim().max(120).optional(),
+  bankAccountNumber: z.string().trim().max(30).optional(),
+  bankIfsc: z
+    .string()
+    .regex(/^[A-Z]{4}0[A-Z0-9]{6}$/)
+    .optional(),
+  bankName: z.string().trim().max(120).optional(),
+});
+export type KycSubmitInput = z.infer<typeof kycSubmitSchema>;

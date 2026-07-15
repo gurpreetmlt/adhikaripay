@@ -1,0 +1,84 @@
+import {
+  pgTable,
+  uuid,
+  numeric,
+  boolean,
+  timestamp,
+  index,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
+import { userRoleEnum, commissionRuleTypeEnum } from "./enums";
+import { services } from "./catalog";
+import { users } from "./users";
+import { transactions } from "./transactions";
+import { walletLedgerGroups } from "./wallets";
+
+// Config: "for service X, role Y earns flat/percentage Z". Evaluated top-down by effectiveFrom.
+export const commissionRules = pgTable(
+  "commission_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    serviceId: uuid("service_id")
+      .notNull()
+      .references(() => services.id, { onDelete: "cascade" }),
+    role: userRoleEnum("role").notNull(),
+    ruleType: commissionRuleTypeEnum("rule_type").notNull(),
+    // percentage stored as 0-100 (e.g. 1.5 = 1.5%), flat stored as rupees
+    value: numeric("value", { precision: 10, scale: 4 }).notNull(),
+    minAmount: numeric("min_amount", { precision: 14, scale: 2 }),
+    maxAmount: numeric("max_amount", { precision: 14, scale: 2 }),
+    effectiveFrom: timestamp("effective_from", { withTimezone: true }).notNull().defaultNow(),
+    effectiveTo: timestamp("effective_to", { withTimezone: true }),
+    isActive: boolean("is_active").notNull().default(true),
+  },
+  (table) => [index("commission_rules_service_role_idx").on(table.serviceId, table.role)],
+);
+
+/** Per-agent override — wins over role-based `commission_rules` when active. */
+export const userCommissionRates = pgTable(
+  "user_commission_rates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    serviceId: uuid("service_id")
+      .notNull()
+      .references(() => services.id, { onDelete: "cascade" }),
+    ruleType: commissionRuleTypeEnum("rule_type").notNull(),
+    value: numeric("value", { precision: 10, scale: 4 }).notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("user_commission_rates_user_service_key").on(table.userId, table.serviceId),
+    index("user_commission_rates_user_idx").on(table.userId),
+  ],
+);
+
+// Actual payout per transaction, one row per beneficiary in the hierarchy chain
+// (retailer -> distributor -> master_distributor -> admin). Written by the async
+// commission-distribution job, each row backed by a matching credit in wallet_ledger_entries.
+export const commissionLedger = pgTable(
+  "commission_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    beneficiaryUserId: uuid("beneficiary_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    role: userRoleEnum("role").notNull(),
+    amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+    ledgerGroupId: uuid("ledger_group_id").references(() => walletLedgerGroups.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("commission_ledger_transaction_idx").on(table.transactionId),
+    index("commission_ledger_beneficiary_idx").on(table.beneficiaryUserId),
+  ],
+);

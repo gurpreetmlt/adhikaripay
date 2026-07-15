@@ -1,0 +1,110 @@
+// Provider-agnostic contract for the wrapper layer. Every real banking rail
+// (AEPS, DMT, BBPS, recharge) goes through an adapter implementing this
+// interface — the rest of the codebase never talks to Eko/PaySprint directly,
+// so swapping or adding a provider is a registry entry, not a refactor.
+
+export type ProviderTxnStatus = "success" | "failed" | "pending";
+
+export interface ProviderResult<TData = Record<string, unknown>> {
+  success: boolean;
+  status: ProviderTxnStatus;
+  providerTxnId: string | null;
+  amount: string | null;
+  message: string;
+  /** Normalized operation-specific data (balance, bill details, beneficiary id...). */
+  data: TData;
+  /** Raw provider response — persisted to Mongo provider_logs, never to Postgres. */
+  raw: Record<string, unknown>;
+}
+
+// ── Operation params ────────────────────────────────────────────────────────
+
+export interface AepsParams {
+  retailerUserId: string;
+  aadhaarNumber: string;
+  bankIin: string;
+  mobile: string;
+  /** Base64 PID block from the RD-service biometric device. Mocked until devices arrive. */
+  biometricPayload: string;
+  amount?: string;
+}
+
+export interface DmtBeneficiaryParams {
+  retailerUserId: string;
+  customerMobile: string;
+  name: string;
+  accountNumber: string;
+  ifsc: string;
+}
+
+export interface DmtTransferParams {
+  retailerUserId: string;
+  customerMobile: string;
+  beneficiaryId: string;
+  amount: string;
+  mode: "imps" | "neft";
+}
+
+export interface BbpsFetchBillParams {
+  retailerUserId: string;
+  billerCode: string;
+  /** Consumer number / CA number / registered mobile, per biller. */
+  customerParams: Record<string, string>;
+}
+
+export interface BbpsPayBillParams extends BbpsFetchBillParams {
+  amount: string;
+  /** Returned by fetchBill; ties the payment to the fetched bill. */
+  billFetchRef: string;
+}
+
+export interface RechargeParams {
+  retailerUserId: string;
+  operatorCode: string;
+  accountRef: string; // mobile number / DTH subscriber id
+  amount: string;
+}
+
+export interface CheckStatusParams {
+  providerTxnId: string | null;
+  /** Our txnRef — providers that support client-ref lookup use this as fallback. */
+  clientRef: string;
+}
+
+// ── Adapter contract ────────────────────────────────────────────────────────
+
+export interface ProviderAdapter {
+  readonly code: string;
+
+  aepsBalanceEnquiry(params: AepsParams): Promise<ProviderResult<{ balance: string }>>;
+  aepsWithdraw(params: AepsParams): Promise<ProviderResult>;
+  aepsMiniStatement(
+    params: AepsParams,
+  ): Promise<ProviderResult<{ statement: { date: string; narration: string; amount: string; type: "credit" | "debit" }[] }>>;
+  aadhaarPay(params: AepsParams): Promise<ProviderResult>;
+
+  dmtAddBeneficiary(params: DmtBeneficiaryParams): Promise<ProviderResult<{ beneficiaryId: string }>>;
+  dmtTransfer(params: DmtTransferParams): Promise<ProviderResult>;
+
+  bbpsFetchBill(
+    params: BbpsFetchBillParams,
+  ): Promise<ProviderResult<{ billFetchRef: string; customerName: string; billAmount: string; dueDate: string }>>;
+  bbpsPayBill(params: BbpsPayBillParams): Promise<ProviderResult>;
+
+  recharge(params: RechargeParams): Promise<ProviderResult>;
+
+  checkStatus(params: CheckStatusParams): Promise<ProviderResult>;
+}
+
+/** Operation names — used for provider_logs and per-operation routing. */
+export type ProviderOperation =
+  | "aeps_balance_enquiry"
+  | "aeps_withdraw"
+  | "aeps_mini_statement"
+  | "aadhaar_pay"
+  | "dmt_add_beneficiary"
+  | "dmt_transfer"
+  | "bbps_fetch_bill"
+  | "bbps_pay_bill"
+  | "recharge"
+  | "check_status";

@@ -1,0 +1,75 @@
+import "dotenv/config";
+import { and, eq, isNull } from "drizzle-orm";
+import { db, pgPool } from "../src/db/postgres";
+import { users, userHierarchy } from "../src/db/postgres/schema";
+import { provisionWalletsForUser } from "../src/modules/wallet/wallet.service";
+import { hashPassword } from "../src/utils/password";
+import { generateUid } from "../src/utils/uid";
+
+/** Fixed admin portal credentials — username `admin` (not mobile). OTP disabled for admin. */
+const ADMIN_LOGIN_USER = "admin";
+const DEFAULT_MOBILE = "9999999999";
+const DEFAULT_PASSWORD = "Dg99@cr89";
+
+// Creates or resets the single root admin. Run: npm run seed:admin -w @adhikaripay/backend
+async function main() {
+  const mobile = process.env.SEED_ADMIN_MOBILE ?? DEFAULT_MOBILE;
+  const password = process.env.SEED_ADMIN_PASSWORD ?? DEFAULT_PASSWORD;
+  const passwordHash = await hashPassword(password);
+
+  const [existing] = await db
+    .select()
+    .from(users)
+    .where(and(eq(users.role, "admin"), isNull(users.parentId)))
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(users)
+      .set({
+        passwordHash,
+        name: "Adhikari Pay Admin",
+        isActive: true,
+        kycStatus: "verified",
+      })
+      .where(eq(users.id, existing.id));
+
+    console.log(
+      `Root admin updated — login username: ${ADMIN_LOGIN_USER}, password: ${password} (mobile in DB: ${existing.mobile})`,
+    );
+    await pgPool.end();
+    return;
+  }
+
+  const uid = generateUid("admin");
+
+  await db.transaction(async (tx) => {
+    const [admin] = await tx
+      .insert(users)
+      .values({
+        uid,
+        parentId: null,
+        role: "admin",
+        name: "Adhikari Pay Admin",
+        mobile,
+        passwordHash,
+        kycStatus: "verified",
+      })
+      .returning();
+
+    if (!admin) throw new Error("Failed to create admin");
+
+    await tx.insert(userHierarchy).values({ ancestorId: admin.id, descendantId: admin.id, depth: 0 });
+    await provisionWalletsForUser(tx, admin.id, admin.role);
+  });
+
+  console.log(
+    `Root admin created — login username: ${ADMIN_LOGIN_USER}, password: ${password}, uid: ${uid}`,
+  );
+  await pgPool.end();
+}
+
+main().catch((err) => {
+  console.error("Seeding admin failed:", err);
+  process.exit(1);
+});

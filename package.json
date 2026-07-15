@@ -1,0 +1,39 @@
+{
+  "name": "adhikari-pay",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "npm@10.8.2",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.8.0"
+  },
+  "description": "Adhikari Pay — B2B agent fintech (AEPS, DMT, BBPS, recharge). Workspace packages: @adhikaripay/*.",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "Frontend"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --filter=@adhikaripay/backend --filter=@adhikaripay/admin-web --filter=@adhikaripay/web --filter=@adhikaripay/frontend",
+    "dev:all": "turbo run dev",
+    "dev:backend": "npm run dev -w @adhikaripay/backend",
+    "dev:admin": "npm run dev -w @adhikaripay/admin-web",
+    "dev:web": "npm run dev -w @adhikaripay/web",
+    "dev:frontend": "npm run dev -w @adhikaripay/frontend",
+    "dev:webs": "bash scripts/dev-all-web.sh",
+    "start:web": "bash scripts/dev-web.sh",
+    "start:mobile": "bash scripts/dev-mobile.sh",
+    "dev:mobile": "cd apps/mobile && react-native start",
+    "android": "npm run android -w @adhikaripay/mobile",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "db:migrate": "npm run db:migrate -w @adhikaripay/backend",
+    "db:seed": "npm run seed:admin -w @adhikaripay/backend",
+    "sync:icons": "bash scripts/sync-icons.sh"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4",
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  }
+}

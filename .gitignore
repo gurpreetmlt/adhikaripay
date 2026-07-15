@@ -1,0 +1,42 @@
+node_modules/
+.turbo/
+dist/
+build/
+.next/
+out/
+.dev-logs/
+
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Secrets — never push credentials
+LOGIN.md
+LOGIN.production.md
+account-details.txt
+*.production.env
+
+*.log
+npm-debug.log*
+
+.DS_Store
+
+drizzle/meta/
+
+coverage/
+
+.vscode/*
+!.vscode/extensions.json
+
+android/app/build/
+ios/build/
+*.keystore
+!debug.keystore
+
+# Non-project folders
+Edu/
+
+# Agent transcripts & terminal state (Cursor IDE)
+.cursor/
+agent-transcripts/

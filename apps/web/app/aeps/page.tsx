@@ -1,0 +1,726 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import clsx from "clsx";
+import {
+  ArrowLeft,
+  ChevronRight,
+  CircleDot,
+  Eye,
+  EyeOff,
+  Fingerprint,
+  Plus,
+  ScanEye,
+  Search,
+  Star,
+  X,
+} from "lucide-react";
+import { AppShell } from "@/components/layout/AppShell";
+import { useAuthStore } from "@/lib/store";
+import { B } from "@/lib/brand";
+
+/* ── Bank data (top Indian banks used in AEPS) ─────────────────────── */
+
+interface Bank {
+  id: string;
+  name: string;
+  shortName: string;
+  color: string;
+  letter: string;
+}
+
+const BANKS: Bank[] = [
+  { id: "bob", name: "Bank of Baroda", shortName: "Bank of Barod...", color: "#E64A19", letter: "B" },
+  { id: "pnb", name: "Punjab National Bank", shortName: "Punjab Nationa...", color: "#D32F2F", letter: "P" },
+  { id: "psb", name: "Punjab & Sind Bank", shortName: "Punjab & Sind...", color: "#7B1FA2", letter: "P" },
+  { id: "sbi", name: "State Bank of India", shortName: "State Bank of...", color: "#1565C0", letter: "S" },
+  { id: "hdfc", name: "HDFC Bank", shortName: "HDFC Bank", color: "#00338D", letter: "H" },
+  { id: "airtel", name: "Airtel Payment Bank", shortName: "Airtel Paymen...", color: "#E53935", letter: "A" },
+  { id: "icici", name: "ICICI Bank", shortName: "ICICI Bank", color: "#F57C00", letter: "I" },
+  { id: "pgb", name: "Punjab Gramin Bank", shortName: "Punjab Gramin...", color: "#E91E63", letter: "P" },
+  { id: "uco", name: "UCO Bank", shortName: "UCO Bank", color: "#7B1FA2", letter: "U" },
+  { id: "boi", name: "Bank of India", shortName: "Bank of India", color: "#E65100", letter: "B" },
+  { id: "canara", name: "Canara Bank", shortName: "Canara Bank", color: "#1976D2", letter: "C" },
+  { id: "indian", name: "Indian Bank", shortName: "Indian Bank", color: "#0D47A1", letter: "I" },
+  { id: "union", name: "Union Bank of India", shortName: "Union Bank", color: "#F57C00", letter: "U" },
+  { id: "kotak", name: "Kotak Mahindra Bank", shortName: "Kotak Bank", color: "#E53935", letter: "K" },
+  { id: "axis", name: "Axis Bank", shortName: "Axis Bank", color: "#6A1B9A", letter: "A" },
+  { id: "bob_vijaya", name: "Bank of Baroda Plus Vijaya Bank Plus Dena Bank", shortName: "BOB + Vijaya", color: "#E64A19", letter: "B" },
+  { id: "pnb_obc", name: "Punjab National Bank Plus Oriental Bank of Commerce", shortName: "PNB + OBC", color: "#D32F2F", letter: "P" },
+  { id: "iob", name: "Indian Overseas Bank", shortName: "IOB", color: "#C62828", letter: "I" },
+  { id: "central", name: "Central Bank of India", shortName: "Central Bank", color: "#B71C1C", letter: "C" },
+  { id: "bom", name: "Bank of Maharashtra", shortName: "Bank of Mahar...", color: "#4A148C", letter: "B" },
+  { id: "idbi", name: "IDBI Bank", shortName: "IDBI Bank", color: "#00695C", letter: "I" },
+  { id: "yes", name: "Yes Bank", shortName: "Yes Bank", color: "#1565C0", letter: "Y" },
+  { id: "fino", name: "Fino Payments Bank", shortName: "Fino Bank", color: "#FF6F00", letter: "F" },
+  { id: "paytm", name: "Paytm Payments Bank", shortName: "Paytm Bank", color: "#00BCD4", letter: "P" },
+];
+
+const AEPS_TABS = ["Withdraw", "Mini Statement", "Deposit", "Balance Enquiry"] as const;
+type AepsTab = (typeof AEPS_TABS)[number];
+
+const QUICK_AMOUNTS = [1000, 3000, 5000, 10000];
+
+/* ── Biometric L1 devices (UIDAI certified) ───────────────────────── */
+
+interface BiometricDevice {
+  id: string;
+  name: string;
+  rdPackage: string;
+  color: string;
+  letter: string;
+}
+
+const BIOMETRIC_DEVICES: BiometricDevice[] = [
+  { id: "mantra_mfs110", name: "Mantra MFS110 L1", rdPackage: "com.mantra.rdservice", color: "#1565C0", letter: "M" },
+  { id: "startek_fm220", name: "Startek L1", rdPackage: "com.acpl.registersdk", color: "#4A148C", letter: "S" },
+  { id: "morpho_mso1300", name: "Morpho MSO L1", rdPackage: "com.scl.rdservice", color: "#E53935", letter: "M" },
+  { id: "visiontek_v600", name: "VisionTek V600 L1", rdPackage: "com.linkwell.rdservice", color: "#00695C", letter: "V" },
+  { id: "evolute_escan", name: "Evolute eScan L1", rdPackage: "com.evolute.rdservice", color: "#F57C00", letter: "E" },
+  { id: "mantra_marc11", name: "Marc 11", rdPackage: "com.mantra.rdservice", color: "#1976D2", letter: "M" },
+  { id: "precision_pb1000", name: "PB1000 - L1", rdPackage: "com.precision.pb510.rdservice", color: "#7B1FA2", letter: "P" },
+];
+
+type AuthMode = "fingerprint" | "iris";
+
+/* ── Device selector sidebar ──────────────────────────────────────── */
+
+function DeviceSidebar({
+  open,
+  onClose,
+  activeDeviceId,
+  onSelect,
+}: {
+  open: boolean;
+  onClose: () => void;
+  activeDeviceId: string;
+  onSelect: (device: BiometricDevice) => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300">
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <h2 className="text-lg font-bold" style={{ color: B.blue }}>
+            Select Biometric Device
+          </h2>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 hover:bg-gray-100">
+            <X size={20} className="text-gray-500" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {BIOMETRIC_DEVICES.map((device) => {
+            const isActive = device.id === activeDeviceId;
+            return (
+              <button
+                key={device.id}
+                type="button"
+                onClick={() => { onSelect(device); onClose(); }}
+                className={clsx(
+                  "flex w-full items-center gap-4 border-b border-gray-100 px-6 py-4 text-left transition hover:bg-gray-50",
+                  isActive && "bg-blue-50/60",
+                )}
+              >
+                <div
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white font-bold"
+                  style={{ backgroundColor: device.color, fontSize: 16 }}
+                >
+                  {device.letter}
+                </div>
+                <div className="flex-1">
+                  <span className="text-sm font-semibold text-gray-800">{device.name}</span>
+                </div>
+                {isActive && (
+                  <span className="rounded-full bg-green-100 px-3 py-1 text-[11px] font-bold text-green-700">
+                    Currently Active
+                  </span>
+                )}
+                <ChevronRight size={16} className="text-gray-400" />
+              </button>
+            );
+          })}
+
+          {/* Add New Device */}
+          <button
+            type="button"
+            className="flex w-full items-center gap-4 px-6 py-4 text-left transition hover:bg-gray-50"
+            onClick={onClose}
+          >
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-gray-300">
+              <Plus size={18} className="text-gray-400" />
+            </div>
+            <span className="text-sm font-semibold text-gray-500">Add New Device</span>
+            <ChevronRight size={16} className="ml-auto text-gray-400" />
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ── Bank icon component ───────────────────────────────────────────── */
+
+function BankIcon({ bank, size = 48 }: { bank: Bank; size?: number }) {
+  return (
+    <div
+      className="flex items-center justify-center rounded-full text-white font-bold shrink-0"
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: bank.color,
+        fontSize: size * 0.38,
+      }}
+    >
+      {bank.letter}
+    </div>
+  );
+}
+
+/* ── Bank sidebar popup ────────────────────────────────────────────── */
+
+function BankSidebar({
+  open,
+  onClose,
+  onSelect,
+  favouriteIds,
+  onToggleFav,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSelect: (bank: Bank) => void;
+  favouriteIds: string[];
+  onToggleFav: (id: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+
+  const favBanks = useMemo(
+    () => BANKS.filter((b) => favouriteIds.includes(b.id)),
+    [favouriteIds],
+  );
+
+  const filtered = useMemo(
+    () =>
+      search.trim()
+        ? BANKS.filter((b) =>
+            b.name.toLowerCase().includes(search.toLowerCase()),
+          )
+        : BANKS,
+    [search],
+  );
+
+  if (!open) return null;
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <h2 className="text-lg font-bold" style={{ color: B.blue }}>
+            Select Customer&apos;s Bank
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 hover:bg-gray-100"
+          >
+            <X size={20} className="text-gray-500" />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="px-6 pt-4 pb-2">
+          <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5">
+            <Search size={18} className="text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search a bank"
+              className="flex-1 bg-transparent text-sm outline-none placeholder:text-gray-400"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
+          {/* Recent/Favourite Banks */}
+          {favBanks.length > 0 && !search && (
+            <div className="mb-6">
+              <h3 className="mb-3 text-sm font-bold text-gray-800">
+                Recent/Favourite Banks
+              </h3>
+              <div className="grid grid-cols-4 gap-3">
+                {favBanks.slice(0, 8).map((bank) => (
+                  <button
+                    key={bank.id}
+                    type="button"
+                    onClick={() => {
+                      onSelect(bank);
+                      onClose();
+                    }}
+                    className="flex flex-col items-center gap-1.5 rounded-xl p-2 text-center hover:bg-gray-50"
+                  >
+                    <BankIcon bank={bank} size={44} />
+                    <span className="text-[10px] font-medium leading-tight text-gray-600 line-clamp-2">
+                      {bank.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* All Banks */}
+          <h3 className="mb-2 text-sm font-bold text-gray-800">All Banks</h3>
+          <div className="space-y-0.5">
+            {filtered.map((bank) => (
+              <div
+                key={bank.id}
+                className="flex items-center justify-between rounded-lg px-2 py-2.5 hover:bg-gray-50"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelect(bank);
+                    onClose();
+                  }}
+                  className="flex flex-1 items-center gap-3 text-left"
+                >
+                  <BankIcon bank={bank} size={36} />
+                  <span className="text-sm font-medium text-gray-800">
+                    {bank.name}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onToggleFav(bank.id)}
+                  className="rounded-lg p-1.5 hover:bg-gray-100"
+                >
+                  <Star
+                    size={16}
+                    strokeWidth={2}
+                    color={favouriteIds.includes(bank.id) ? "#F59E0B" : "#CBD5E1"}
+                    fill={favouriteIds.includes(bank.id) ? "#F59E0B" : "none"}
+                  />
+                </button>
+              </div>
+            ))}
+            {filtered.length === 0 && (
+              <p className="py-8 text-center text-sm text-gray-400">
+                No banks found for &quot;{search}&quot;
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ── Main AEPS page ────────────────────────────────────────────────── */
+
+export default function AepsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const user = useAuthStore((s) => s.user);
+
+  const initialTab = useMemo(() => {
+    const q = searchParams.get("tab");
+    if (q && (AEPS_TABS as readonly string[]).includes(q)) return q as AepsTab;
+    return "Withdraw" as AepsTab;
+  }, [searchParams]);
+
+  const [tab, setTab] = useState<AepsTab>(initialTab);
+  const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
+  const [bankSidebarOpen, setBankSidebarOpen] = useState(false);
+  const [aadhaar, setAadhaar] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [amount, setAmount] = useState("");
+  const [aadhaarVisible, setAadhaarVisible] = useState(false);
+  const [consent, setConsent] = useState(true);
+  const [activeDevice, setActiveDevice] = useState<BiometricDevice>(BIOMETRIC_DEVICES[0]);
+  const [deviceSidebarOpen, setDeviceSidebarOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>("fingerprint");
+  const [favBanks, setFavBanks] = useState<string[]>(["bob_vijaya", "pnb_obc", "psb", "sbi", "hdfc", "airtel", "icici", "pgb"]);
+
+  useEffect(() => {
+    const q = searchParams.get("tab");
+    if (q && (AEPS_TABS as readonly string[]).includes(q)) setTab(q as AepsTab);
+  }, [searchParams]);
+
+  const toggleFavBank = useCallback((id: string) => {
+    setFavBanks((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }, []);
+
+  const showAmount = tab === "Withdraw" || tab === "Deposit";
+
+  const visibleBanks = useMemo(() => {
+    const favs = BANKS.filter((b) => favBanks.includes(b.id));
+    return favs.length > 0 ? favs.slice(0, 6) : BANKS.slice(0, 6);
+  }, [favBanks]);
+
+  function formatAadhaar(v: string) {
+    const digits = v.replace(/\D/g, "").slice(0, 12);
+    return digits.replace(/(\d{4})(?=\d)/g, "$1 ");
+  }
+
+  function maskAadhaar(v: string) {
+    const digits = v.replace(/\D/g, "");
+    if (digits.length <= 4) return digits;
+    return "XXXX XXXX " + digits.slice(-4);
+  }
+
+  return (
+    <AppShell>
+      <div className="mx-auto max-w-6xl p-6">
+        {/* Back + Title */}
+        <div className="mb-6 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard")}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border hover:bg-gray-50"
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold" style={{ color: B.blue }}>
+              AePS — Aadhaar Enabled Payment
+            </h1>
+            <p className="text-xs" style={{ color: B.muted }}>
+              Cash Withdraw, Balance Enquiry, Mini Statement & Deposit
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+          {/* ── Left: Form ─────────────────────────────────── */}
+          <div className="space-y-5">
+            {/* Tabs */}
+            <div className="flex gap-2">
+              {AEPS_TABS.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTab(t)}
+                  className={clsx(
+                    "rounded-full px-4 py-2 text-sm font-semibold transition",
+                    tab === t
+                      ? "text-white shadow-md"
+                      : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50",
+                  )}
+                  style={tab === t ? { background: B.blue } : undefined}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {/* Bank selector strip */}
+            <div className="rounded-2xl border bg-white p-4" style={{ borderColor: B.border }}>
+              <div className="flex items-center gap-4 overflow-x-auto pb-1">
+                {visibleBanks.map((bank) => (
+                  <button
+                    key={bank.id}
+                    type="button"
+                    onClick={() => setSelectedBank(bank)}
+                    className={clsx(
+                      "flex flex-col items-center gap-1.5 rounded-xl p-2 transition min-w-[72px]",
+                      selectedBank?.id === bank.id
+                        ? "bg-blue-50 ring-2 ring-blue-400"
+                        : "hover:bg-gray-50",
+                    )}
+                  >
+                    <BankIcon bank={bank} size={44} />
+                    <span className="text-[10px] font-medium text-gray-600 leading-tight text-center line-clamp-1 w-16">
+                      {bank.shortName}
+                    </span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setBankSidebarOpen(true)}
+                  className="flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold transition hover:bg-blue-50"
+                  style={{ color: B.blueLight }}
+                >
+                  View All <ChevronRight size={14} />
+                </button>
+              </div>
+              {selectedBank && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2">
+                  <BankIcon bank={selectedBank} size={28} />
+                  <span className="text-sm font-semibold" style={{ color: B.blue }}>
+                    {selectedBank.name}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Form fields */}
+            <div className="space-y-4 rounded-2xl border bg-white p-5" style={{ borderColor: B.border }}>
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Aadhaar */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Aadhaar or VID Number
+                  </label>
+                  <div className="flex items-center rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={aadhaarVisible ? formatAadhaar(aadhaar) : maskAadhaar(aadhaar)}
+                      onChange={(e) => setAadhaar(e.target.value.replace(/\D/g, "").slice(0, 12))}
+                      placeholder="XXXX XXXX XXXX"
+                      className="flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-gray-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setAadhaarVisible((v) => !v)}
+                      className="ml-2 text-gray-400 hover:text-gray-600"
+                    >
+                      {aadhaarVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Mobile */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Mobile Number
+                  </label>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    value={mobile}
+                    onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    placeholder="Mobile Number"
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium outline-none placeholder:text-gray-400 focus:border-blue-300 focus:ring-1 focus:ring-blue-200"
+                  />
+                </div>
+              </div>
+
+              {/* Amount (only for Withdraw / Deposit) */}
+              {showAmount && (
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Amount to {tab}
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))}
+                    placeholder="Amount to Withdraw"
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium outline-none placeholder:text-gray-400 focus:border-blue-300 focus:ring-1 focus:ring-blue-200"
+                  />
+                  <div className="mt-3 flex gap-2">
+                    {QUICK_AMOUNTS.map((a) => (
+                      <button
+                        key={a}
+                        type="button"
+                        onClick={() => setAmount(String(a))}
+                        className={clsx(
+                          "rounded-full border px-4 py-1.5 text-xs font-bold transition",
+                          amount === String(a)
+                            ? "border-blue-400 bg-blue-50 text-blue-700"
+                            : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50",
+                        )}
+                      >
+                        ₹{a.toLocaleString("en-IN")}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Consent */}
+              <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-blue-600"
+                />
+                <span className="text-xs text-gray-600 leading-relaxed">
+                  I (the customer) accept{" "}
+                  <span className="font-semibold text-blue-700 underline">Aadhaar Consent</span>{" "}
+                  and have read the{" "}
+                  <span className="font-semibold text-blue-700 underline">AePS Advisory</span>
+                </span>
+              </label>
+            </div>
+
+            {/* Authentication Mode */}
+            <div className="rounded-2xl border bg-white p-5" style={{ borderColor: B.border }}>
+              <label className="mb-3 block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Authentication Mode
+              </label>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAuthMode("fingerprint")}
+                  className={clsx(
+                    "flex items-center gap-2.5 rounded-xl border-2 px-5 py-3 text-sm font-semibold transition",
+                    authMode === "fingerprint"
+                      ? "border-blue-500 bg-blue-50 text-blue-700"
+                      : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50",
+                  )}
+                >
+                  <Fingerprint size={20} />
+                  Fingerprint
+                  {authMode === "fingerprint" && (
+                    <CircleDot size={16} className="ml-1 text-green-500" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthMode("iris")}
+                  className={clsx(
+                    "flex items-center gap-2.5 rounded-xl border-2 px-5 py-3 text-sm font-semibold transition",
+                    authMode === "iris"
+                      ? "border-blue-500 bg-blue-50 text-blue-700"
+                      : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50",
+                  )}
+                >
+                  <ScanEye size={20} />
+                  Iris
+                  {authMode === "iris" && (
+                    <CircleDot size={16} className="ml-1 text-green-500" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Biometric device + Scan */}
+            <div
+              className="flex items-center justify-between rounded-2xl border bg-white p-4"
+              style={{ borderColor: B.border }}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="flex h-11 w-11 items-center justify-center rounded-full text-white font-bold"
+                  style={{ backgroundColor: activeDevice.color, fontSize: 15 }}
+                >
+                  {activeDevice.letter}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-800">{activeDevice.name}</p>
+                  <button
+                    type="button"
+                    onClick={() => setDeviceSidebarOpen(true)}
+                    className="text-xs font-semibold hover:underline"
+                    style={{ color: B.blueLight }}
+                  >
+                    Change Device
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={!selectedBank || !aadhaar || !consent}
+                className={clsx(
+                  "rounded-xl px-8 py-3 text-sm font-bold text-white shadow-lg transition",
+                  selectedBank && aadhaar && consent
+                    ? "hover:opacity-90"
+                    : "cursor-not-allowed opacity-50",
+                )}
+                style={{
+                  background: `linear-gradient(135deg, ${B.green} 0%, #0F9E5C 100%)`,
+                }}
+              >
+                {authMode === "fingerprint" ? "Scan Finger" : "Scan Iris"}
+              </button>
+            </div>
+          </div>
+
+          {/* ── Right: Help / Info ──────────────────────────── */}
+          <div className="space-y-4">
+            <div className="rounded-2xl border bg-white p-5" style={{ borderColor: B.border }}>
+              <h3 className="mb-3 text-sm font-bold" style={{ color: B.blue }}>
+                How AePS Works
+              </h3>
+              <ol className="space-y-2 text-xs text-gray-600 leading-relaxed">
+                <li className="flex gap-2">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[10px] font-bold text-blue-700">1</span>
+                  Select customer&apos;s bank
+                </li>
+                <li className="flex gap-2">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[10px] font-bold text-blue-700">2</span>
+                  Enter Aadhaar number &amp; mobile
+                </li>
+                <li className="flex gap-2">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[10px] font-bold text-blue-700">3</span>
+                  Enter amount (for withdraw/deposit)
+                </li>
+                <li className="flex gap-2">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[10px] font-bold text-blue-700">4</span>
+                  Scan customer fingerprint
+                </li>
+                <li className="flex gap-2">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-50 text-[10px] font-bold text-green-700">✓</span>
+                  Transaction complete — receipt generated
+                </li>
+              </ol>
+            </div>
+
+            <div className="rounded-2xl border p-5" style={{ borderColor: B.border, background: `${B.green}08` }}>
+              <h3 className="mb-2 text-sm font-bold" style={{ color: B.greenDark }}>
+                Commission Info
+              </h3>
+              <div className="space-y-1.5 text-xs text-gray-600">
+                <div className="flex justify-between">
+                  <span>Cash Withdraw</span>
+                  <span className="font-bold" style={{ color: B.greenDark }}>Upto ₹3.50</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Balance Enquiry</span>
+                  <span className="font-bold" style={{ color: B.greenDark }}>₹1.00</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Mini Statement</span>
+                  <span className="font-bold" style={{ color: B.greenDark }}>₹1.00</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Aadhaar Pay</span>
+                  <span className="font-bold" style={{ color: B.greenDark }}>₹2.00</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border bg-amber-50 p-4" style={{ borderColor: "#FDE68A" }}>
+              <p className="text-xs font-semibold text-amber-800 leading-relaxed">
+                ⚠️ Ensure biometric device is connected before scanning. 
+                Customer must be physically present for Aadhaar authentication.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bank sidebar popup */}
+      <BankSidebar
+        open={bankSidebarOpen}
+        onClose={() => setBankSidebarOpen(false)}
+        onSelect={setSelectedBank}
+        favouriteIds={favBanks}
+        onToggleFav={toggleFavBank}
+      />
+
+      {/* Device selector sidebar */}
+      <DeviceSidebar
+        open={deviceSidebarOpen}
+        onClose={() => setDeviceSidebarOpen(false)}
+        activeDeviceId={activeDevice.id}
+        onSelect={setActiveDevice}
+      />
+    </AppShell>
+  );
+}

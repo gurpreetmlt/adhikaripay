@@ -1,0 +1,481 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  User,
+  Lock,
+  Bell,
+  Shield,
+  Smartphone,
+  ChevronRight,
+  Check,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  FileText,
+} from "lucide-react";
+import { toast } from "react-hot-toast";
+import { AppShell } from "@/components/layout/AppShell";
+import { B, initials, roleFromUserRole } from "@/lib/brand";
+import { extractApiError } from "@/lib/onboarding";
+import { useAuthStore } from "@/lib/store";
+import { useAuthHydrated } from "@/lib/useAuthHydrated";
+import { enableBiometricLogin, isWebAuthnAvailable } from "@/lib/webauthn";
+
+const SECTIONS = [
+  { id: "profile", icon: User, label: "Profile" },
+  { id: "security", icon: Lock, label: "Security" },
+  { id: "notify", icon: Bell, label: "Notifications" },
+  { id: "kyc", icon: Shield, label: "KYC & Limits" },
+  { id: "devices", icon: Smartphone, label: "Devices" },
+];
+
+function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="relative h-6 w-11 rounded-full transition-colors"
+      style={{ background: on ? B.green : "#D1D5DB" }}
+    >
+      <div
+        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+          on ? "translate-x-5" : "translate-x-0.5"
+        }`}
+      />
+    </button>
+  );
+}
+
+export default function SettingsPage() {
+  const router = useRouter();
+  const hydrated = useAuthHydrated();
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const refreshToken = useAuthStore((s) => s.refreshToken);
+  const user = useAuthStore((s) => s.user);
+  const role = roleFromUserRole(user?.role);
+  const [active, setActive] = useState("profile");
+  const [showPin, setShowPin] = useState(false);
+  const [bioLoading, setBioLoading] = useState(false);
+  const [notifs, setNotifs] = useState({
+    sms: true,
+    email: true,
+    push: true,
+    txn: true,
+    commission: false,
+  });
+
+  async function handleEnableBiometric() {
+    if (!user || !refreshToken) {
+      toast.error("Session missing — please log in again");
+      return;
+    }
+    if (!isWebAuthnAvailable()) {
+      toast.error("Biometric login not supported on this browser");
+      return;
+    }
+    setBioLoading(true);
+    try {
+      await enableBiometricLogin({
+        userId: user.id,
+        userName: user.mobile,
+        userLabel: user.name,
+        refreshToken,
+      });
+      toast.success("Biometric login enabled");
+    } catch (err) {
+      toast.error(extractApiError(err, err instanceof Error ? err.message : "Biometric setup failed"));
+    } finally {
+      setBioLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (hydrated && !accessToken) router.replace("/login");
+  }, [hydrated, accessToken, router]);
+
+  if (!hydrated || !accessToken) return null;
+
+  const name = user?.name ?? "";
+  const mobile = user?.mobile ?? "";
+  const uid = user?.uid ?? "";
+  const av = initials(name || "AG");
+
+  return (
+    <AppShell>
+      <div className="p-6">
+        <div className="mb-5">
+          <h1 className="text-2xl font-bold" style={{ color: B.blue }}>
+            Settings
+          </h1>
+          <p className="mt-0.5 text-sm" style={{ color: B.muted }}>
+            Manage your account preferences
+          </p>
+        </div>
+
+        <div className="flex gap-5">
+          <div className="w-56 flex-shrink-0">
+            <div className="overflow-hidden rounded-2xl border bg-white" style={{ borderColor: B.border }}>
+              {SECTIONS.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setActive(s.id)}
+                  className="flex w-full items-center justify-between border-b px-4 py-3.5 text-left transition-all"
+                  style={{
+                    borderColor: B.border,
+                    background: active === s.id ? `${B.blue}0A` : "transparent",
+                    borderLeft: active === s.id ? `3px solid ${B.blue}` : "3px solid transparent",
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <s.icon size={16} style={{ color: active === s.id ? B.blue : B.muted }} />
+                    <span
+                      className="text-sm font-semibold"
+                      style={{ color: active === s.id ? B.blue : B.muted }}
+                    >
+                      {s.label}
+                    </span>
+                  </div>
+                  <ChevronRight size={13} style={{ color: B.muted }} />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex-1">
+            {active === "profile" && (
+              <div className="space-y-5 rounded-2xl border bg-white p-6" style={{ borderColor: B.border }}>
+                <h2 className="text-lg font-bold" style={{ color: B.blue }}>
+                  Profile Information
+                </h2>
+                <div className="flex items-center gap-4">
+                  <div
+                    className="flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-bold text-white"
+                    style={{ background: B.badgeGrad }}
+                  >
+                    {av}
+                  </div>
+                  <div>
+                    <div className="font-bold" style={{ color: B.blue }}>
+                      {name}
+                    </div>
+                    <div className="text-sm" style={{ color: B.muted }}>
+                      {role.label} · ID: {uid}
+                    </div>
+                    <button type="button" className="mt-1 text-xs font-semibold" style={{ color: B.green }}>
+                      Change Photo
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {[
+                    { label: "Full Name", value: name, type: "text" },
+                    { label: "Mobile", value: mobile, type: "tel" },
+                    { label: "Email", value: "", type: "email", placeholder: "email@example.com" },
+                    { label: "UID", value: uid, type: "text" },
+                    { label: "Role", value: role.label, type: "text" },
+                    { label: "Account Status", value: user?.isActive ? "Active" : "Inactive", type: "text" },
+                  ].map((f) => (
+                    <div key={f.label}>
+                      <label
+                        className="mb-1.5 block text-xs font-semibold uppercase tracking-wider"
+                        style={{ color: B.muted }}
+                      >
+                        {f.label}
+                      </label>
+                      <input
+                        type={f.type}
+                        defaultValue={f.value}
+                        placeholder={"placeholder" in f ? f.placeholder : undefined}
+                        readOnly={f.label === "UID" || f.label === "Role"}
+                        className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none"
+                        style={{ borderColor: B.border, background: B.bg, color: B.blue }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="rounded-xl px-6 py-2.5 text-sm font-semibold text-white"
+                  style={{ background: B.badgeGrad }}
+                >
+                  Save Changes
+                </button>
+              </div>
+            )}
+
+            {active === "security" && (
+              <div className="space-y-5 rounded-2xl border bg-white p-6" style={{ borderColor: B.border }}>
+                <h2 className="text-lg font-bold" style={{ color: B.blue }}>
+                  Security Settings
+                </h2>
+                <div className="space-y-4">
+                  <div className="rounded-xl border p-4" style={{ borderColor: B.border }}>
+                    <div className="mb-3 text-sm font-semibold" style={{ color: B.blue }}>
+                      Change Password
+                    </div>
+                    {["Current Password", "New Password", "Confirm Password"].map((f) => (
+                      <div key={f} className="mb-3">
+                        <label className="mb-1 block text-xs font-semibold" style={{ color: B.muted }}>
+                          {f}
+                        </label>
+                        <div
+                          className="flex items-center gap-2 rounded-xl border px-4 py-2.5"
+                          style={{ borderColor: B.border, background: B.bg }}
+                        >
+                          <Lock size={14} style={{ color: B.muted }} />
+                          <input
+                            type={showPin ? "text" : "password"}
+                            placeholder="••••••••"
+                            className="flex-1 bg-transparent text-sm outline-none"
+                            style={{ color: B.blue }}
+                          />
+                          <button type="button" onClick={() => setShowPin(!showPin)}>
+                            {showPin ? (
+                              <EyeOff size={14} style={{ color: B.muted }} />
+                            ) : (
+                              <Eye size={14} style={{ color: B.muted }} />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="rounded-xl px-5 py-2 text-sm font-semibold text-white"
+                      style={{ background: B.badgeGrad }}
+                    >
+                      Update Password
+                    </button>
+                  </div>
+                  <div className="rounded-xl border p-4" style={{ borderColor: B.border }}>
+                    <div className="mb-1 text-sm font-semibold" style={{ color: B.blue }}>
+                      Transaction PIN
+                    </div>
+                    <div className="mb-3 text-xs" style={{ color: B.muted }}>
+                      {user?.hasTxnPin
+                        ? "PIN is set — update or reset from onboarding"
+                        : "Set a PIN required for wallet transfers"}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => router.push("/onboarding/pin")}
+                      className="rounded-xl px-5 py-2 text-sm font-semibold text-white"
+                      style={{ background: B.badgeGrad }}
+                    >
+                      {user?.hasTxnPin ? "Manage PIN" : "Set PIN"}
+                    </button>
+                  </div>
+                  <div className="rounded-xl border p-4" style={{ borderColor: B.border }}>
+                    <div className="mb-1 text-sm font-semibold" style={{ color: B.blue }}>
+                      Biometric login
+                    </div>
+                    <div className="mb-3 text-xs" style={{ color: B.muted }}>
+                      Use Touch ID / Windows Hello to refresh your session on this device
+                    </div>
+                    <button
+                      type="button"
+                      disabled={bioLoading || !isWebAuthnAvailable()}
+                      onClick={() => void handleEnableBiometric()}
+                      className="rounded-xl px-5 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                      style={{ background: B.walletGrad }}
+                    >
+                      {bioLoading ? "Enabling…" : "Enable biometric"}
+                    </button>
+                  </div>
+                  <div className="rounded-xl border p-4" style={{ borderColor: B.border }}>
+                    <div className="mb-1 text-sm font-semibold" style={{ color: B.blue }}>
+                      Two-Factor Authentication
+                    </div>
+                    <div className="mb-3 text-xs" style={{ color: B.muted }}>
+                      Add extra security with OTP on every login
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium" style={{ color: B.blue }}>
+                        Enable 2FA via SMS
+                      </span>
+                      <Toggle on={true} onToggle={() => {}} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {active === "notify" && (
+              <div className="rounded-2xl border bg-white p-6" style={{ borderColor: B.border }}>
+                <h2 className="mb-5 text-lg font-bold" style={{ color: B.blue }}>
+                  Notification Preferences
+                </h2>
+                <div className="space-y-4">
+                  {[
+                    { key: "sms" as const, label: "SMS Alerts", sub: "Transaction confirmations via SMS" },
+                    { key: "email" as const, label: "Email Notifications", sub: "Daily summary and statements" },
+                    { key: "push" as const, label: "Push Notifications", sub: "Instant alerts on mobile app" },
+                    { key: "txn" as const, label: "Transaction Alerts", sub: "Notify on every debit/credit" },
+                    {
+                      key: "commission" as const,
+                      label: "Commission Updates",
+                      sub: "Alert when commission is credited",
+                    },
+                  ].map((n) => (
+                    <div
+                      key={n.key}
+                      className="flex items-center justify-between rounded-xl border p-4"
+                      style={{ borderColor: B.border }}
+                    >
+                      <div>
+                        <div className="text-sm font-semibold" style={{ color: B.blue }}>
+                          {n.label}
+                        </div>
+                        <div className="mt-0.5 text-xs" style={{ color: B.muted }}>
+                          {n.sub}
+                        </div>
+                      </div>
+                      <Toggle
+                        on={notifs[n.key]}
+                        onToggle={() => setNotifs((p) => ({ ...p, [n.key]: !p[n.key] }))}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {active === "kyc" && (
+              <div className="space-y-4 rounded-2xl border bg-white p-6" style={{ borderColor: B.border }}>
+                <h2 className="text-lg font-bold" style={{ color: B.blue }}>
+                  KYC & Transaction Limits
+                </h2>
+                <div
+                  className="rounded-2xl border p-4"
+                  style={{ borderColor: B.green, background: `${B.green}08` }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100">
+                      <Check size={18} className="text-emerald-600" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold" style={{ color: B.green }}>
+                        KYC {user?.kycStatus === "verified" ? "Verified" : "Pending"}
+                      </div>
+                      <div className="text-xs" style={{ color: B.muted }}>
+                        Status: {user?.kycStatus ?? "unknown"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push("/kyc")}
+                  className="flex w-full items-center justify-between rounded-2xl border-2 p-4 transition-all hover:shadow-md"
+                  style={{ borderColor: B.blueLight, background: `${B.blue}06` }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="flex h-10 w-10 items-center justify-center rounded-xl"
+                      style={{ background: B.badgeGrad }}
+                    >
+                      <FileText size={18} className="text-white" />
+                    </div>
+                    <div className="text-left">
+                      <div className="text-sm font-bold" style={{ color: B.blue }}>
+                        Complete Full KYC Onboarding
+                      </div>
+                      <div className="text-xs" style={{ color: B.muted }}>
+                        Step-wise verification with digital agreement
+                      </div>
+                    </div>
+                  </div>
+                  <ArrowRight size={16} style={{ color: B.blueLight }} />
+                </button>
+
+                <div className="space-y-3">
+                  {[
+                    { label: "Daily Transaction Limit", value: "₹2,00,000", used: "₹1,82,400", pct: 91 },
+                    { label: "Monthly Transaction Limit", value: "₹50,00,000", used: "₹8,40,000", pct: 17 },
+                    { label: "Max Single Transaction", value: "₹50,000", used: "₹25,000", pct: 50 },
+                  ].map((l) => (
+                    <div key={l.label} className="rounded-xl border p-4" style={{ borderColor: B.border }}>
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-sm font-semibold" style={{ color: B.blue }}>
+                          {l.label}
+                        </span>
+                        <span className="text-xs font-semibold" style={{ color: B.muted }}>
+                          {l.used} / {l.value}
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full bg-gray-100">
+                        <div
+                          className="h-2 rounded-full transition-all"
+                          style={{ width: `${l.pct}%`, background: l.pct > 80 ? "#DC2626" : B.green }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {active === "devices" && (
+              <div className="space-y-4 rounded-2xl border bg-white p-6" style={{ borderColor: B.border }}>
+                <h2 className="text-lg font-bold" style={{ color: B.blue }}>
+                  Logged-in Devices
+                </h2>
+                {[
+                  { name: "Chrome · macOS", os: "Web", location: "Local", last: "Active now", current: true },
+                  { name: "Chrome · Windows", os: "Windows 11", location: "Office", last: "2 hours ago", current: false },
+                  { name: "Android App", os: "Android 14", location: "Mobile", last: "1 day ago", current: false },
+                ].map((d) => (
+                  <div
+                    key={d.name}
+                    className="flex items-center justify-between rounded-xl border p-4"
+                    style={{ borderColor: B.border }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="flex h-10 w-10 items-center justify-center rounded-xl"
+                        style={{ background: B.secondary }}
+                      >
+                        <Smartphone size={18} style={{ color: B.blue }} />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold" style={{ color: B.blue }}>
+                          {d.name}
+                        </div>
+                        <div className="text-xs" style={{ color: B.muted }}>
+                          {d.os} · {d.location}
+                        </div>
+                        <div className="mt-0.5 text-xs" style={{ color: d.current ? B.green : B.muted }}>
+                          {d.last}
+                        </div>
+                      </div>
+                    </div>
+                    {!d.current && (
+                      <button
+                        type="button"
+                        className="rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-red-50"
+                        style={{ borderColor: "#DC262630", color: "#DC2626" }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                    {d.current && (
+                      <span
+                        className="rounded-full px-2.5 py-1 text-xs font-semibold"
+                        style={{ background: `${B.green}15`, color: B.green }}
+                      >
+                        This Device
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </AppShell>
+  );
+}

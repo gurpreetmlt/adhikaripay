@@ -1,0 +1,17 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="badge" x1="70" y1="60" x2="452" y2="452" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2A5CDD"/><stop offset="1" stop-color="#0B2A9A"/>
+    </linearGradient>
+    <linearGradient id="wallet" x1="150" y1="180" x2="380" y2="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#24CC82"/><stop offset="1" stop-color="#11A362"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="124" fill="url(#badge)"/>
+  <rect x="184" y="150" width="176" height="55" rx="15" fill="#ffffff" opacity="0.38"/>
+  <rect x="140" y="188" width="264" height="205" rx="48" fill="url(#wallet)"/>
+  <rect x="140" y="188" width="264" height="55" rx="48" fill="#ffffff" opacity="0.14"/>
+  <rect x="326" y="258" width="78" height="74" rx="26" fill="#0B2A9A"/>
+  <circle cx="350" cy="295" r="13" fill="#ffffff"/>
+  <g transform="translate(174,378) scale(0.132,-0.132)" fill="#FFFFFF"><path d="M489 1004Q470 1065 420.5 1100.5Q371 1136 288 1136H122V1328H917V1145H648Q686 1116 707.0 1081.0Q728 1046 737 1004H917V820H736Q717 742 666.0 678.5Q615 615 534 577Q566 563 594.0 541.0Q622 519 645 484L902 0H665Q631 0 607.5 13.5Q584 27 569 52L364 467Q351 490 334.5 500.5Q318 511 286 511H122V688H287Q369 688 416.5 724.0Q464 760 484 820H121V1004Z"/></g>
+</svg>

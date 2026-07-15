@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+/* Theme tokens — switch with html.dark (Light / Dark / Auto) */
+:root {
+  --admin-bg: #f0f4ff;
+  --admin-card: #ffffff;
+  --admin-card-hover: #e8eefb;
+  --admin-secondary: #e8eefb;
+  --admin-border: rgba(11, 42, 154, 0.12);
+  --admin-text: #0b2a9a;
+  --admin-muted: #5a6da8;
+  --brand-blue: #0b2a9a;
+  --brand-blue-mid: #2a5cdd;
+  --brand-green: #12b76a;
+  --mesh-a: rgba(11, 42, 154, 0.08);
+  --mesh-b: rgba(18, 183, 106, 0.06);
+  /* Sidebar — light = brand blue gradient */
+  --admin-sidebar-bg: linear-gradient(135deg, #2a5cdd 0%, #0b2a9a 100%);
+  --admin-sidebar-text: rgba(255, 255, 255, 0.6);
+  --admin-sidebar-text-active: #ffffff;
+  --admin-sidebar-muted: rgba(255, 255, 255, 0.35);
+  --admin-sidebar-hover: rgba(255, 255, 255, 0.1);
+  --admin-sidebar-active: rgba(255, 255, 255, 0.15);
+  --admin-sidebar-border: rgba(255, 255, 255, 0.1);
+  --admin-sidebar-shadow: 4px 0 28px rgba(11, 42, 154, 0.2);
+  --admin-sidebar-user-bg: rgba(255, 255, 255, 0.1);
+}
+
+html.dark {
+  --admin-bg: #0b1224;
+  --admin-card: #121a2f;
+  --admin-card-hover: #1a243d;
+  --admin-secondary: #1a243d;
+  --admin-border: #2a3654;
+  --admin-text: #e8eef9;
+  --admin-muted: #8b9bc4;
+  --brand-blue: #7eb0ff;
+  --brand-blue-mid: #5b93f5;
+  --mesh-a: rgba(42, 92, 221, 0.22);
+  --mesh-b: rgba(18, 183, 106, 0.12);
+  /* Sidebar — dark = navy panel (not blue gradient) */
+  --admin-sidebar-bg: linear-gradient(180deg, #121a2f 0%, #0a1120 100%);
+  --admin-sidebar-text: #8b9bc4;
+  --admin-sidebar-text-active: #e8eef9;
+  --admin-sidebar-muted: #5a6a8a;
+  --admin-sidebar-hover: rgba(126, 176, 255, 0.08);
+  --admin-sidebar-active: rgba(42, 92, 221, 0.22);
+  --admin-sidebar-border: #24304d;
+  --admin-sidebar-shadow: 4px 0 24px rgba(0, 0, 0, 0.45);
+  --admin-sidebar-user-bg: rgba(42, 92, 221, 0.12);
+}
+
+@theme {
+  --color-brand-50: #e8eef9;
+  --color-brand-100: #d4e0f7;
+  --color-brand-500: #2a5cdd;
+  --color-brand-600: #123a9e;
+  --color-brand-700: #0b2a9a;
+  --color-brand-green: #12b76a;
+  --color-surface: #f0f4ff;
+  --color-card: #ffffff;
+  --color-border-subtle: #d8e0f0;
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  color-scheme: light;
+  transition: background-color 0.45s ease, color 0.35s ease;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+html.theme-animating,
+html.theme-animating * {
+  transition:
+    background-color 0.45s ease,
+    color 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease !important;
+}
+
+body {
+  background: var(--admin-bg);
+  color: var(--admin-text);
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 70% 50% at 10% -10%, var(--mesh-a), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, var(--mesh-b), transparent 50%);
+}
+
+/* Theme-aware surfaces (prefer these over hard-coded white) */
+.admin-card {
+  background: var(--admin-card);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-surface {
+  background: var(--admin-bg);
+  color: var(--admin-text);
+}
+
+.admin-input {
+  background: var(--admin-card);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+/* Dark mode: flip hard-coded white / surface utilities */
+html.dark .bg-white {
+  background-color: var(--admin-card) !important;
+}
+
+html.dark .bg-surface,
+html.dark .bg-card {
+  background-color: var(--admin-card) !important;
+}

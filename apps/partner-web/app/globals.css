@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  /* Purple — exact value from LokalMart's brand-purple (#7c3aed). Partner/Admin are the
+     back-office portals, same role as LokalMart's seller-web/admin-web, so they share its color. */
+  --color-brand-50: #f5f3ff;
+  --color-brand-100: #ede9fe;
+  --color-brand-500: #8b5cf6;
+  --color-brand-600: #7c3aed;
+  --color-brand-700: #6d28d9;
+
+  --color-surface: #f4f5f9;
+  --color-card: #ffffff;
+  --color-border-subtle: #e8e9f0;
+
+  --font-sans: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  background-color: var(--color-surface);
+  color: #1f2333;
+}
