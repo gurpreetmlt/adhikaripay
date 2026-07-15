@@ -21,6 +21,6 @@ export const useAuthStore = create<AuthState>()(
       setTokens: (accessToken, refreshToken) => set({ accessToken, refreshToken }),
       logout: () => set({ accessToken: null, refreshToken: null, user: null }),
     }),
-    { name: "lokalpay-retailer-auth" },
+    { name: "adhikaripay-retailer-auth" },
   ),
 );

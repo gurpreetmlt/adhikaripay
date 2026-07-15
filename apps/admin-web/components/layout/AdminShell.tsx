@@ -275,7 +275,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { isDark } = useAdminTheme();
-  const name = user?.name?.replace(/LokalPay/gi, "Adhikari Pay") ?? "Admin";
+  const name = user?.name ?? "Admin";
   const uid = user?.uid ?? "—";
   const av = initials(name);
 

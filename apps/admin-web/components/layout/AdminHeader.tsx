@@ -23,7 +23,7 @@ const QUICK_ROUTES = [
 ];
 
 function displayName(raw?: string | null) {
-  return (raw ?? "Admin").replace(/LokalPay/gi, "Adhikari Pay");
+  return raw ?? "Admin";
 }
 
 function initials(name: string) {
