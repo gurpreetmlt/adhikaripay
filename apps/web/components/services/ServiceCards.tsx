@@ -24,6 +24,14 @@ const AEPS_TAB_MAP: Record<string, string> = {
   AADHAAR_PAY: "Withdraw",
 };
 
+/** Routes for services that have a dedicated page but aren't part of the AEPS tab set. */
+function resolveServiceRoute(code: string): string | null {
+  const aepsTab = AEPS_TAB_MAP[code];
+  if (aepsTab) return `/aeps?tab=${encodeURIComponent(aepsTab)}`;
+  if (code === "UPI_CASH_POINT") return "/upi-cash-point";
+  return null;
+}
+
 function ServiceIconCard({
   svc,
   index,
@@ -183,7 +191,7 @@ export function ServiceCards({ title = "All Services" }: { title?: string }) {
                 index={i}
                 favorite
                 onToggleFav={() => handleToggle(svc.code)}
-                onOpen={AEPS_TAB_MAP[svc.code] ? () => router.push(`/aeps?tab=${encodeURIComponent(AEPS_TAB_MAP[svc.code])}`) : undefined}
+                onOpen={resolveServiceRoute(svc.code) ? () => router.push(resolveServiceRoute(svc.code)!) : undefined}
               />
             ))}
           </div>
@@ -206,7 +214,7 @@ export function ServiceCards({ title = "All Services" }: { title?: string }) {
                 index={i}
                 favorite={codes.includes(svc.code)}
                 onToggleFav={() => handleToggle(svc.code)}
-                onOpen={AEPS_TAB_MAP[svc.code] ? () => router.push(`/aeps?tab=${encodeURIComponent(AEPS_TAB_MAP[svc.code])}`) : undefined}
+                onOpen={resolveServiceRoute(svc.code) ? () => router.push(resolveServiceRoute(svc.code)!) : undefined}
               />
             ))}
           </div>
