@@ -19,7 +19,9 @@ export const apiLimiter = rateLimit({
 
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: isDev ? 200 : 5,
+  // Modestly raised for the pre-launch testing phase (no real SMS provider / real users yet) —
+  // tighten back down once real traffic patterns exist.
+  limit: isDev ? 200 : 10,
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
@@ -28,7 +30,8 @@ export const authLimiter = rateLimit({
 
 export const otpRequestLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: isDev ? 50 : 3,
+  // Same pre-launch testing note as authLimiter above.
+  limit: isDev ? 50 : 8,
   standardHeaders: true,
   legacyHeaders: false,
   validate: sharedValidate,
