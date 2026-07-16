@@ -33,21 +33,21 @@
     {
       "idx": 4,
       "version": "7",
-      "when": 1784200000000,
+      "when": 1784175067310,
       "tag": "0004_login_mpin",
       "breakpoints": true
     },
     {
       "idx": 5,
       "version": "7",
-      "when": 1784300000000,
+      "when": 1784175067311,
       "tag": "0005_txn_wallet_type",
       "breakpoints": true
     },
     {
       "idx": 6,
       "version": "7",
-      "when": 1784400000000,
+      "when": 1784175067312,
       "tag": "0006_service_icon",
       "breakpoints": true
     },

@@ -147,7 +147,13 @@ export function LoginScreen({ onOtpSent, onSignup }: LoginScreenProps) {
                 return (
                   <Pressable
                     key={r.key}
-                    onPress={() => setRole(r.key)}
+                    onPress={() => {
+                      // Switching role manually starts a fresh login — clear the number so the
+                      // previous role's mobile isn't accidentally submitted under the new role.
+                      // (The auto-correction path in sendOtp deliberately keeps the number.)
+                      if (r.key !== role) setMobile("");
+                      setRole(r.key);
+                    }}
                     style={[styles.chip, active && styles.chipActive]}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}

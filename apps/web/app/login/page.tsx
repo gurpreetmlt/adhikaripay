@@ -240,7 +240,16 @@ export default function LoginPage() {
                 <button
                   key={r.id}
                   type="button"
-                  onClick={() => setRole(r)}
+                  onClick={() => {
+                    // Fresh login on manual role switch — don't carry the previous role's number.
+                    if (r.id !== role.id) {
+                      setMobile("");
+                      setOtpStep("mobile");
+                      setOtp("");
+                      setDevOtp(null);
+                    }
+                    setRole(r);
+                  }}
                   className="relative flex flex-col items-center gap-2 rounded-2xl border-2 p-3.5"
                   style={{
                     borderColor: active ? r.color : B.border,
