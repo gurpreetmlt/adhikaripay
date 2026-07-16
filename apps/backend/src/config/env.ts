@@ -5,8 +5,8 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(4000),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
-  REDIS_URL: z.string().min(1, "REDIS_URL is required"),
+  /** Optional — cache only (sessions/hot reads). Never queues, jobs, or primary data. */
+  REDIS_URL: z.string().optional(),
   JWT_ACCESS_SECRET: z.string().min(32, "JWT_ACCESS_SECRET must be at least 32 characters"),
   JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
   JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
