@@ -74,7 +74,9 @@ function SidebarContent({
         className="flex items-center gap-2 overflow-hidden border-b border-white/10 px-4 py-4"
         style={{ minHeight: 68 }}
       >
-        {open ? <AdhikariPayLogo width={152} variant="light" /> : <AdhikariIcon size={36} />}
+        <Link href="/dashboard" className="flex items-center">
+          {open ? <AdhikariPayLogo width={152} variant="light" /> : <AdhikariIcon size={36} />}
+        </Link>
         {onClose ? (
           <button
             type="button"
