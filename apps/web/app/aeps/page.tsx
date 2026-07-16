@@ -6,6 +6,7 @@ import clsx from "clsx";
 import { toast } from "react-hot-toast";
 import {
   ArrowLeft,
+  Check,
   ChevronRight,
   CircleDot,
   Eye,
@@ -485,24 +486,41 @@ function AepsPageInner() {
             {/* Bank selector strip */}
             <div className="rounded-2xl border bg-white p-4" style={{ borderColor: B.border }}>
               <div className="flex items-center gap-4 overflow-x-auto pb-1">
-                {visibleBanks.map((bank) => (
-                  <button
-                    key={bank.id}
-                    type="button"
-                    onClick={() => setSelectedBank(bank)}
-                    className={clsx(
-                      "flex flex-col items-center gap-1.5 rounded-xl p-2 transition min-w-[72px]",
-                      selectedBank?.id === bank.id
-                        ? "bg-blue-50 ring-2 ring-blue-400"
-                        : "hover:bg-gray-50",
-                    )}
-                  >
-                    <BankIcon bank={bank} size={44} />
-                    <span className="text-[10px] font-medium text-gray-600 leading-tight text-center line-clamp-1 w-16">
-                      {bank.shortName}
-                    </span>
-                  </button>
-                ))}
+                {visibleBanks.map((bank) => {
+                  const active = selectedBank?.id === bank.id;
+                  return (
+                    <button
+                      key={bank.id}
+                      type="button"
+                      onClick={() => setSelectedBank(bank)}
+                      className={clsx(
+                        "relative flex flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition min-w-[72px]",
+                        active
+                          ? "border-blue-500 bg-blue-50 shadow-md shadow-blue-100"
+                          : "border-transparent hover:bg-gray-50",
+                      )}
+                    >
+                      {active && (
+                        <span
+                          className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full"
+                          style={{ background: B.blue }}
+                        >
+                          <Check size={10} className="text-white" strokeWidth={3} />
+                        </span>
+                      )}
+                      <BankIcon bank={bank} size={44} />
+                      <span
+                        className={clsx(
+                          "text-[10px] leading-tight text-center line-clamp-1 w-16",
+                          active ? "font-bold" : "font-medium text-gray-600",
+                        )}
+                        style={active ? { color: B.blue } : undefined}
+                      >
+                        {bank.shortName}
+                      </span>
+                    </button>
+                  );
+                })}
                 <button
                   type="button"
                   onClick={() => setBankSidebarOpen(true)}
