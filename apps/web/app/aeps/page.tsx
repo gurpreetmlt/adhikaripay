@@ -22,7 +22,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { B } from "@/lib/brand";
 import {
   captureFingerprintWeb,
-  formatRdEndpoint,
+  formatRdDeviceLabel,
   getRdProbeLog,
   warmRdService,
   type RdEndpoint,
@@ -384,6 +384,22 @@ function AepsPageInner() {
     if (q && (AEPS_TABS as readonly string[]).includes(q)) setTab(q as AepsTab);
   }, [searchParams]);
 
+  function applyDiscoveredDevice(ep: RdEndpoint) {
+    setRdEndpoint(ep);
+    setRdStatus("ready");
+    const name = (ep.deviceName || "").toLowerCase();
+    if (!name) return;
+    const match =
+      BIOMETRIC_DEVICES.find((d) => name.includes("mfs110") && d.id === "mantra_mfs110") ||
+      BIOMETRIC_DEVICES.find((d) => name.includes("marc") && d.id === "mantra_marc11") ||
+      BIOMETRIC_DEVICES.find((d) => name.includes("morpho") && d.id.includes("morpho")) ||
+      BIOMETRIC_DEVICES.find((d) => name.includes("startek") && d.id.includes("startek")) ||
+      BIOMETRIC_DEVICES.find((d) => name.includes("evolute") && d.id.includes("evolute")) ||
+      BIOMETRIC_DEVICES.find((d) => name.includes("vision") && d.id.includes("visiontek")) ||
+      BIOMETRIC_DEVICES.find((d) => name.includes("precision") || name.includes("pb1000"));
+    if (match) setActiveDevice(match);
+  }
+
   /** Discover Mantra while user fills bank / Aadhaar — so Scan skips "looking for RD". */
   useEffect(() => {
     if (authMode !== "fingerprint") return;
@@ -393,10 +409,8 @@ function AepsPageInner() {
     void (async () => {
       const ep = await warmRdService();
       if (cancelled) return;
-      if (ep) {
-        setRdEndpoint(ep);
-        setRdStatus("ready");
-      } else {
+      if (ep) applyDiscoveredDevice(ep);
+      else {
         setRdEndpoint(null);
         setRdStatus("missing");
       }
@@ -418,10 +432,8 @@ function AepsPageInner() {
   async function retryRdWarm() {
     setRdStatus("looking");
     const ep = await warmRdService(true);
-    if (ep) {
-      setRdEndpoint(ep);
-      setRdStatus("ready");
-    } else {
+    if (ep) applyDiscoveredDevice(ep);
+    else {
       setRdEndpoint(null);
       setRdStatus("missing");
     }
@@ -767,8 +779,8 @@ function AepsPageInner() {
                   {rdStatus === "ready" && (
                     <>
                       <p className="text-sm font-bold text-green-800">Scanner ready</p>
-                      <p className="truncate text-xs font-mono text-green-700/80">
-                        {rdEndpoint ? formatRdEndpoint(rdEndpoint) : "127.0.0.1"}
+                      <p className="truncate text-xs text-green-700/90">
+                        {rdEndpoint ? formatRdDeviceLabel(rdEndpoint) : "Device connected"}
                       </p>
                     </>
                   )}

@@ -3,7 +3,7 @@
  * Fast path: cached port → one CAPTURE. Slow full scan only on cache miss.
  */
 
-const CACHE_KEY = "adhikaripay_rd_endpoint_v3";
+const CACHE_KEY = "adhikaripay_rd_endpoint_v4";
 const PORT_START = 11100;
 const PORT_END = 11120;
 const PRIORITY_PORTS = [11100, 11101, 11102, 11120, 11103];
@@ -18,6 +18,9 @@ export interface RdEndpoint {
   port: number;
   scheme: Scheme;
   capturePath: string;
+  /** Friendly name from DeviceInfo mi= (e.g. Mantra MFS110) */
+  deviceName?: string;
+  serial?: string;
 }
 
 let lastLog: string[] = [];
@@ -92,6 +95,7 @@ function clearCache() {
   sessionEp = null;
   try {
     localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem("adhikaripay_rd_endpoint_v3");
     localStorage.removeItem("adhikaripay_rd_endpoint_v2");
     localStorage.removeItem("adhikaripay_rd_endpoint");
   } catch {
@@ -115,11 +119,95 @@ async function isAlive(port: number, scheme: Scheme): Promise<boolean> {
   }
 }
 
+/** Parse model/serial from RD DeviceInfo / RDService XML. */
+export function parseDeviceInfo(xml: string): { deviceName: string; serial?: string } | null {
+  if (!xml || !xml.includes("<")) return null;
+
+  const mi =
+    xml.match(/\bmi="([^"]+)"/i)?.[1] ||
+    xml.match(/<mi>([^<]+)<\/mi>/i)?.[1] ||
+    xml.match(/model[=:"\s]+([A-Za-z0-9 _-]+)/i)?.[1];
+
+  const dpId = xml.match(/\bdpId="([^"]+)"/i)?.[1] ?? "";
+  const rdsId = xml.match(/\brdsId="([^"]+)"/i)?.[1] ?? "";
+  const serial =
+    xml.match(/\bserialNo="([^"]+)"/i)?.[1] ||
+    xml.match(/\bdc="([^"]+)"/i)?.[1] ||
+    xml.match(/<serial[^>]*>([^<]+)</i)?.[1];
+
+  const vendorHint = `${dpId} ${rdsId}`.toLowerCase();
+  let brand = "Biometric";
+  if (vendorHint.includes("mantra") || (mi && /mfs|marc/i.test(mi))) brand = "Mantra";
+  else if (vendorHint.includes("morpho") || vendorHint.includes("idemia")) brand = "Morpho";
+  else if (vendorHint.includes("startek") || vendorHint.includes("acpl")) brand = "Startek";
+  else if (vendorHint.includes("evolute")) brand = "Evolute";
+  else if (vendorHint.includes("precision")) brand = "Precision";
+  else if (vendorHint.includes("vision") || vendorHint.includes("linkwell")) brand = "VisionTek";
+
+  const model = (mi || "").trim();
+  if (!model && !brand) return null;
+
+  const deviceName = model
+    ? brand === "Biometric"
+      ? model
+      : `${brand} ${model}`
+    : `${brand} L1`;
+
+  return { deviceName, serial: serial?.trim() || undefined };
+}
+
+async function fetchDeviceMeta(
+  port: number,
+  scheme: Scheme,
+): Promise<{ deviceName?: string; serial?: string; capturePath: string }> {
+  const base = `${scheme}://127.0.0.1:${port}`;
+  const attempts: { method: string; path: string }[] = [
+    { method: "DEVICEINFO", path: "/" },
+    { method: "RDSERVICE", path: "/" },
+    { method: "DEVICEINFO", path: "/rd/info" },
+    { method: "GET", path: "/rd/info" },
+  ];
+
+  for (const a of attempts) {
+    try {
+      const res = await xhrRequest(a.method, `${base}${a.path}`, null, PROBE_MS + 400);
+      const parsed = parseDeviceInfo(res.text);
+      if (parsed) {
+        return { ...parsed, capturePath: "/rd/capture" };
+      }
+    } catch {
+      /* next */
+    }
+  }
+  return { capturePath: "/rd/capture" };
+}
+
+/** Probe + read device name when RD is alive. */
+async function probeAndDescribe(port: number, scheme: Scheme): Promise<RdEndpoint | null> {
+  if (!(await isAlive(port, scheme))) return null;
+  const meta = await fetchDeviceMeta(port, scheme);
+  return {
+    port,
+    scheme,
+    capturePath: meta.capturePath,
+    deviceName: meta.deviceName,
+    serial: meta.serial,
+  };
+}
+
 async function discoverRdEndpoint(force = false): Promise<RdEndpoint | null> {
   lastLog = [];
 
   if (!force && sessionEp) {
-    lastLog.push(`session ${sessionEp.scheme}://127.0.0.1:${sessionEp.port}`);
+    lastLog.push(`session ${sessionEp.deviceName || sessionEp.port}`);
+    // Refresh name if missing
+    if (!sessionEp.deviceName) {
+      const meta = await fetchDeviceMeta(sessionEp.port, sessionEp.scheme);
+      if (meta.deviceName) {
+        sessionEp = { ...sessionEp, ...meta };
+        saveCache(sessionEp);
+      }
+    }
     return sessionEp;
   }
 
@@ -129,20 +217,18 @@ async function discoverRdEndpoint(force = false): Promise<RdEndpoint | null> {
 
   const cached = loadCache();
   if (!force && cached) {
-    // Trust cache for speed — only verify with one quick probe
-    if (await isAlive(cached.port, cached.scheme)) {
-      lastLog.push(`cached ${cached.scheme}://127.0.0.1:${cached.port}`);
-      sessionEp = cached;
-      return cached;
+    const live = await probeAndDescribe(cached.port, cached.scheme);
+    if (live) {
+      lastLog.push(`cached ${live.deviceName || live.port}`);
+      saveCache(live);
+      return live;
     }
-    // Try other scheme same port (common: http vs https)
     for (const scheme of schemes) {
       if (scheme === cached.scheme) continue;
-      if (await isAlive(cached.port, scheme)) {
-        const ep = { ...cached, scheme };
-        saveCache(ep);
-        lastLog.push(`cached-port ${scheme}://127.0.0.1:${cached.port}`);
-        return ep;
+      const live2 = await probeAndDescribe(cached.port, scheme);
+      if (live2) {
+        saveCache(live2);
+        return live2;
       }
     }
     clearCache();
@@ -151,25 +237,20 @@ async function discoverRdEndpoint(force = false): Promise<RdEndpoint | null> {
   const ports = orderedPorts();
   for (let i = 0; i < ports.length; i += BATCH) {
     const batch = ports.slice(i, i + BATCH);
-    const results = await Promise.all(
+    // First find any alive port quickly, then fetch name for the first hit
+    const aliveChecks = await Promise.all(
       batch.flatMap((port) =>
-        schemes.map(async (scheme) => {
-          if (await isAlive(port, scheme)) {
-            return {
-              port,
-              scheme,
-              capturePath: "/rd/capture",
-            } satisfies RdEndpoint;
-          }
-          return null;
-        }),
+        schemes.map(async (scheme) => ((await isAlive(port, scheme)) ? { port, scheme } : null)),
       ),
     );
-    const found = results.find((r): r is RdEndpoint => r !== null);
-    if (found) {
-      lastLog.push(`found ${found.scheme}://127.0.0.1:${found.port}`);
-      saveCache(found);
-      return found;
+    const hit = aliveChecks.find((r): r is { port: number; scheme: Scheme } => r !== null);
+    if (hit) {
+      const ep = await probeAndDescribe(hit.port, hit.scheme);
+      if (ep) {
+        lastLog.push(`found ${ep.deviceName || `${ep.scheme}://${ep.port}`}`);
+        saveCache(ep);
+        return ep;
+      }
     }
   }
   return null;
@@ -288,8 +369,11 @@ export async function warmRdService(force = false): Promise<RdEndpoint | null> {
   return discoverRdEndpoint(force);
 }
 
-export function formatRdEndpoint(ep: RdEndpoint): string {
-  return `${ep.scheme}://127.0.0.1:${ep.port}`;
+export function formatRdDeviceLabel(ep: RdEndpoint): string {
+  if (ep.deviceName) {
+    return ep.serial ? `${ep.deviceName} · ${ep.serial}` : ep.deviceName;
+  }
+  return "Biometric scanner connected";
 }
 
 export async function captureFingerprintWeb(): Promise<string> {
