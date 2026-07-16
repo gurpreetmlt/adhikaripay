@@ -25,6 +25,7 @@ import { B, ROLES, type Role } from "@/lib/brand";
 import { useAuthStore } from "@/lib/store";
 import { extractApiError, nextOnboardingPath } from "@/lib/onboarding";
 import { authenticateBiometric, getBiometricStore } from "@/lib/webauthn";
+import { getDeviceId, getDeviceLabel } from "@/lib/deviceId";
 
 interface LoginResponseData {
   user: AuthUser;
@@ -108,6 +109,8 @@ export default function LoginPage() {
         mobile,
         otp,
         portal: "agent",
+        deviceId: getDeviceId(),
+        deviceLabel: getDeviceLabel(),
       });
       if (!data.success) throw new Error(data.message);
 

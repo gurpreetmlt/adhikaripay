@@ -7,6 +7,7 @@ import clsx from "clsx";
 import type { ApiResponse, AuthUser } from "@adhikaripay/shared-types";
 import api from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
+import { getDeviceId, getDeviceLabel } from "@/lib/deviceId";
 
 interface LoginResponseData {
   user: AuthUser;
@@ -96,7 +97,12 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const { data } = await api.post<ApiResponse<LoginResponseData>>("/auth/otp/verify", { mobile, otp });
+      const { data } = await api.post<ApiResponse<LoginResponseData>>("/auth/otp/verify", {
+        mobile,
+        otp,
+        deviceId: getDeviceId(),
+        deviceLabel: getDeviceLabel(),
+      });
       if (!data.success) throw new Error(data.message);
       completeLogin(data.data);
     } catch (err) {
