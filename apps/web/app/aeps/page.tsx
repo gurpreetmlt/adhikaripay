@@ -327,9 +327,19 @@ function BankSidebar({
 
 /* ── Main AEPS page ────────────────────────────────────────────────── */
 
+function AepsLoading() {
+  return (
+    <AppShell>
+      <div className="mx-auto max-w-6xl p-6">
+        <p className="text-sm font-medium text-gray-500">Loading AePS…</p>
+      </div>
+    </AppShell>
+  );
+}
+
 export default function AepsPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<AepsLoading />}>
       <AepsPageInner />
     </Suspense>
   );
@@ -372,29 +382,39 @@ function AepsPageInner() {
 
   const showAmount = tab === "Withdraw" || tab === "Deposit";
 
-  const canScan =
-    !!selectedBank &&
-    aadhaar.replace(/\D/g, "").length >= 8 &&
-    consent &&
-    (!showAmount || !!amount) &&
-    !scanning;
-
   async function handleScan() {
-    if (!canScan) return;
+    if (scanning) return;
     if (authMode === "iris") {
       toast.error("Iris capture is not enabled yet. Use Fingerprint.");
       return;
     }
+    if (!selectedBank) {
+      toast.error("Select customer bank first");
+      return;
+    }
+    if (aadhaar.replace(/\D/g, "").length < 8) {
+      toast.error("Enter a valid Aadhaar / VID number");
+      return;
+    }
+    if (!consent) {
+      toast.error("Customer must accept Aadhaar consent");
+      return;
+    }
+    if (showAmount && !amount) {
+      toast.error("Enter amount before scanning");
+      return;
+    }
 
+    const toastId = toast.loading("Looking for Mantra RD Service… Place finger when light is on");
     setScanning(true);
     try {
       const pidData = await captureFingerprintWeb();
-      toast.success("Fingerprint captured — ready for AePS");
-      // Keep PidData in session for next API wire step
+      toast.success(`Fingerprint captured (${activeDevice.name})`, { id: toastId });
       sessionStorage.setItem("adhikaripay_aeps_pid", pidData);
-      console.info("[AePS] PidData length:", pidData.length);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Capture failed", { duration: 8000 });
+      const msg = err instanceof Error ? err.message : "Capture failed";
+      toast.error(msg.split("\n")[0] ?? msg, { id: toastId, duration: 10_000 });
+      console.error("[AePS] capture failed", err);
     } finally {
       setScanning(false);
     }
@@ -662,11 +682,11 @@ function AepsPageInner() {
               </div>
               <button
                 type="button"
-                disabled={!canScan}
+                disabled={scanning}
                 onClick={handleScan}
                 className={clsx(
                   "rounded-xl px-8 py-3 text-sm font-bold text-white shadow-lg transition",
-                  canScan ? "hover:opacity-90" : "cursor-not-allowed opacity-50",
+                  scanning ? "cursor-wait opacity-80" : "hover:opacity-90",
                 )}
                 style={{
                   background: `linear-gradient(135deg, ${B.green} 0%, #0F9E5C 100%)`,

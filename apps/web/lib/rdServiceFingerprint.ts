@@ -106,17 +106,19 @@ export async function discoverRdEndpoint(): Promise<RdEndpoint | null> {
   }
 
   const ports = orderedPorts();
+  const preferHttps =
+    typeof window !== "undefined" && window.location.protocol === "https:";
+  const schemes: Scheme[] = preferHttps ? ["https", "http"] : ["http", "https"];
+
   for (let i = 0; i < ports.length; i += BATCH) {
     const batch = ports.slice(i, i + BATCH);
     const results = await Promise.all(
       batch.map(async (port) => {
-        if (await probePort(port, "http")) {
-          lastLog.push(`Found http://127.0.0.1:${port}`);
-          return { port, scheme: "http" as const };
-        }
-        if (await probePort(port, "https")) {
-          lastLog.push(`Found https://127.0.0.1:${port}`);
-          return { port, scheme: "https" as const };
+        for (const scheme of schemes) {
+          if (await probePort(port, scheme)) {
+            lastLog.push(`Found ${scheme}://127.0.0.1:${port}`);
+            return { port, scheme };
+          }
         }
         return null;
       }),
@@ -215,12 +217,13 @@ export async function captureFingerprintWeb(): Promise<string> {
 
   let ep = await discoverRdEndpoint();
   if (!ep) {
+    const onHttps = window.location.protocol === "https:";
     throw new Error(
-      `Mantra RD Service not found on this PC (ports ${PORT_START}–${PORT_END}).\n` +
-        `1. Install & open Mantra L1 RDService\n` +
-        `2. Connect MFS110 — status Device connected\n` +
-        `3. Use Chrome on the same Windows PC\n` +
-        `4. Click Scan Finger again`,
+      `Mantra RD Service not found on this PC (ports ${PORT_START}–${PORT_END}). ` +
+        `Open Mantra L1 RDService → Device connected → same Windows PC Chrome. ` +
+        (onHttps
+          ? "If still failing on HTTPS site, try http://localhost:3001 (local) — some browsers block local RD from live HTTPS."
+          : "Confirm RD shows http://127.0.0.1:PORT on its screen."),
     );
   }
 
