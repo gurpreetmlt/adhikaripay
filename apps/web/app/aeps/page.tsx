@@ -362,6 +362,7 @@ function AepsPageInner() {
   const [mobile, setMobile] = useState("");
   const [amount, setAmount] = useState("");
   const [aadhaarVisible, setAadhaarVisible] = useState(false);
+  const [aadhaarFocused, setAadhaarFocused] = useState(false);
   const [consent, setConsent] = useState(true);
   const [activeDevice, setActiveDevice] = useState<BiometricDevice>(BIOMETRIC_DEVICES[0]);
   const [deviceSidebarOpen, setDeviceSidebarOpen] = useState(false);
@@ -533,8 +534,10 @@ function AepsPageInner() {
                     <input
                       type="text"
                       inputMode="numeric"
-                      value={aadhaarVisible ? formatAadhaar(aadhaar) : maskAadhaar(aadhaar)}
+                      value={aadhaarFocused || aadhaarVisible ? formatAadhaar(aadhaar) : maskAadhaar(aadhaar)}
                       onChange={(e) => setAadhaar(e.target.value.replace(/\D/g, "").slice(0, 12))}
+                      onFocus={() => setAadhaarFocused(true)}
+                      onBlur={() => setAadhaarFocused(false)}
                       placeholder="XXXX XXXX XXXX"
                       className="flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-gray-400"
                     />
