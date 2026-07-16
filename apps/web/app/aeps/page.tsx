@@ -407,7 +407,7 @@ function AepsPageInner() {
       return;
     }
 
-    const toastId = toast.loading("Looking for Mantra RD Service… Place finger when light is on");
+    const toastId = toast.loading("Connecting to Mantra… finger ready");
     setScanning(true);
     try {
       const pidData = await captureFingerprintWeb();
