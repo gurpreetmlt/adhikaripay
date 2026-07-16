@@ -41,14 +41,21 @@ export function createApp(): Express {
       referrerPolicy: { policy: "strict-origin-when-cross-origin" },
     }),
   );
+  // CORS_ORIGIN is a comma-separated list — multiple web portals (retailer/partner/admin/web)
+  // each run on their own subdomain and all need to call this one backend.
+  const allowedOrigins = env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean);
   app.use(
     cors({
       // Preview/dev tooling assigns whatever port is free, so in development we allow any
-      // localhost origin rather than a single hardcoded port. Production still pins to CORS_ORIGIN.
+      // localhost origin rather than a single hardcoded port. Production checks against the list.
       origin:
         env.NODE_ENV === "development"
           ? /^https?:\/\/(localhost|127\.0\.0\.1):\d+$/
-          : env.CORS_ORIGIN,
+          : (origin, callback) => {
+              // No Origin header (server-to-server, mobile app, curl) — allow.
+              if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+              callback(new Error(`Origin ${origin} not allowed by CORS`));
+            },
       credentials: true,
     }),
   );

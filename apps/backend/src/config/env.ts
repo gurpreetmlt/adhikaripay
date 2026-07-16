@@ -12,6 +12,7 @@ const envSchema = z.object({
   JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
   JWT_REFRESH_EXPIRES_IN: z.string().default("30d"),
   AES_ENCRYPTION_KEY: z.string().min(1, "AES_ENCRYPTION_KEY is required"),
+  /** Comma-separated list of allowed origins (one per web portal) — e.g. "https://a.com,https://b.com" */
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
   /**
    * Temporary testing toggle — echoes the OTP in the API response even in production.
