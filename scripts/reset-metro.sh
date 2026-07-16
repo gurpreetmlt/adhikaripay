@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-MOBILE="$ROOT/apps/mobile"
+MOBILE="$ROOT/apps/adhikaripay-mobile-app"
 
 echo "==> Project: $ROOT"
 echo "==> Stopping ALL Metro / packager on 8081–8083..."

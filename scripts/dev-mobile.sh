@@ -4,7 +4,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-MOBILE="$ROOT/apps/mobile"
+MOBILE="$ROOT/apps/adhikaripay-mobile-app"
 LOG_DIR="$ROOT/.dev-logs"
 mkdir -p "$LOG_DIR"
 cd "$ROOT"

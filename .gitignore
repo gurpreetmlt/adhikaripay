@@ -37,6 +37,7 @@ ios/build/
 # Non-project folders
 Edu/
 
-# Agent transcripts & terminal state (Cursor IDE)
-.cursor/
+# Agent transcripts & local terminal state
+.agent-config/
+.agent-local/
 agent-transcripts/

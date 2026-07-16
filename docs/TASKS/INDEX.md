@@ -1,6 +1,6 @@
 # Task Index
 
-> **Cursor limit bachao:** sirf 1 task file + AGENTS.md per chat. Plan: [CURSOR_PLAN.md](../CURSOR_PLAN.md) | Roadmap: [ROADMAP.md](../ROADMAP.md)
+> **AI editor limit bachao:** sirf 1 task file + AGENTS.md per chat. Plan: [AGENT_PLAN.md](../AGENT_PLAN.md) | Roadmap: [ROADMAP.md](../ROADMAP.md)
 
 ## Setup & infra
 | # | Task | Size | File |

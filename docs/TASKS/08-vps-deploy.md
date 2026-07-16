@@ -5,13 +5,13 @@ Express API on Ubuntu VPS — `api.adhikaripay.in` (example)
 
 ## Requirements on VPS
 - Node 20+
-- PostgreSQL (or managed)
-- MongoDB (or managed)
+- PostgreSQL (or managed) — single database, no Mongo
+- Redis (optional — cache/queues only)
 - nginx + Let's Encrypt SSL
 
 ## Env (production)
 Copy from `apps/backend/.env.example`:
-- `DATABASE_URL`, `MONGODB_URI`, `JWT_*`, `AES_ENCRYPTION_KEY`
+- `DATABASE_URL`, `JWT_*`, `AES_ENCRYPTION_KEY`
 - Strong secrets — never commit
 
 ## Build & run

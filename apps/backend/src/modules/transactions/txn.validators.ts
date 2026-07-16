@@ -56,6 +56,12 @@ const aepsBase = {
 
 export const aepsEnquirySchema = z.object({ ...aepsBase });
 
-export const aepsWithdrawSchema = z.object({ ...base, ...aepsBase, amount });
+// AEPS withdrawal is authorized by the customer's Aadhaar + biometric capture (UIDAI two-factor)
+// rather than the retailer's wallet PIN — no txnPin here, unlike the other debit operations above.
+export const aepsWithdrawSchema = z.object({
+  idempotencyKey: z.string().min(8).max(100),
+  ...aepsBase,
+  amount,
+});
 
 export const aadhaarPaySchema = z.object({ ...base, ...aepsBase, amount });

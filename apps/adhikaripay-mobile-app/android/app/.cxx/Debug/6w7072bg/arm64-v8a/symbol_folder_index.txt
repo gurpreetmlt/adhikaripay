@@ -1,0 +1,1 @@
+/Users/gurpreetchauhan/Desktop/Adhikari Pay/apps/adhikaripay-mobile-app/android/app/build/intermediates/cxx/Debug/6w7072bg/obj/arm64-v8a

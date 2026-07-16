@@ -1,13 +1,13 @@
 # Adhikari Pay — Agent Guide (read this first)
 
-Cursor token bachane ke liye **poori repo mat padho**. Sirf is file + relevant task file.
+AI editor token bachane ke liye **poori repo mat padho**. Sirf is file + relevant task file.
 
 ## Quick links
 
 | Need | Read |
 |------|------|
 | Login / URLs | [`LOGIN.md`](LOGIN.md) |
-| **Cursor limit plan** | [`docs/CURSOR_PLAN.md`](docs/CURSOR_PLAN.md) |
+| **AI efficiency (global + project)** | [`docs/AGENT_PLAN.md`](docs/AGENT_PLAN.md) · Claude: [`CLAUDE.md`](CLAUDE.md) |
 | What's next (phases) | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
 | Done / pending | [`docs/CHECKLIST.md`](docs/CHECKLIST.md) |
 | Task index | [`docs/TASKS/INDEX.md`](docs/TASKS/INDEX.md) |
@@ -15,7 +15,7 @@ Cursor token bachane ke liye **poori repo mat padho**. Sirf is file + relevant t
 
 ## Branding
 
-- **Product name:** Adhikari Pay (never Lokalpay / LokalPay in UI or agent docs)
+- **Product name:** Adhikari Pay (use this exact name in UI and agent docs)
 - **npm workspaces:** `@adhikaripay/*` (e.g. `@adhikaripay/backend`, `@adhikaripay/mobile`)
 - **Folder path:** `apps/mobile`
 
@@ -26,7 +26,7 @@ Frontend/            Public marketing site (:3002) — Log in / Sign up → Agen
 apps/
   admin-web/         Admin panel (:3000) — admin role only
   web/               Agent portal (:3001) — super dist, dist, retailer
-  backend/           Express API (:4000) — Postgres + Mongo
+  backend/           Express API (:4000) — Postgres only (Neon in prod)
   mobile/            Adhikari Pay Android app (pkg @adhikaripay/mobile)
   partner-web/       LEGACY — use apps/web
   retailer-web/      LEGACY — use apps/web
@@ -39,7 +39,7 @@ packages/
 
 - **Web:** Next.js 16, React 19, Tailwind 4, Zustand
 - **Mobile:** RN CLI 0.76, Android only, TypeScript
-- **Backend:** Express 5, Drizzle + Postgres, Mongoose + Mongo
+- **Backend:** Express 5, Drizzle + Postgres (single DB). Redis optional (cache only).
 - **Roles:** `admin` | `master_distributor` (UI: Super Distributor) | `distributor` | `retailer`
 
 ## Auth rule
@@ -63,17 +63,17 @@ packages/
 ## Agent rules (token saving)
 
 1. **Task file pehle** — `docs/TASKS/INDEX.md` → pick ONE file (~30 lines)
-2. **CURSOR_PLAN.md** — prompt templates, chat split, Terminal + MCP rules
+2. **AGENT_PLAN.md** — prompt templates, chat split, Terminal + MCP rules
 3. **L task = split chats** — ROADMAP dekho, XL mat ek chat mein daalo
 4. **Glob mat chalao** — task file ke "Read ONLY" paths direct kholo
 5. **Legacy ignore** — `partner-web`, `retailer-web`, unused `packages/db`
 6. **LOGIN.md** — credentials ke liye alag search mat karo
 7. **Task done** → `docs/CHECKLIST.md` update karo, nayi chat next task ke liye
-8. **MCP default off** — browser / Figma / Datadog / etc. sirf jab task ya user explicitly maange; exploratory MCP mat. Details: [`docs/CURSOR_PLAN.md`](docs/CURSOR_PLAN.md#mcp-rule-same-token-discipline-as-code-tools)
+8. **MCP default off** — browser / Figma / Datadog / etc. sirf jab task ya user explicitly maange; exploratory MCP mat. Details: [`docs/AGENT_PLAN.md`](docs/AGENT_PLAN.md#mcp-rule-same-token-discipline-as-code-tools)
 
-## Terminal (Mac only — Cursor shell mat)
+## Terminal (Mac only — agent shell mat)
 
-Build / install / migrate / dev / seed **Mac Terminal** mein chalao — Cursor shell mat. Agent **copy-paste commands** de, andar na chalaaye. Details: [`docs/CURSOR_PLAN.md`](docs/CURSOR_PLAN.md#terminal-rule-mac-only--cursor-shell-mat-use-karo).
+Build / install / migrate / dev / seed **Mac Terminal** mein chalao — agent shell mat. Agent **copy-paste commands** de, andar na chalaaye. Details: [`docs/AGENT_PLAN.md`](docs/AGENT_PLAN.md#terminal-rule-mac-only--agent-shell-mat-use-karo).
 
 ```bash
 # Android install (phone USB on)

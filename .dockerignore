@@ -5,7 +5,8 @@
 **/.turbo
 **/.dev-logs
 **/.git
-**/.cursor
+**/.agent-config
+**/.agent-local
 **/android
 **/ios
 **/*.log

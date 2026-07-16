@@ -8,8 +8,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SOURCE="$ROOT/Icons"
 WEB_DEST="$ROOT/apps/web/public/service-icons"
-MOBILE_SVG="$ROOT/apps/mobile/src/assets/service-icons"
-MOBILE_XML="$ROOT/apps/mobile/src/assets/serviceIconXml.ts"
+MOBILE_SVG="$ROOT/apps/adhikaripay-mobile-app/src/assets/service-icons"
+MOBILE_XML="$ROOT/apps/adhikaripay-mobile-app/src/assets/serviceIconXml.ts"
 
 if [ ! -d "$SOURCE" ]; then
   echo "ERROR: Icons/ folder not found at $SOURCE"

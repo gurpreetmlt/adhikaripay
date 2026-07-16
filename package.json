@@ -23,7 +23,7 @@
     "dev:webs": "bash scripts/dev-all-web.sh",
     "start:web": "bash scripts/dev-web.sh",
     "start:mobile": "bash scripts/dev-mobile.sh",
-    "dev:mobile": "cd apps/mobile && react-native start",
+    "dev:mobile": "cd apps/adhikaripay-mobile-app && react-native start",
     "android": "npm run android -w @adhikaripay/mobile",
     "build": "turbo run build",
     "lint": "turbo run lint",

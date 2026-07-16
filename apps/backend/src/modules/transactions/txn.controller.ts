@@ -152,7 +152,6 @@ export async function aepsMiniStatement(req: Request, res: Response): Promise<vo
 
 export async function aepsWithdraw(req: Request, res: Response): Promise<void> {
   const body = req.body as z.infer<typeof aepsWithdrawSchema>;
-  await verifyTxnPinOrThrow(actor(req).id, body.txnPin);
 
   const outcome = await executeServiceTxn({
     actor: actor(req),

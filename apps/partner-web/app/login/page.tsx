@@ -76,7 +76,7 @@ export default function LoginPage() {
       setCooldown(RESEND_COOLDOWN_SECONDS);
       if (data.data.otp) {
         // No SMS provider wired yet — dev/test builds echo the OTP back so the flow is usable
-        // end-to-end. Shown on screen and auto-filled, same as LokalMart's dev-mode OTP.
+        // end-to-end. Shown on screen and auto-filled, same as legacy retail prototype's dev-mode OTP.
         toast.success(`Dev OTP: ${data.data.otp}`, { duration: 15000 });
         setDevOtp(data.data.otp);
         setOtp(data.data.otp);
