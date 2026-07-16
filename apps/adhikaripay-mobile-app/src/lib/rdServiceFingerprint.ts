@@ -13,7 +13,9 @@ import { Platform } from "react-native";
  * blocks plain HTTP by default).
  */
 
-const RD_SERVICE_PORTS = [11100, 11101, 11102];
+// Mantra L1 has been observed on 11120 on-device. Keep older guessed ports too because some RD
+// apps vary across versions/devices.
+const RD_SERVICE_PORTS = [11120, 11100, 11101, 11102];
 const RD_HTTP_TIMEOUT_MS = 4000;
 const CAPTURE_TIMEOUT_MS = 20000;
 
@@ -130,11 +132,17 @@ export async function captureFingerprint(): Promise<string> {
   const headers = { "Content-Type": "text/xml" };
   // Capture requests go to the same base path the info probe found working (root vs "/rd/..."),
   // trying the documented custom verb "CAPTURE" before falling back to plain POST.
+  const normalizedProbePath =
+    found.path === "/rd/info"
+      ? "/rd/capture"
+      : found.path === "/"
+        ? "/"
+        : found.path;
   const captureUrls = [
-    `http://127.0.0.1:${found.port}${found.path}`,
     `http://127.0.0.1:${found.port}/rd/capture`,
     `http://127.0.0.1:${found.port}/capture`,
     `http://127.0.0.1:${found.port}/`,
+    `http://127.0.0.1:${found.port}${normalizedProbePath}`,
   ].filter((url, index, arr) => arr.indexOf(url) === index);
 
   // fetch() only throws on a genuine network failure, never for HTTP error statuses (404/405/500),
