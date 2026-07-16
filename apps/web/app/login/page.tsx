@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
@@ -26,6 +26,7 @@ import { useAuthStore } from "@/lib/store";
 import { extractApiError, nextOnboardingPath } from "@/lib/onboarding";
 import { authenticateBiometric, getBiometricStore } from "@/lib/webauthn";
 import { getDeviceId, getDeviceLabel } from "@/lib/deviceId";
+import { clearRememberedLogin, getRememberedLogin, setRememberedLogin, type RememberedLogin } from "@/lib/rememberedLogin";
 
 interface LoginResponseData {
   user: AuthUser;
@@ -51,11 +52,67 @@ export default function LoginPage() {
   const [pending, setPending] = useState<LoginResponseData | null>(null);
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [mpin, setMpin] = useState("");
+  const [remembered, setRemembered] = useState<RememberedLogin | null>(null);
+  // Show the fast MPIN "welcome back" unlock when this browser has a remembered agent.
+  const [unlockMode, setUnlockMode] = useState(false);
+
+  useEffect(() => {
+    const saved = getRememberedLogin();
+    if (saved) {
+      setRemembered(saved);
+      setUnlockMode(true);
+    }
+  }, []);
 
   function finishLogin(data: LoginResponseData) {
     setAuth(data.user, { accessToken: data.accessToken, refreshToken: data.refreshToken });
+    // Remember this agent so next time (on this trusted browser) we can offer MPIN, not OTP.
+    setRememberedLogin({ mobile: data.user.mobile, name: data.user.name });
     toast.success(`Welcome back, ${data.user.name}`);
     router.replace(nextOnboardingPath(data.user) ?? "/dashboard");
+  }
+
+  function switchToFullLogin() {
+    clearRememberedLogin();
+    setRemembered(null);
+    setUnlockMode(false);
+    setMpin("");
+    setMobile("");
+    setOtp("");
+    setOtpStep("mobile");
+    setDevOtp(null);
+  }
+
+  async function unlockWithMpin(e?: FormEvent) {
+    e?.preventDefault();
+    if (!remembered || mpin.length !== 4) return;
+    setLoading(true);
+    try {
+      const { data } = await api.post<ApiResponse<LoginResponseData>>("/auth/mpin/login", {
+        mobile: remembered.mobile,
+        mpin,
+        portal: "agent",
+        deviceId: getDeviceId(),
+      });
+      if (!data.success) throw new Error(data.message);
+      finishLogin(data.data);
+    } catch (err) {
+      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
+      if (code === "DEVICE_NOT_TRUSTED" || code === "MPIN_NOT_SET") {
+        // Trust lapsed / no MPIN yet → fall back to OTP with the remembered number prefilled.
+        toast(code === "MPIN_NOT_SET" ? "Set your MPIN after logging in with OTP" : "Please verify with OTP again");
+        setMobile(remembered.mobile);
+        setMpin("");
+        setUnlockMode(false);
+        void requestOtp();
+        return;
+      }
+      toast.error(extractApiError(err, "Incorrect MPIN"));
+      setMpin("");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handlePasswordLogin(e?: FormEvent) {
@@ -225,6 +282,52 @@ export default function LoginPage() {
           <div className="mb-8 lg:hidden">
             <AdhikariPayLogo width={190} />
           </div>
+
+          {unlockMode && remembered ? (
+            <form onSubmit={unlockWithMpin}>
+              <h2 className="mb-1 text-2xl font-bold" style={{ color: B.blue }}>
+                Welcome back, {remembered.name.split(" ")[0]}
+              </h2>
+              <p className="mb-7 text-sm" style={{ color: B.muted }}>
+                Enter your <strong style={{ color: B.blue }}>4-digit MPIN</strong> for +91 {remembered.mobile}
+              </p>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                Login MPIN
+              </label>
+              <input
+                autoFocus
+                inputMode="numeric"
+                maxLength={4}
+                value={mpin}
+                onChange={(e) => setMpin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                className="mb-4 w-full rounded-2xl border-2 bg-white px-4 py-3.5 text-center text-2xl tracking-[0.5em] outline-none"
+                style={{ borderColor: B.border, color: B.blue }}
+                placeholder="••••"
+              />
+              <SubmitBtn loading={loading} label="Unlock with MPIN" color={role.color} gradient={role.gradient} />
+              <button
+                type="button"
+                className="mt-4 w-full text-sm font-medium"
+                style={{ color: B.muted }}
+                onClick={() => {
+                  setMobile(remembered.mobile);
+                  setUnlockMode(false);
+                  void requestOtp();
+                }}
+              >
+                Use OTP instead
+              </button>
+              <button
+                type="button"
+                className="mt-2 w-full text-sm font-semibold"
+                style={{ color: role.color }}
+                onClick={switchToFullLogin}
+              >
+                Not you? Use a different number
+              </button>
+            </form>
+          ) : (
+          <>
           <h2 className="mb-1 text-2xl font-bold" style={{ color: B.blue }}>
             Sign in to your account
           </h2>
@@ -443,6 +546,8 @@ export default function LoginPage() {
               Sign up with OTP
             </Link>
           </p>
+          </>
+          )}
         </div>
       </div>
     </div>
