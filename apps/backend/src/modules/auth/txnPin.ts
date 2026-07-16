@@ -3,7 +3,7 @@ import { db } from "../../db/postgres";
 import { users } from "../../db/postgres/schema";
 import { hashPassword, comparePassword } from "../../utils/password";
 import { HttpError } from "../../utils/httpError";
-import { AuditLog } from "../../db/mongo/models/AuditLog";
+import { insertAuditLog } from "../../db/postgres/repositories/auditLog";
 
 const PIN_PATTERN = /^\d{4}$/;
 
@@ -32,7 +32,7 @@ export async function setTxnPin(
 
   const txnPinHash = await hashPassword(pin);
   await db.update(users).set({ txnPinHash, updatedAt: new Date() }).where(eq(users.id, userId));
-  await AuditLog.create({
+  await insertAuditLog({
     userId,
     action: "auth.txn_pin_set",
     entityType: "user",
@@ -57,7 +57,7 @@ export async function verifyTxnPinOrThrow(userId: string, pin: string | undefine
   }
   const ok = await comparePassword(pin, user.txnPinHash);
   if (!ok) {
-    await AuditLog.create({
+    await insertAuditLog({
       userId,
       action: "auth.txn_pin_failed",
       entityType: "user",

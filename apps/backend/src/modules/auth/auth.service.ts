@@ -10,8 +10,14 @@ import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../uti
 import { HttpError } from "../../utils/httpError";
 import { env } from "../../config/env";
 import { logger } from "../../utils/logger";
-import { AuditLog } from "../../db/mongo/models/AuditLog";
-import { OtpRequest, MAX_OTP_ATTEMPTS } from "../../db/mongo/models/OtpRequest";
+import { insertAuditLog } from "../../db/postgres/repositories/auditLog";
+import {
+  MAX_OTP_ATTEMPTS,
+  findLatestActiveOtp,
+  incrementOtpAttempts,
+  insertOtpRequest,
+  markOtpConsumed,
+} from "../../db/postgres/repositories/otpRequest";
 import type { AuthPortal, AuthUser, UserRole } from "@adhikaripay/shared-types";
 import { isAdminRole, isAgentPortalRole, ROLE_LABELS } from "@adhikaripay/shared-types";
 import type {
@@ -140,7 +146,7 @@ export async function registerUser(
     return created;
   });
 
-  await AuditLog.create({
+  await insertAuditLog({
     userId: actor.id,
     action: "auth.register",
     entityType: "user",
@@ -192,7 +198,7 @@ async function issueSession(
     expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
   });
 
-  await AuditLog.create({
+  await insertAuditLog({
     userId: row.id,
     action: "auth.login",
     entityType: "user",
@@ -289,7 +295,7 @@ export async function loginUser(
     }
 
     if (!row || !passwordMatches || !row.isActive) {
-      await AuditLog.create({
+      await insertAuditLog({
         userId: row?.id ?? null,
         action: "auth.login_failed",
         entityType: "user",
@@ -311,7 +317,7 @@ export async function loginUser(
   const passwordMatches = row ? await comparePassword(input.password, row.passwordHash) : false;
 
   if (!row || !passwordMatches || !row.isActive) {
-    await AuditLog.create({
+    await insertAuditLog({
       userId: row?.id ?? null,
       action: "auth.login_failed",
       entityType: "user",
@@ -381,7 +387,7 @@ export async function requestLoginOtp(
   const otp = randomInt(100000, 1000000).toString();
 
   if (row || isDev) {
-    await OtpRequest.create({
+    await insertOtpRequest({
       mobile: input.mobile,
       otpHash: hashToken(otp),
       purpose: "login",
@@ -389,7 +395,7 @@ export async function requestLoginOtp(
     });
 
     if (row) {
-      await AuditLog.create({
+      await insertAuditLog({
         userId: row.id,
         action: "auth.otp_requested",
         entityType: "user",
@@ -424,12 +430,7 @@ export async function verifyLoginOtp(
     );
   }
 
-  const record = await OtpRequest.findOne({
-    mobile: input.mobile,
-    purpose: "login",
-    consumedAt: null,
-    expiresAt: { $gt: new Date() },
-  }).sort({ createdAt: -1 });
+  const record = await findLatestActiveOtp({ mobile: input.mobile, purpose: "login" });
 
   if (!record) throw new HttpError(401, "OTP has expired or was not requested", "OTP_EXPIRED");
 
@@ -438,13 +439,11 @@ export async function verifyLoginOtp(
   }
 
   if (record.otpHash !== hashToken(input.otp)) {
-    record.attempts += 1;
-    await record.save();
+    await incrementOtpAttempts(record.id);
     throw new HttpError(401, "Incorrect OTP", "OTP_INCORRECT");
   }
 
-  record.consumedAt = new Date();
-  await record.save();
+  await markOtpConsumed(record.id);
 
   const [row] = await db.select().from(users).where(eq(users.mobile, input.mobile));
   if (!row) throw new HttpError(401, "No account found for this number", "ACCOUNT_NOT_FOUND");
@@ -506,7 +505,7 @@ export async function loginWithMpin(
 
   const ok = await comparePassword(input.mpin, withMpin.loginMpinHash);
   if (!ok) {
-    await AuditLog.create({
+    await insertAuditLog({
       userId: withMpin.id,
       action: "auth.mpin_failed",
       entityType: "user",
@@ -546,7 +545,7 @@ export async function setLoginMpin(
     .set({ loginMpinHash, updatedAt: new Date() })
     .where(eq(users.id, userId));
 
-  await AuditLog.create({
+  await insertAuditLog({
     userId,
     action: "auth.mpin_set",
     entityType: "user",
@@ -632,7 +631,7 @@ export async function requestSignupOtp(
   }
 
   const otp = randomInt(100000, 1000000).toString();
-  await OtpRequest.create({
+  await insertOtpRequest({
     mobile: input.mobile,
     otpHash: hashToken(otp),
     purpose: "signup",
@@ -640,7 +639,7 @@ export async function requestSignupOtp(
     meta: { name: input.name.trim(), sponsorUid: sponsor.uid },
   });
 
-  await AuditLog.create({
+  await insertAuditLog({
     userId: sponsor.id,
     action: "auth.signup_otp_requested",
     entityType: "user",
@@ -670,20 +669,14 @@ export async function verifySignupOtp(
     throw new HttpError(400, "Signup is only available on the agent portal", "WRONG_PORTAL");
   }
 
-  const record = await OtpRequest.findOne({
-    mobile: input.mobile,
-    purpose: "signup",
-    consumedAt: null,
-    expiresAt: { $gt: new Date() },
-  }).sort({ createdAt: -1 });
+  const record = await findLatestActiveOtp({ mobile: input.mobile, purpose: "signup" });
 
   if (!record) throw new HttpError(401, "OTP has expired or was not requested", "OTP_EXPIRED");
   if (record.attempts >= MAX_OTP_ATTEMPTS) {
     throw new HttpError(401, "Too many incorrect attempts — request a new OTP", "OTP_LOCKED");
   }
   if (record.otpHash !== hashToken(input.otp)) {
-    record.attempts += 1;
-    await record.save();
+    await incrementOtpAttempts(record.id);
     throw new HttpError(401, "Incorrect OTP", "OTP_INCORRECT");
   }
 
@@ -693,8 +686,7 @@ export async function verifySignupOtp(
     throw new HttpError(422, "Sponsor UID does not match OTP request", "SPONSOR_MISMATCH");
   }
 
-  record.consumedAt = new Date();
-  await record.save();
+  await markOtpConsumed(record.id);
 
   const [sponsor] = await db.select().from(users).where(eq(users.uid, sponsorUid));
   if (!sponsor || !sponsor.isActive || sponsor.role !== "distributor") {
@@ -718,7 +710,7 @@ export async function verifySignupOtp(
   const [row] = await db.select().from(users).where(eq(users.id, user.id));
   if (!row) throw new HttpError(500, "User created but not found");
 
-  await AuditLog.create({
+  await insertAuditLog({
     userId: row.id,
     action: "auth.signup",
     entityType: "user",

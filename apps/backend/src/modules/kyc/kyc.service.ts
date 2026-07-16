@@ -3,7 +3,7 @@ import { db } from "../../db/postgres";
 import { users } from "../../db/postgres/schema";
 import { encryptPII } from "../../utils/aes";
 import { HttpError } from "../../utils/httpError";
-import { AuditLog } from "../../db/mongo/models/AuditLog";
+import { insertAuditLog } from "../../db/postgres/repositories/auditLog";
 import type { AuthUser } from "@adhikaripay/shared-types";
 import type { KycSubmitInput } from "../auth/auth.validators";
 
@@ -48,7 +48,7 @@ export async function submitKyc(userId: string, input: KycSubmitInput): Promise<
 
   if (!updated) throw new HttpError(500, "Failed to save KYC");
 
-  await AuditLog.create({
+  await insertAuditLog({
     userId,
     action: "kyc.submit",
     entityType: "user",

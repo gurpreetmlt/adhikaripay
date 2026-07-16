@@ -19,13 +19,6 @@ rm -rf /tmp/metro-* /tmp/haste-map-* 2>/dev/null || true
 rm -rf "${TMPDIR:-/tmp}"/metro-* "${TMPDIR:-/tmp}"/haste-map-* 2>/dev/null || true
 watchman watch-del-all 2>/dev/null || true
 
-if [ -d "/Users/gurpreetchauhan/Desktop/LokalPay" ]; then
-  echo ""
-  echo "⚠️  Purana folder ab bhi hai: ~/Desktop/LokalPay"
-  echo "    Sirf 'Adhikari Pay' use karo."
-  echo ""
-fi
-
 echo "==> Starting Metro (reset-cache) from: $MOBILE"
 cd "$MOBILE"
 export CI=true

@@ -1,7 +1,7 @@
 import { and, eq, asc, desc } from "drizzle-orm";
 import { db } from "../../db/postgres";
 import { providers, providerServices, services } from "../../db/postgres/schema";
-import { ProviderLog } from "../../db/mongo/models/ProviderLog";
+import { insertProviderLog } from "../../db/postgres/repositories/providerLog";
 import { getAdapterByCode } from "./provider.registry";
 import { HttpError } from "../../utils/httpError";
 import { logger } from "../../utils/logger";
@@ -85,12 +85,12 @@ export async function callProvider<T extends Record<string, unknown>>(
     };
   }
 
-  ProviderLog.create({
+  insertProviderLog({
     txnRef,
     providerCode: routed.adapter.code,
     operation,
     requestPayload: redactedRequest,
-    responsePayload: result.raw,
+    responsePayload: (result.raw ?? {}) as Record<string, unknown>,
     status: result.status,
     durationMs: Date.now() - startedAt,
   }).catch((err: unknown) => logger.error({ err }, "failed to write provider log"));

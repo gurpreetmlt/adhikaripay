@@ -4,7 +4,7 @@ import { db } from "../../db/postgres";
 import { users, transactions, services, serviceCategories, wallets, userCommissionRates } from "../../db/postgres/schema";
 import { HttpError } from "../../utils/httpError";
 import { decryptPII } from "../../utils/aes";
-import { AuditLog } from "../../db/mongo/models/AuditLog";
+import { findLatestAuditLog, insertAuditLog } from "../../db/postgres/repositories/auditLog";
 import type { UserRole, KycStatus, TransactionStatus } from "@adhikaripay/shared-types";
 
 function maskPan(pan: string) {
@@ -115,12 +115,7 @@ export async function getAdminUserDetail(userId: string) {
     .from(wallets)
     .where(eq(wallets.userId, userId));
 
-  const kycAudit = await AuditLog.findOne({
-    userId: row.id,
-    action: "kyc.submit",
-  })
-    .sort({ createdAt: -1 })
-    .lean();
+  const kycAudit = await findLatestAuditLog({ userId: row.id, action: "kyc.submit" });
 
   const meta = (kycAudit?.metadata ?? {}) as Record<string, unknown>;
 
@@ -272,7 +267,7 @@ export async function listAdminUsers(opts: {
 export async function setUserActive(adminId: string, userId: string, isActive: boolean) {
   const [row] = await db.update(users).set({ isActive, updatedAt: new Date() }).where(eq(users.id, userId)).returning();
   if (!row) throw new HttpError(404, "User not found", "USER_NOT_FOUND");
-  await AuditLog.create({
+  await insertAuditLog({
     userId: adminId,
     action: isActive ? "admin.user_activate" : "admin.user_deactivate",
     entityType: "user",
@@ -318,7 +313,7 @@ export async function decideKyc(adminId: string, userId: string, decision: "veri
     .where(eq(users.id, userId))
     .returning();
 
-  await AuditLog.create({
+  await insertAuditLog({
     userId: adminId,
     action: decision === "verified" ? "kyc.approve" : "kyc.reject",
     entityType: "user",
@@ -407,7 +402,7 @@ export async function updateServiceSiteControl(
     .where(eq(services.id, serviceId))
     .returning();
 
-  await AuditLog.create({
+  await insertAuditLog({
     userId: adminId,
     action: "admin.catalog_service_update",
     entityType: "service",
@@ -533,7 +528,7 @@ export async function upsertAdminUserCommissions(
     }
   }
 
-  await AuditLog.create({
+  await insertAuditLog({
     userId: adminId,
     action: "admin.user_commission_upsert",
     entityType: "user",

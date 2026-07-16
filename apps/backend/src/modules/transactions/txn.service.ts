@@ -8,7 +8,7 @@ import type { ProviderOperation, ProviderResult } from "../providers/types";
 import { HttpError } from "../../utils/httpError";
 import { generateTxnRef } from "../../utils/uid";
 import { logger } from "../../utils/logger";
-import { AuditLog } from "../../db/mongo/models/AuditLog";
+import { insertAuditLog } from "../../db/postgres/repositories/auditLog";
 import type { UserRole, WalletType } from "@adhikaripay/shared-types";
 
 type Actor = { id: string; role: UserRole };
@@ -285,7 +285,7 @@ export async function recheckTxnStatus(actor: Actor, txnRef: string): Promise<Tx
   const walletType: WalletType = direction === "credit" ? "aeps" : "main";
   const finalized = await finalizeTxn(txn, result, { direction, walletType });
 
-  await AuditLog.create({
+  await insertAuditLog({
     userId: actor.id,
     action: "txn.status_recheck",
     entityType: "transaction",

@@ -37,7 +37,7 @@ export const transactions = pgTable(
     // Wallet debited/credited for this txn (main = Wallet 1, aeps = Wallet 2). Null on legacy rows.
     walletType: walletTypeEnum("wallet_type"),
     // small structured fields only (mobile number, operator code, account no.) — raw provider
-    // request/response payloads live in MongoDB (provider_logs), not here
+    // request/response payloads live in the provider_logs table, not here
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     initiatedAt: timestamp("initiated_at", { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),

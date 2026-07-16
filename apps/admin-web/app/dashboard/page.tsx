@@ -277,7 +277,7 @@ export default function DashboardPage() {
             <div className="space-y-3">
               <HealthRow icon={Server} label="API Server" status="operational" />
               <HealthRow icon={Database} label="PostgreSQL" status="operational" />
-              <HealthRow icon={Database} label="MongoDB" status="operational" />
+              <HealthRow icon={Database} label="Redis" status="operational" />
               <HealthRow icon={Clock} label="Last checked" status="now" />
             </div>
           </div>

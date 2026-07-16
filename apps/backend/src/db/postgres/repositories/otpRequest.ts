@@ -1,0 +1,73 @@
+import { and, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { db } from "../index";
+import { otpRequests, type OtpMeta } from "../schema";
+
+export const MAX_OTP_ATTEMPTS = 5;
+
+export type OtpPurpose = "login" | "signup";
+
+export interface InsertOtpRequestInput {
+  mobile: string;
+  otpHash: string;
+  purpose: OtpPurpose;
+  expiresAt: Date;
+  meta?: OtpMeta | null;
+}
+
+export async function insertOtpRequest(input: InsertOtpRequestInput): Promise<void> {
+  await db.insert(otpRequests).values({
+    mobile: input.mobile,
+    otpHash: input.otpHash,
+    purpose: input.purpose,
+    expiresAt: input.expiresAt,
+    meta: input.meta ?? null,
+  });
+}
+
+export interface ActiveOtpRecord {
+  id: string;
+  otpHash: string;
+  attempts: number;
+  meta: OtpMeta | null;
+}
+
+export async function findLatestActiveOtp(filter: {
+  mobile: string;
+  purpose: OtpPurpose;
+}): Promise<ActiveOtpRecord | null> {
+  const [row] = await db
+    .select({
+      id: otpRequests.id,
+      otpHash: otpRequests.otpHash,
+      attempts: otpRequests.attempts,
+      meta: otpRequests.meta,
+    })
+    .from(otpRequests)
+    .where(
+      and(
+        eq(otpRequests.mobile, filter.mobile),
+        eq(otpRequests.purpose, filter.purpose),
+        isNull(otpRequests.consumedAt),
+        gt(otpRequests.expiresAt, new Date()),
+      ),
+    )
+    .orderBy(desc(otpRequests.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function incrementOtpAttempts(id: string): Promise<void> {
+  await db
+    .update(otpRequests)
+    .set({ attempts: sql`${otpRequests.attempts} + 1` })
+    .where(eq(otpRequests.id, id));
+}
+
+export async function markOtpConsumed(id: string): Promise<void> {
+  await db.update(otpRequests).set({ consumedAt: new Date() }).where(eq(otpRequests.id, id));
+}
+
+/** Sweeps expired OTP rows — Postgres has no native TTL index like Mongo did. */
+export async function deleteExpiredOtpRequests(): Promise<void> {
+  await db.delete(otpRequests).where(lt(otpRequests.expiresAt, sql`now()`));
+}
