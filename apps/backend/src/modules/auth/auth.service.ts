@@ -18,6 +18,17 @@ import {
   insertOtpRequest,
   markOtpConsumed,
 } from "../../db/postgres/repositories/otpRequest";
+import {
+  MAX_DEVICE_MPIN_ATTEMPTS,
+  findDevice,
+  incrementDeviceFailedAttempts,
+  listDevicesForUser,
+  revokeAllDevicesForUser,
+  revokeDevice,
+  touchDeviceAuth,
+  trustDevice,
+  type DeviceRow,
+} from "../../db/postgres/repositories/device";
 import type { AuthPortal, AuthUser, UserRole } from "@adhikaripay/shared-types";
 import { isAdminRole, isAgentPortalRole, ROLE_LABELS } from "@adhikaripay/shared-types";
 import type {
@@ -40,6 +51,12 @@ const ALLOWED_CHILD_ROLE: Record<UserRole, UserRole | null> = {
 };
 
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // keep in sync with JWT_REFRESH_EXPIRES_IN
+
+// Rolling trust window: MPIN-only login is allowed as long as this device authenticated
+// (via OTP or MPIN) within the last N hours. Deliberately NOT a calendar-day/midnight cutoff —
+// a login at 11:58pm followed by one at 12:02am is 4 minutes apart, not "a new day" — so this
+// rolls forward from the device's own last activity instead of the clock.
+const DEVICE_TRUST_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 /** Default login MPIN for agent accounts that never set one (seed + first OTP/password login). */
 export const DEFAULT_AGENT_LOGIN_MPIN = "1234";
@@ -465,6 +482,24 @@ export async function verifyLoginOtp(
   }
 
   const withMpin = await ensureDefaultLoginMpin(row);
+
+  const device = await trustDevice({ userId: row.id, deviceId: input.deviceId, label: input.deviceLabel });
+  await insertAuditLog({
+    userId: row.id,
+    action: "auth.device_trusted",
+    entityType: "device",
+    entityId: device.id,
+    ipAddress: context.ipAddress,
+    userAgent: context.userAgent,
+    metadata: { deviceId: input.deviceId, label: input.deviceLabel ?? null },
+  });
+  // Extension point: notify the user's other trusted devices ("new device login") once an
+  // SMS/push provider is wired up — same pattern as EXPOSE_OTP_IN_RESPONSE below.
+  logger.info(
+    { userId: row.id, deviceId: input.deviceId, label: input.deviceLabel },
+    "[DEVICE TRUSTED] notify-other-devices not wired yet",
+  );
+
   return issueSession(withMpin, context, "otp");
 }
 
@@ -506,8 +541,25 @@ export async function loginWithMpin(
     );
   }
 
+  // Device trust gate: MPIN-only login is only allowed within the rolling trust window (see
+  // DEVICE_TRUST_WINDOW_MS). A never-seen device, a revoked one, or one that's gone stale all
+  // fall back to OTP — the client is expected to catch DEVICE_NOT_TRUSTED and switch tabs.
+  const device = await findDevice(withMpin.id, input.deviceId);
+  const isFresh = device && !device.revokedAt && Date.now() - device.lastAuthAt.getTime() < DEVICE_TRUST_WINDOW_MS;
+  if (!isFresh) {
+    throw new HttpError(
+      401,
+      "This device needs to verify with OTP again before using MPIN.",
+      "DEVICE_NOT_TRUSTED",
+    );
+  }
+
   const ok = await comparePassword(input.mpin, withMpin.loginMpinHash);
   if (!ok) {
+    const attempts = await incrementDeviceFailedAttempts(device.id);
+    if (attempts >= MAX_DEVICE_MPIN_ATTEMPTS) {
+      await revokeDevice(device.id);
+    }
     await insertAuditLog({
       userId: withMpin.id,
       action: "auth.mpin_failed",
@@ -515,12 +567,46 @@ export async function loginWithMpin(
       entityId: withMpin.id,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
-      metadata: {},
+      metadata: { deviceId: input.deviceId, attempts, revoked: attempts >= MAX_DEVICE_MPIN_ATTEMPTS },
     });
     throw new HttpError(401, "Incorrect MPIN", "MPIN_INCORRECT");
   }
 
+  await touchDeviceAuth(device.id);
   return issueSession(withMpin, context, "mpin");
+}
+
+export interface DeviceSummary {
+  id: string;
+  label: string | null;
+  trustedAt: Date;
+  lastAuthAt: Date;
+}
+
+export async function listUserDevices(userId: string): Promise<DeviceSummary[]> {
+  const rows = await listDevicesForUser(userId);
+  return rows.map((row: DeviceRow) => ({
+    id: row.id,
+    label: row.label,
+    trustedAt: row.trustedAt,
+    lastAuthAt: row.lastAuthAt,
+  }));
+}
+
+export async function revokeUserDevice(userId: string, id: string): Promise<void> {
+  const rows = await listDevicesForUser(userId);
+  const owned = rows.find((row: DeviceRow) => row.id === id);
+  if (!owned) throw new HttpError(404, "Device not found", "DEVICE_NOT_FOUND");
+  await revokeDevice(id);
+  await insertAuditLog({
+    userId,
+    action: "auth.device_revoked",
+    entityType: "device",
+    entityId: id,
+    ipAddress: null,
+    userAgent: null,
+    metadata: { manual: true },
+  });
 }
 
 export async function setLoginMpin(
@@ -542,11 +628,19 @@ export async function setLoginMpin(
     }
   }
 
+  const isChange = Boolean(row.loginMpinHash);
   const loginMpinHash = await hashPassword(input.mpin);
   await db
     .update(users)
     .set({ loginMpinHash, updatedAt: new Date() })
     .where(eq(users.id, userId));
+
+  // Step-up: changing an existing MPIN revokes every trusted device, this one included — the
+  // next login anywhere requires OTP again. (First-time set is exempt: it normally happens
+  // right after an OTP login in the same session, so there's nothing suspicious to step up for.)
+  if (isChange) {
+    await revokeAllDevicesForUser(userId);
+  }
 
   await insertAuditLog({
     userId,
@@ -555,7 +649,7 @@ export async function setLoginMpin(
     entityId: userId,
     ipAddress: null,
     userAgent: null,
-    metadata: { firstSet: !row.loginMpinHash },
+    metadata: { firstSet: !isChange },
   });
 
   return getAuthMe(userId);

@@ -22,6 +22,8 @@ import {
   requestSignupOtp,
   verifySignupOtp,
   getAuthMe,
+  listUserDevices,
+  revokeUserDevice,
 } from "./auth.service";
 import { setTxnPin, verifyTxnPinOrThrow } from "./txnPin";
 import { db } from "../../db/postgres";
@@ -97,6 +99,21 @@ export async function setMpin(req: Request, res: Response): Promise<void> {
   const input = setLoginMpinSchema.parse(req.body);
   const user = await setLoginMpin(req.auth.sub, input);
   sendSuccess(res, { user }, "Login MPIN set successfully");
+}
+
+export async function listDevices(req: Request, res: Response): Promise<void> {
+  if (!req.auth) throw new HttpError(401, "Authentication required", "UNAUTHENTICATED");
+  const devices = await listUserDevices(req.auth.sub);
+  sendSuccess(res, { devices }, "OK");
+}
+
+const revokeDeviceParamsSchema = z.object({ id: z.string().uuid() });
+
+export async function revokeDevice(req: Request, res: Response): Promise<void> {
+  if (!req.auth) throw new HttpError(401, "Authentication required", "UNAUTHENTICATED");
+  const { id } = revokeDeviceParamsSchema.parse(req.params);
+  await revokeUserDevice(req.auth.sub, id);
+  sendSuccess(res, null, "Device signed out");
 }
 
 export async function signupRequest(req: Request, res: Response): Promise<void> {

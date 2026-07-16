@@ -73,11 +73,17 @@ export const otpRequestSchema = z.object({
 });
 export type OtpRequestInput = z.infer<typeof otpRequestSchema>;
 
+const deviceIdSchema = z.string().trim().min(8).max(100);
+const deviceLabelSchema = z.string().trim().max(150).optional();
+
 export const otpVerifySchema = z.object({
   mobile: mobileSchema,
   otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
   portal: z.enum(AUTH_PORTALS).default("agent"),
   role: z.enum(AGENT_LOGIN_ROLES).optional(),
+  /** Trusts this device for MPIN-only login going forward — see auth.service.ts. */
+  deviceId: deviceIdSchema,
+  deviceLabel: deviceLabelSchema,
 });
 export type OtpVerifyInput = z.infer<typeof otpVerifySchema>;
 
@@ -86,6 +92,8 @@ export const mpinLoginSchema = z.object({
   mpin: z.string().regex(/^\d{4}$/, "MPIN must be 4 digits"),
   portal: z.enum(AUTH_PORTALS).default("agent"),
   role: z.enum(AGENT_LOGIN_ROLES).optional(),
+  /** Server rejects with DEVICE_NOT_TRUSTED if this device hasn't completed OTP recently. */
+  deviceId: deviceIdSchema,
 });
 export type MpinLoginInput = z.infer<typeof mpinLoginSchema>;
 

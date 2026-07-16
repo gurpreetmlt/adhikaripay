@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import { users, refreshTokens } from "./users";
+import { devices } from "./devices";
 import { wallets, walletLedgerGroups, walletLedgerEntries } from "./wallets";
 import { serviceCategories, services, providers, providerServices } from "./catalog";
 import { transactions } from "./transactions";
@@ -11,12 +12,17 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   wallets: many(wallets),
   transactions: many(transactions),
   refreshTokens: many(refreshTokens),
+  devices: many(devices),
   apiClients: many(apiClients),
   commissionRates: many(userCommissionRates),
 }));
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
   user: one(users, { fields: [refreshTokens.userId], references: [users.id] }),
+}));
+
+export const devicesRelations = relations(devices, ({ one }) => ({
+  user: one(users, { fields: [devices.userId], references: [users.id] }),
 }));
 
 export const walletsRelations = relations(wallets, ({ one, many }) => ({

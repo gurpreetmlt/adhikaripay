@@ -9,6 +9,8 @@ import {
   verifyOtp,
   mpinLogin,
   setMpin,
+  listDevices,
+  revokeDevice,
   signupRequest,
   signupVerify,
   setTransactionPin,
@@ -30,6 +32,9 @@ authRouter.post("/otp/verify", authLimiter, verifyOtp);
 
 authRouter.post("/mpin/login", authLimiter, mpinLogin);
 authRouter.post("/mpin/set", requireAuth, setMpin);
+
+authRouter.get("/devices", requireAuth, listDevices);
+authRouter.post("/devices/:id/revoke", requireAuth, revokeDevice);
 
 authRouter.post("/signup/request", otpRequestLimiter, signupRequest);
 authRouter.post("/signup/verify", authLimiter, signupVerify);

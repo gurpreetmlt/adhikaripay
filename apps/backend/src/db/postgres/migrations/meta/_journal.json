@@ -57,6 +57,13 @@
       "when": 1784175067313,
       "tag": "0007_fuzzy_thanos",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784210276125,
+      "tag": "0008_light_demogoblin",
+      "breakpoints": true
     }
   ]
 }
