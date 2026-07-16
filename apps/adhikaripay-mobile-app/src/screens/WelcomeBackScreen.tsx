@@ -12,6 +12,7 @@ import {
 } from "../lib/bioUnlock";
 import { useAuthStore } from "../store/auth";
 import { apiError } from "../utils/apiError";
+import { getDeviceId, getDeviceLabel } from "../lib/deviceId";
 import { BrandMark } from "../components/BrandMark";
 import { CodeGrid } from "../components/CodeGrid";
 import { colors } from "../theme/colors";
@@ -224,6 +225,8 @@ export function WelcomeBackScreen({ mobile, role, devOtp: initialDevOtp, onBack 
         otp: value,
         portal: "agent",
         role,
+        deviceId: await getDeviceId(),
+        deviceLabel: getDeviceLabel(),
       });
       if (!data.success) throw new Error(data.message);
       await finishLogin(data.data);
@@ -245,12 +248,27 @@ export function WelcomeBackScreen({ mobile, role, devOtp: initialDevOtp, onBack 
         mpin,
         portal: "agent",
         role,
+        deviceId: await getDeviceId(),
       });
       if (!data.success) throw new Error(data.message);
       await finishLogin(data.data);
     } catch (err) {
+      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
       const msg = apiError(err, "Incorrect MPIN");
-      if (msg.toLowerCase().includes("not set")) {
+      if (code === "DEVICE_NOT_TRUSTED") {
+        // Trust lapsed / new device → OTP verification is required again on this phone.
+        showAlert("Verify with OTP", "For your security, verify with OTP again on this device.", [
+          {
+            text: "Open OTP",
+            style: "primary",
+            onPress: () => {
+              setTab("otp");
+              setMpin("");
+              void resendOtp();
+            },
+          },
+        ]);
+      } else if (code === "MPIN_NOT_SET" || msg.toLowerCase().includes("not set")) {
         showAlert("MPIN not set", "Pehle OTP tab se login karo, phir 4-digit MPIN set karo.", [
           {
             text: "Open OTP",
