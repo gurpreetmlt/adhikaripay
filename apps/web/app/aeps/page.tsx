@@ -779,7 +779,7 @@ function AepsPageInner() {
                   {rdStatus === "ready" && (
                     <>
                       <p className="text-sm font-bold text-green-800">Scanner ready</p>
-                      <p className="truncate text-xs text-green-700/90">
+                      <p className="text-sm font-semibold text-green-900">
                         {rdEndpoint ? formatRdDeviceLabel(rdEndpoint) : "Device connected"}
                       </p>
                     </>

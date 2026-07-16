@@ -3,7 +3,7 @@
  * Fast path: cached port → one CAPTURE. Slow full scan only on cache miss.
  */
 
-const CACHE_KEY = "adhikaripay_rd_endpoint_v4";
+const CACHE_KEY = "adhikaripay_rd_endpoint_v5";
 const PORT_START = 11100;
 const PORT_END = 11120;
 const PRIORITY_PORTS = [11100, 11101, 11102, 11120, 11103];
@@ -95,6 +95,7 @@ function clearCache() {
   sessionEp = null;
   try {
     localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem("adhikaripay_rd_endpoint_v4");
     localStorage.removeItem("adhikaripay_rd_endpoint_v3");
     localStorage.removeItem("adhikaripay_rd_endpoint_v2");
     localStorage.removeItem("adhikaripay_rd_endpoint");
@@ -119,41 +120,78 @@ async function isAlive(port: number, scheme: Scheme): Promise<boolean> {
   }
 }
 
-/** Parse model/serial from RD DeviceInfo / RDService XML. */
+/** Parse model from RD DeviceInfo / RDService XML — no serial in display name. */
 export function parseDeviceInfo(xml: string): { deviceName: string; serial?: string } | null {
   if (!xml || !xml.includes("<")) return null;
 
   const mi =
-    xml.match(/\bmi="([^"]+)"/i)?.[1] ||
-    xml.match(/<mi>([^<]+)<\/mi>/i)?.[1] ||
-    xml.match(/model[=:"\s]+([A-Za-z0-9 _-]+)/i)?.[1];
+    xml.match(/\bmi="([^"]+)"/i)?.[1]?.trim() ||
+    xml.match(/<mi>([^<]+)<\/mi>/i)?.[1]?.trim() ||
+    "";
+
+  const infoAttr =
+    xml.match(/\binfo="([^"]+)"/i)?.[1]?.trim() ||
+    xml.match(/\brdsId="([^"]+)"/i)?.[1]?.trim() ||
+    "";
 
   const dpId = xml.match(/\bdpId="([^"]+)"/i)?.[1] ?? "";
   const rdsId = xml.match(/\brdsId="([^"]+)"/i)?.[1] ?? "";
   const serial =
     xml.match(/\bserialNo="([^"]+)"/i)?.[1] ||
-    xml.match(/\bdc="([^"]+)"/i)?.[1] ||
-    xml.match(/<serial[^>]*>([^<]+)</i)?.[1];
+    xml.match(/Serial\s*No[:\s]+([A-Za-z0-9-]+)/i)?.[1];
 
-  const vendorHint = `${dpId} ${rdsId}`.toLowerCase();
-  let brand = "Biometric";
-  if (vendorHint.includes("mantra") || (mi && /mfs|marc/i.test(mi))) brand = "Mantra";
-  else if (vendorHint.includes("morpho") || vendorHint.includes("idemia")) brand = "Morpho";
-  else if (vendorHint.includes("startek") || vendorHint.includes("acpl")) brand = "Startek";
-  else if (vendorHint.includes("evolute")) brand = "Evolute";
-  else if (vendorHint.includes("precision")) brand = "Precision";
-  else if (vendorHint.includes("vision") || vendorHint.includes("linkwell")) brand = "VisionTek";
+  const blob = `${dpId} ${rdsId} ${infoAttr} ${mi} ${xml.slice(0, 500)}`.toLowerCase();
 
-  const model = (mi || "").trim();
-  if (!model && !brand) return null;
+  let brand = "";
+  if (blob.includes("mantra")) brand = "Mantra";
+  else if (blob.includes("morpho") || blob.includes("idemia") || blob.includes("sagem")) brand = "Morpho";
+  else if (blob.includes("startek") || blob.includes("acpl")) brand = "Startek";
+  else if (blob.includes("evolute")) brand = "Evolute";
+  else if (blob.includes("precision")) brand = "Precision";
+  else if (blob.includes("visiontek") || blob.includes("linkwell") || blob.includes("vision"))
+    brand = "VisionTek";
 
-  const deviceName = model
-    ? brand === "Biometric"
-      ? model
-      : `${brand} ${model}`
-    : `${brand} L1`;
+  // Model from mi=, or from info like "Mantra.MFS110..." / "MANTRA.MFS110.RDService"
+  let model = mi;
+  if (!model && infoAttr) {
+    const fromInfo =
+      infoAttr.match(/\b(MFS\d+|MSO\d+|MARC\s*\d+|FM\d+|PB\d+|V\d+)\b/i)?.[1] ||
+      infoAttr.split(/[./_]/)[1];
+    if (fromInfo && !/^android|windows|rdservice|l1|rd$/i.test(fromInfo)) {
+      model = fromInfo.trim();
+    }
+  }
+  if (!model && /mfs110/i.test(blob)) model = "MFS110";
+  if (!model && /mfs100/i.test(blob)) model = "MFS100";
+  if (!model && /marc\s*11/i.test(blob)) model = "Marc 11";
 
-  return { deviceName, serial: serial?.trim() || undefined };
+  if (!brand && model && /mfs|marc/i.test(model)) brand = "Mantra";
+  if (!brand && !model) return null;
+
+  // Level from XML / info (default L1 for UIDAI RD)
+  const level = /\bl2\b/i.test(blob) ? "L2" : "L1";
+
+  let deviceName: string;
+  if (brand && model) {
+    const modelClean = model.replace(/\s+/g, " ").trim();
+    // Avoid "Mantra Mantra MFS110"
+    const modelPart = modelClean.toLowerCase().startsWith(brand.toLowerCase())
+      ? modelClean
+      : modelClean;
+    deviceName = `${brand} ${modelPart}`;
+    if (!new RegExp(`\\b${level}\\b`, "i").test(deviceName)) {
+      deviceName = `${deviceName} ${level}`;
+    }
+  } else if (brand) {
+    deviceName = `${brand} ${level}`;
+  } else {
+    deviceName = `${model} ${level}`;
+  }
+
+  return {
+    deviceName: deviceName.replace(/\s+/g, " ").trim(),
+    serial: serial?.trim() || undefined,
+  };
 }
 
 async function fetchDeviceMeta(
@@ -200,8 +238,10 @@ async function discoverRdEndpoint(force = false): Promise<RdEndpoint | null> {
 
   if (!force && sessionEp) {
     lastLog.push(`session ${sessionEp.deviceName || sessionEp.port}`);
-    // Refresh name if missing
-    if (!sessionEp.deviceName) {
+    const weakName =
+      !sessionEp.deviceName ||
+      /^biometric(\s+l[12])?$/i.test(sessionEp.deviceName.trim());
+    if (weakName) {
       const meta = await fetchDeviceMeta(sessionEp.port, sessionEp.scheme);
       if (meta.deviceName) {
         sessionEp = { ...sessionEp, ...meta };
@@ -369,11 +409,9 @@ export async function warmRdService(force = false): Promise<RdEndpoint | null> {
   return discoverRdEndpoint(force);
 }
 
+/** Display label: full device name only — never serial. */
 export function formatRdDeviceLabel(ep: RdEndpoint): string {
-  if (ep.deviceName) {
-    return ep.serial ? `${ep.deviceName} · ${ep.serial}` : ep.deviceName;
-  }
-  return "Biometric scanner connected";
+  return ep.deviceName?.trim() || "Biometric device connected";
 }
 
 export async function captureFingerprintWeb(): Promise<string> {
