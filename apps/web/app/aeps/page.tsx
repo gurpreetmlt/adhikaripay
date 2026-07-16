@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
+import { toast } from "react-hot-toast";
 import {
   ArrowLeft,
   ChevronRight,
@@ -17,8 +18,8 @@ import {
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import { useAuthStore } from "@/lib/store";
 import { B } from "@/lib/brand";
+import { captureFingerprintWeb } from "@/lib/rdServiceFingerprint";
 
 /* ── Bank data (top Indian banks used in AEPS) ─────────────────────── */
 
@@ -73,12 +74,12 @@ interface BiometricDevice {
 }
 
 const BIOMETRIC_DEVICES: BiometricDevice[] = [
-  { id: "mantra_mfs110", name: "Mantra MFS110 L1", rdPackage: "com.mantra.rdservice", color: "#1565C0", letter: "M" },
+  { id: "mantra_mfs110", name: "Mantra MFS110 L1", rdPackage: "com.mantra.mfs110.rdservice", color: "#1565C0", letter: "M" },
   { id: "startek_fm220", name: "Startek L1", rdPackage: "com.acpl.registersdk", color: "#4A148C", letter: "S" },
   { id: "morpho_mso1300", name: "Morpho MSO L1", rdPackage: "com.scl.rdservice", color: "#E53935", letter: "M" },
   { id: "visiontek_v600", name: "VisionTek V600 L1", rdPackage: "com.linkwell.rdservice", color: "#00695C", letter: "V" },
   { id: "evolute_escan", name: "Evolute eScan L1", rdPackage: "com.evolute.rdservice", color: "#F57C00", letter: "E" },
-  { id: "mantra_marc11", name: "Marc 11", rdPackage: "com.mantra.rdservice", color: "#1976D2", letter: "M" },
+  { id: "mantra_marc11", name: "Marc 11", rdPackage: "com.mantra.mfs110.rdservice", color: "#1976D2", letter: "M" },
   { id: "precision_pb1000", name: "PB1000 - L1", rdPackage: "com.precision.pb510.rdservice", color: "#7B1FA2", letter: "P" },
 ];
 
@@ -327,9 +328,16 @@ function BankSidebar({
 /* ── Main AEPS page ────────────────────────────────────────────────── */
 
 export default function AepsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AepsPageInner />
+    </Suspense>
+  );
+}
+
+function AepsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const user = useAuthStore((s) => s.user);
 
   const initialTab = useMemo(() => {
     const q = searchParams.get("tab");
@@ -348,6 +356,7 @@ export default function AepsPage() {
   const [activeDevice, setActiveDevice] = useState<BiometricDevice>(BIOMETRIC_DEVICES[0]);
   const [deviceSidebarOpen, setDeviceSidebarOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("fingerprint");
+  const [scanning, setScanning] = useState(false);
   const [favBanks, setFavBanks] = useState<string[]>(["bob_vijaya", "pnb_obc", "psb", "sbi", "hdfc", "airtel", "icici", "pgb"]);
 
   useEffect(() => {
@@ -362,6 +371,34 @@ export default function AepsPage() {
   }, []);
 
   const showAmount = tab === "Withdraw" || tab === "Deposit";
+
+  const canScan =
+    !!selectedBank &&
+    aadhaar.replace(/\D/g, "").length >= 8 &&
+    consent &&
+    (!showAmount || !!amount) &&
+    !scanning;
+
+  async function handleScan() {
+    if (!canScan) return;
+    if (authMode === "iris") {
+      toast.error("Iris capture is not enabled yet. Use Fingerprint.");
+      return;
+    }
+
+    setScanning(true);
+    try {
+      const pidData = await captureFingerprintWeb();
+      toast.success("Fingerprint captured — ready for AePS");
+      // Keep PidData in session for next API wire step
+      sessionStorage.setItem("adhikaripay_aeps_pid", pidData);
+      console.info("[AePS] PidData length:", pidData.length);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Capture failed", { duration: 8000 });
+    } finally {
+      setScanning(false);
+    }
+  }
 
   const visibleBanks = useMemo(() => {
     const favs = BANKS.filter((b) => favBanks.includes(b.id));
@@ -625,18 +662,21 @@ export default function AepsPage() {
               </div>
               <button
                 type="button"
-                disabled={!selectedBank || !aadhaar || !consent}
+                disabled={!canScan}
+                onClick={handleScan}
                 className={clsx(
                   "rounded-xl px-8 py-3 text-sm font-bold text-white shadow-lg transition",
-                  selectedBank && aadhaar && consent
-                    ? "hover:opacity-90"
-                    : "cursor-not-allowed opacity-50",
+                  canScan ? "hover:opacity-90" : "cursor-not-allowed opacity-50",
                 )}
                 style={{
                   background: `linear-gradient(135deg, ${B.green} 0%, #0F9E5C 100%)`,
                 }}
               >
-                {authMode === "fingerprint" ? "Scan Finger" : "Scan Iris"}
+                {scanning
+                  ? "Place finger on scanner…"
+                  : authMode === "fingerprint"
+                    ? "Scan Finger"
+                    : "Scan Iris"}
               </button>
             </div>
           </div>
@@ -697,8 +737,8 @@ export default function AepsPage() {
 
             <div className="rounded-2xl border bg-amber-50 p-4" style={{ borderColor: "#FDE68A" }}>
               <p className="text-xs font-semibold text-amber-800 leading-relaxed">
-                ⚠️ Ensure biometric device is connected before scanning. 
-                Customer must be physically present for Aadhaar authentication.
+                Mantra MFS110: Windows pe Mantra L1 RDService open rakho, device Connected dikhe,
+                phir isi PC ke Chrome se Scan Finger dabao. Customer physically present hona chahiye.
               </p>
             </div>
           </div>

@@ -110,7 +110,7 @@ export default function WalletPage() {
                   <>
                     Pending
                     {parseFloat(main?.pendingBalance ?? "0") > 0
-                      ? ` · ${walletDisplayName("main")} ${formatInr(main!.pendingBalance)}`
+                      ? ` · ${walletDisplayName("main")} ${formatInr(main?.pendingBalance ?? "0")}`
                       : ""}
                     {aeps && parseFloat(aeps.pendingBalance ?? "0") > 0
                       ? ` · ${walletDisplayName("aeps")} ${formatInr(aeps.pendingBalance ?? "0")}`
