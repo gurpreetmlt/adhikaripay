@@ -13,6 +13,13 @@ const envSchema = z.object({
   JWT_REFRESH_EXPIRES_IN: z.string().default("30d"),
   AES_ENCRYPTION_KEY: z.string().min(1, "AES_ENCRYPTION_KEY is required"),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
+  /**
+   * Temporary testing toggle — echoes the OTP in the API response even in production.
+   * SECURITY: with this on, anyone who knows a registered mobile number can log into that
+   * account without SMS access. Only safe while no real SMS provider is wired up (so no real
+   * OTP delivery exists to bypass anyway). Turn this off the moment SMS delivery goes live.
+   */
+  EXPOSE_OTP_IN_RESPONSE: z.coerce.boolean().default(false),
 });
 
 const parsed = envSchema.safeParse(process.env);

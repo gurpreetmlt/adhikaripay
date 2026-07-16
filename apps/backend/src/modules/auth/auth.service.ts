@@ -384,6 +384,9 @@ export async function requestLoginOtp(
   }
 
   const isDev = env.NODE_ENV !== "production";
+  // See the SECURITY note on EXPOSE_OTP_IN_RESPONSE in config/env.ts — temporary testing-only
+  // toggle, must be turned off once a real SMS provider is wired up.
+  const exposeOtp = isDev || env.EXPOSE_OTP_IN_RESPONSE;
   const otp = randomInt(100000, 1000000).toString();
 
   if (row || isDev) {
@@ -406,15 +409,15 @@ export async function requestLoginOtp(
       });
     }
 
-    if (isDev) {
-      logger.info({ mobile: input.mobile, otp, registered: !!row, role: input.role }, "[DEV ONLY] OTP generated — no SMS provider wired yet");
+    if (exposeOtp) {
+      logger.info({ mobile: input.mobile, otp, registered: !!row, role: input.role }, "[OTP EXPOSED] no SMS provider wired yet");
     }
   }
 
   return {
     message: "If this number is registered, an OTP has been sent",
     expiresInSeconds: OTP_TTL_MS / 1000,
-    ...(isDev ? { otp } : {}),
+    ...(exposeOtp ? { otp } : {}),
   };
 }
 
@@ -649,15 +652,15 @@ export async function requestSignupOtp(
     metadata: { mobile: input.mobile },
   });
 
-  const isDev = env.NODE_ENV !== "production";
-  if (isDev) {
-    logger.info({ mobile: input.mobile, otp, purpose: "signup" }, "[DEV ONLY] Signup OTP generated");
+  const exposeOtp = env.NODE_ENV !== "production" || env.EXPOSE_OTP_IN_RESPONSE;
+  if (exposeOtp) {
+    logger.info({ mobile: input.mobile, otp, purpose: "signup" }, "[OTP EXPOSED] no SMS provider wired yet");
   }
 
   return {
     message: "OTP sent for signup",
     expiresInSeconds: OTP_TTL_MS / 1000,
-    ...(isDev ? { otp } : {}),
+    ...(exposeOtp ? { otp } : {}),
   };
 }
 
