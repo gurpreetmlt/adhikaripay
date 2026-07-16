@@ -1,22 +1,24 @@
 /**
  * Browser → local Mantra / Morpho L1 RD Service (Windows).
- * Uses UIDAI HTTP API on 127.0.0.1 — same machine as the scanner.
- * Port is dynamic (often 11100–11130); last working port is cached in localStorage.
+ *
+ * Mantra requires HTTP method "CAPTURE" (UIDAI). Browser fetch() often cannot send
+ * custom verbs reliably — use XMLHttpRequest (same as Mantra/Eko sample apps).
  */
 
-const CACHE_KEY = "adhikaripay_rd_endpoint";
+const CACHE_KEY = "adhikaripay_rd_endpoint_v2";
 const PORT_START = 11100;
-const PORT_END = 11135;
-const PRIORITY_PORTS = [11120, 11101, 11100, 11102, 11103];
-const PROBE_MS = 1500;
-const CAPTURE_MS = 20000;
-const BATCH = 8;
+const PORT_END = 11120; // Mantra docs: 11100–11120
+const PRIORITY_PORTS = [11100, 11101, 11102, 11120, 11103];
+const PROBE_MS = 2500;
+const CAPTURE_MS = 25000;
+const BATCH = 6;
 
 type Scheme = "http" | "https";
 
 export interface RdEndpoint {
   port: number;
   scheme: Scheme;
+  capturePath: string;
 }
 
 let lastLog: string[] = [];
@@ -39,14 +41,24 @@ function orderedPorts(): number[] {
   return out;
 }
 
-async function fetchTimed(url: string, init: RequestInit, ms: number): Promise<Response> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try {
-    return await fetch(url, { ...init, signal: ctrl.signal });
-  } finally {
-    clearTimeout(t);
-  }
+/** XHR supports custom methods like CAPTURE / RDSERVICE (fetch often does not). */
+function xhrRequest(
+  method: string,
+  url: string,
+  body: string | null,
+  timeoutMs: number,
+): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+    xhr.timeout = timeoutMs;
+    xhr.setRequestHeader("Content-Type", "text/xml; charset=utf-8");
+    xhr.setRequestHeader("Accept", "text/xml, application/xml, */*");
+    xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText ?? "" });
+    xhr.onerror = () => reject(new Error("Network error (CORS / private network / cert?)"));
+    xhr.ontimeout = () => reject(new Error("Timeout — place finger on scanner within time"));
+    xhr.send(body);
+  });
 }
 
 function loadCache(): RdEndpoint | null {
@@ -54,7 +66,13 @@ function loadCache(): RdEndpoint | null {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const p = JSON.parse(raw) as RdEndpoint;
-    if (typeof p.port === "number" && (p.scheme === "http" || p.scheme === "https")) return p;
+    if (
+      typeof p.port === "number" &&
+      (p.scheme === "http" || p.scheme === "https") &&
+      typeof p.capturePath === "string"
+    ) {
+      return p;
+    }
   } catch {
     /* ignore */
   }
@@ -72,52 +90,71 @@ function saveCache(ep: RdEndpoint) {
 function clearCache() {
   try {
     localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem("adhikaripay_rd_endpoint");
   } catch {
     /* ignore */
   }
 }
 
-/** Any HTTP response (incl. 405) means RD is listening. */
-async function probePort(port: number, scheme: Scheme): Promise<boolean> {
-  for (const path of ["/rd/info", "/"]) {
-    for (const method of ["RDSERVICE", "GET"] as const) {
+function parseCapturePathFromInfo(xml: string): string | null {
+  // Some RD INFO responses include path attributes or CapturePath
+  const m =
+    xml.match(/capturePath="([^"]+)"/i) ||
+    xml.match(/<CapturePath>([^<]+)<\/CapturePath>/i) ||
+    xml.match(/path="(\/?rd\/capture)"/i);
+  if (!m?.[1]) return null;
+  const path = m[1].trim();
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+/** Probe: RDSERVICE or GET — any response means RD is alive. */
+async function probeEndpoint(port: number, scheme: Scheme): Promise<RdEndpoint | null> {
+  const base = `${scheme}://127.0.0.1:${port}`;
+  for (const path of ["/", "/rd/info", "/rd/service"]) {
+    for (const method of ["RDSERVICE", "DEVICEINFO", "GET"]) {
       try {
-        await fetchTimed(`${scheme}://127.0.0.1:${port}${path}`, { method }, PROBE_MS);
-        return true;
+        const res = await xhrRequest(method, `${base}${path}`, null, PROBE_MS);
+        // Any HTTP status (incl. 405/404 with body) = listener up
+        if (res.status > 0 || res.text.length > 0) {
+          const capturePath = parseCapturePathFromInfo(res.text) ?? "/rd/capture";
+          return { port, scheme, capturePath };
+        }
       } catch {
         /* next */
       }
     }
   }
-  return false;
+  return null;
 }
 
 export async function discoverRdEndpoint(): Promise<RdEndpoint | null> {
   lastLog = [];
 
   const cached = loadCache();
-  if (cached && (await probePort(cached.port, cached.scheme))) {
-    lastLog.push(`Using cached ${cached.scheme}://127.0.0.1:${cached.port}`);
-    return cached;
-  }
   if (cached) {
+    const alive = await probeEndpoint(cached.port, cached.scheme);
+    if (alive) {
+      lastLog.push(`Using cached ${cached.scheme}://127.0.0.1:${cached.port}${cached.capturePath}`);
+      return { ...cached, capturePath: alive.capturePath || cached.capturePath };
+    }
     lastLog.push(`Cached port ${cached.port} dead — scanning…`);
     clearCache();
   }
 
-  const ports = orderedPorts();
   const preferHttps =
     typeof window !== "undefined" && window.location.protocol === "https:";
   const schemes: Scheme[] = preferHttps ? ["https", "http"] : ["http", "https"];
+  const ports = orderedPorts();
 
   for (let i = 0; i < ports.length; i += BATCH) {
     const batch = ports.slice(i, i + BATCH);
     const results = await Promise.all(
       batch.map(async (port) => {
         for (const scheme of schemes) {
-          if (await probePort(port, scheme)) {
-            lastLog.push(`Found ${scheme}://127.0.0.1:${port}`);
-            return { port, scheme };
+          const ep = await probeEndpoint(port, scheme);
+          if (ep) {
+            lastLog.push(`Found ${scheme}://127.0.0.1:${port} capture=${ep.capturePath}`);
+            return ep;
           }
         }
         return null;
@@ -132,19 +169,29 @@ export async function discoverRdEndpoint(): Promise<RdEndpoint | null> {
   return null;
 }
 
-function pidOptionsXml(timeoutMs: number): string {
-  return `<PidOptions ver="1.0"><Opts fCount="1" fType="0" iCount="0" iType="0" pCount="0" pType="0" format="0" pidVer="2.0" timeout="${timeoutMs}" posh="UNKNOWN" env="P" wadh=""/><Demo></Demo><CustOpts></CustOpts></PidOptions>`;
+/** Mantra-friendly PidOptions variants (invalid XML is a common capture failure). */
+function pidOptionsVariants(timeoutMs: number): string[] {
+  return [
+    // L1 common: fType=2 (FMR+FIR), no Demo
+    `<PidOptions ver="1.0"><Opts fCount="1" fType="2" iCount="0" pCount="0" format="0" pidVer="2.0" timeout="${timeoutMs}" posh="UNKNOWN" env="P"/></PidOptions>`,
+    // fType=0 FMR only
+    `<PidOptions ver="1.0"><Opts fCount="1" fType="0" iCount="0" pCount="0" format="0" pidVer="2.0" timeout="${timeoutMs}" posh="UNKNOWN" env="P"/></PidOptions>`,
+    // With empty CustOpts (some older RD builds)
+    `<PidOptions ver="1.0"><Opts fCount="1" fType="2" iCount="0" iType="0" pCount="0" pType="0" format="0" pidVer="2.0" timeout="${timeoutMs}" otp="" wadh="" posh="UNKNOWN" env="P"/><CustOpts></CustOpts></PidOptions>`,
+  ];
 }
 
-function extractErr(xml: string): string | null {
+function extractErr(xml: string): { code: string; info: string } | null {
   const code = xml.match(/errCode="(-?\d+)"/);
-  if (!code || code[1] === "0") return null;
+  if (!code) return null;
+  if (code[1] === "0") return null;
   const info = xml.match(/errInfo="([^"]*)"/);
-  return info?.[1] || `RD error ${code[1]}`;
+  return { code: code[1], info: info?.[1] || `RD error ${code[1]}` };
 }
 
 function looksLikePid(body: string): boolean {
-  return body.includes("<PidData") || body.includes("errCode=") || body.includes("<Resp");
+  const t = body.trim();
+  return t.includes("<PidData") || t.includes("<Resp") || t.includes("errCode=");
 }
 
 async function tryCapture(
@@ -154,23 +201,25 @@ async function tryCapture(
   ms: number,
 ): Promise<{ ok: true; xml: string } | { ok: false; detail: string }> {
   try {
-    const res = await fetchTimed(
-      url,
-      {
-        method,
-        headers: { "Content-Type": "text/xml", Accept: "text/xml, */*" },
-        body,
-      },
-      ms,
-    );
-    const text = await res.text();
+    const res = await xhrRequest(method, url, body, ms);
+    const text = res.text;
     const err = extractErr(text);
-    if (err) return { ok: false, detail: `${method} ${url} → ${err}` };
-    if (!res.ok) return { ok: false, detail: `${method} ${url} → HTTP ${res.status}` };
-    if (!text.trim() || !looksLikePid(text)) {
-      return { ok: false, detail: `${method} ${url} → unexpected response` };
+    if (err) {
+      return { ok: false, detail: `${method} ${url} → [${err.code}] ${err.info}` };
     }
-    return { ok: true, xml: text };
+    if (looksLikePid(text) && (res.status === 0 || res.status === 200 || text.includes('errCode="0"'))) {
+      return { ok: true, xml: text };
+    }
+    if (looksLikePid(text) && text.includes("<PidData")) {
+      return { ok: true, xml: text };
+    }
+    if (!text.trim()) {
+      return { ok: false, detail: `${method} ${url} → empty (HTTP ${res.status})` };
+    }
+    return {
+      ok: false,
+      detail: `${method} ${url} → HTTP ${res.status}: ${text.slice(0, 100)}`,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, detail: `${method} ${url} → ${msg}` };
@@ -179,29 +228,50 @@ async function tryCapture(
 
 async function captureOn(ep: RdEndpoint): Promise<string> {
   const base = `${ep.scheme}://127.0.0.1:${ep.port}`;
-  const xml = pidOptionsXml(CAPTURE_MS);
-  const ms = CAPTURE_MS + 8000;
-  const targets = [
-    { url: `${base}/`, method: "CAPTURE" },
-    { url: `${base}/`, method: "POST" },
-    { url: `${base}/rd/capture`, method: "CAPTURE" },
-    { url: `${base}/rd/capture`, method: "POST" },
-  ];
+  const paths = Array.from(
+    new Set([ep.capturePath, "/rd/capture", "/capture", "/"]),
+  );
+  const methods = ["CAPTURE", "POST"];
+  const optionsList = pidOptionsVariants(CAPTURE_MS);
+  const timeoutMs = CAPTURE_MS + 5000;
 
   const errors: string[] = [];
-  for (const t of targets) {
-    const r = await tryCapture(t.url, t.method, xml, ms);
-    if (r.ok) {
-      lastLog.push(`Capture OK ${t.method} ${t.url}`);
-      return r.xml;
+
+  // Prefer discovered path + CAPTURE + first PidOptions (Mantra happy path)
+  for (const opts of optionsList) {
+    for (const path of paths) {
+      for (const method of methods) {
+        const url = `${base}${path === "/" ? "/" : path}`;
+        const r = await tryCapture(url, method, opts, timeoutMs);
+        if (r.ok) {
+          lastLog.push(`Capture OK ${method} ${url}`);
+          saveCache({ ...ep, capturePath: path });
+          return r.xml;
+        }
+        errors.push(r.detail);
+        lastLog.push(r.detail);
+
+        // Invalid PidOptions → try next XML variant immediately
+        if (r.detail.includes("Invalid") || r.detail.includes("[100]")) {
+          break;
+        }
+        // Device busy / finger — stop hammering other paths
+        if (
+          r.detail.includes("700") ||
+          r.detail.includes("Finger") ||
+          r.detail.includes("Timeout") ||
+          r.detail.includes("not connected")
+        ) {
+          throw new Error(r.detail.replace(/^[^→]+→\s*/, "").trim() || r.detail);
+        }
+      }
     }
-    errors.push(r.detail);
-    lastLog.push(r.detail);
   }
+
+  const useful = errors.filter((e) => !e.includes("empty") && !e.includes("HTTP 405"));
   throw new Error(
-    `Scanner did not return fingerprint data.\n` +
-      `Open Mantra L1 RDService on this PC, confirm device connected, then retry.\n` +
-      errors.slice(0, 4).join("\n"),
+    useful[0]?.replace(/^[^→]+→\s*/, "").trim() ||
+      "Scanner did not return fingerprint data. Open Mantra RDService, place finger when red light is on.",
   );
 }
 
@@ -219,11 +289,9 @@ export async function captureFingerprintWeb(): Promise<string> {
   if (!ep) {
     const onHttps = window.location.protocol === "https:";
     throw new Error(
-      `Mantra RD Service not found on this PC (ports ${PORT_START}–${PORT_END}). ` +
-        `Open Mantra L1 RDService → Device connected → same Windows PC Chrome. ` +
-        (onHttps
-          ? "If still failing on HTTPS site, try http://localhost:3001 (local) — some browsers block local RD from live HTTPS."
-          : "Confirm RD shows http://127.0.0.1:PORT on its screen."),
+      onHttps
+        ? "Mantra RD not found. Enable chrome://flags/#allow-insecure-localhost + disable block-insecure-private-network-requests, open Mantra RDService, then retry. Or test on http://localhost:3001"
+        : `Mantra RD Service not found (ports ${PORT_START}–${PORT_END}). Open Mantra L1 RDService on this PC → Device connected.`,
     );
   }
 

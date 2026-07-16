@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { B } from "@/lib/brand";
-import { captureFingerprintWeb } from "@/lib/rdServiceFingerprint";
+import { captureFingerprintWeb, getRdProbeLog } from "@/lib/rdServiceFingerprint";
 
 /* ── Bank data (top Indian banks used in AEPS) ─────────────────────── */
 
@@ -415,8 +415,9 @@ function AepsPageInner() {
       sessionStorage.setItem("adhikaripay_aeps_pid", pidData);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Capture failed";
-      toast.error(msg.split("\n")[0] ?? msg, { id: toastId, duration: 10_000 });
+      toast.error(msg, { id: toastId, duration: 12_000 });
       console.error("[AePS] capture failed", err);
+      console.error("[AePS] RD probe log:\n", getRdProbeLog());
     } finally {
       setScanning(false);
     }
@@ -778,8 +779,10 @@ function AepsPageInner() {
 
             <div className="rounded-2xl border bg-amber-50 p-4" style={{ borderColor: "#FDE68A" }}>
               <p className="text-xs font-semibold text-amber-800 leading-relaxed">
-                Mantra MFS110: Windows pe Mantra L1 RDService open rakho, device Connected dikhe,
-                phir isi PC ke Chrome se Scan Finger dabao. Customer physically present hona chahiye.
+                Mantra (Windows): RDService open + Device connected. Live HTTPS site ke liye Chrome
+                flags: allow-insecure-localhost ON, block-insecure-private-network-requests OFF.
+                Best test: <span className="font-mono">http://localhost:3001/aeps</span> same PC pe.
+                Scan pe red light aaye to finger immediately lagao.
               </p>
             </div>
           </div>
