@@ -9,6 +9,7 @@ import { apiError } from "../utils/apiError";
 import { BrandMark } from "../components/BrandMark";
 import { colors } from "../theme/colors";
 import { showAlert } from "../components/AppAlert";
+import { getRememberedLogin } from "../lib/rememberedLogin";
 
 export type LoginRoleChip = "retailer" | "distributor" | "master_distributor";
 
@@ -40,7 +41,7 @@ const TRUST_BADGES = [
 ] as const;
 
 interface LoginScreenProps {
-  onOtpSent: (mobile: string, role: LoginRoleChip, devOtp?: string) => void;
+  onOtpSent: (mobile: string, role: LoginRoleChip, devOtp?: string, preferMpin?: boolean) => void;
   onSignup: () => void;
 }
 
@@ -56,12 +57,20 @@ export function LoginScreen({ onOtpSent, onSignup }: LoginScreenProps) {
     }
     setLoading(true);
     try {
+      // Trusted-device shortcut: if this is the number that last logged in on this phone, go
+      // straight to the MPIN "welcome back" unlock WITHOUT sending an OTP. The server still
+      // enforces the trust window — if it's lapsed, WelcomeBack falls back and requests an OTP.
+      const remembered = await getRememberedLogin();
+      if (remembered && remembered.mobile === mobile) {
+        onOtpSent(mobile, remembered.role, undefined, true);
+        return;
+      }
       const { data } = await api.post<ApiResponse<{ message: string; otp?: string }>>(
         "/auth/otp/request",
         { mobile, portal: "agent", role },
       );
       if (!data.success) throw new Error(data.message);
-      onOtpSent(mobile, role, data.data.otp);
+      onOtpSent(mobile, role, data.data.otp, false);
     } catch (err) {
       const msg = apiError(err, "Could not send OTP");
       const suggested = roleFromMismatchMessage(msg);

@@ -10,6 +10,7 @@ export function AuthFlow() {
   const [mobile, setMobile] = useState("");
   const [role, setRole] = useState<LoginRoleChip>("retailer");
   const [devOtp, setDevOtp] = useState<string | undefined>();
+  const [preferMpin, setPreferMpin] = useState(false);
 
   if (step === "welcome") {
     return (
@@ -17,9 +18,11 @@ export function AuthFlow() {
         mobile={mobile}
         role={role}
         devOtp={devOtp}
+        preferMpin={preferMpin}
         onBack={() => {
           setStep("login");
           setDevOtp(undefined);
+          setPreferMpin(false);
           setRole("retailer");
         }}
       />
@@ -32,10 +35,11 @@ export function AuthFlow() {
 
   return (
     <LoginScreen
-      onOtpSent={(m, selectedRole, otp) => {
+      onOtpSent={(m, selectedRole, otp, mpinFirst) => {
         setMobile(m);
         setRole(selectedRole);
         setDevOtp(otp);
+        setPreferMpin(Boolean(mpinFirst));
         setStep("welcome");
       }}
       onSignup={() => setStep("signup")}

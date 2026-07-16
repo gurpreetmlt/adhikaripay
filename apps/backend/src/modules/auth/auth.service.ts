@@ -55,8 +55,10 @@ const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // keep in sync with JWT_
 // Rolling trust window: MPIN-only login is allowed as long as this device authenticated
 // (via OTP or MPIN) within the last N hours. Deliberately NOT a calendar-day/midnight cutoff —
 // a login at 11:58pm followed by one at 12:02am is 4 minutes apart, not "a new day" — so this
-// rolls forward from the device's own last activity instead of the clock.
-const DEVICE_TRUST_WINDOW_MS = 12 * 60 * 60 * 1000;
+// rolls forward from the device's own last activity instead of the clock. 24h comfortably covers
+// a retailer's full working day + break; money movement is separately gated by the txn PIN /
+// biometric on every transaction, so this only controls convenience of app access, not funds.
+const DEVICE_TRUST_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /** Default login MPIN for agent accounts that never set one (seed + first OTP/password login). */
 export const DEFAULT_AGENT_LOGIN_MPIN = "1234";

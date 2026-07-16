@@ -13,6 +13,7 @@ import {
 import { useAuthStore } from "../store/auth";
 import { apiError } from "../utils/apiError";
 import { getDeviceId, getDeviceLabel } from "../lib/deviceId";
+import { setRememberedLogin } from "../lib/rememberedLogin";
 import { BrandMark } from "../components/BrandMark";
 import { CodeGrid } from "../components/CodeGrid";
 import { colors } from "../theme/colors";
@@ -29,6 +30,8 @@ interface Props {
   mobile: string;
   role: LoginRoleChip;
   devOtp?: string;
+  /** True when arriving via the trusted-device shortcut (no OTP was sent) → open MPIN first. */
+  preferMpin?: boolean;
   onBack: () => void;
 }
 
@@ -43,10 +46,10 @@ const ROLE_SHORT: Record<LoginRoleChip, string> = {
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "bio", "0", "back"] as const;
 
 /** Design 1b — light “Welcome back” unlock (MPIN / OTP / Fingerprint). */
-export function WelcomeBackScreen({ mobile, role, devOtp: initialDevOtp, onBack }: Props) {
+export function WelcomeBackScreen({ mobile, role, devOtp: initialDevOtp, preferMpin, onBack }: Props) {
   const setAuth = useAuthStore((s) => s.setAuth);
-  /** Registered users: MPIN is the default unlock (OTP available on another tab). */
-  const [tab, setTab] = useState<AuthTab>("mpin");
+  // Trusted-device shortcut opens MPIN; a fresh OTP send opens the OTP tab (the code was just sent).
+  const [tab, setTab] = useState<AuthTab>(preferMpin ? "mpin" : initialDevOtp ? "otp" : "mpin");
   const [mpin, setMpin] = useState("");
   const [otp, setOtp] = useState(initialDevOtp ?? "");
   const [devOtp, setDevOtp] = useState(initialDevOtp ?? "");
@@ -75,6 +78,8 @@ export function WelcomeBackScreen({ mobile, role, devOtp: initialDevOtp, onBack 
 
   function commitLogin(session: LoginResponse) {
     setAuthHeader(session.accessToken);
+    // Remember this number+role so next login on this phone opens MPIN directly (skips OTP send).
+    void setRememberedLogin({ mobile, role });
     setAuth(session.user, {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
