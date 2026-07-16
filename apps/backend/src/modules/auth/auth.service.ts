@@ -483,22 +483,26 @@ export async function verifyLoginOtp(
 
   const withMpin = await ensureDefaultLoginMpin(row);
 
-  const device = await trustDevice({ userId: row.id, deviceId: input.deviceId, label: input.deviceLabel });
-  await insertAuditLog({
-    userId: row.id,
-    action: "auth.device_trusted",
-    entityType: "device",
-    entityId: device.id,
-    ipAddress: context.ipAddress,
-    userAgent: context.userAgent,
-    metadata: { deviceId: input.deviceId, label: input.deviceLabel ?? null },
-  });
-  // Extension point: notify the user's other trusted devices ("new device login") once an
-  // SMS/push provider is wired up — same pattern as EXPOSE_OTP_IN_RESPONSE below.
-  logger.info(
-    { userId: row.id, deviceId: input.deviceId, label: input.deviceLabel },
-    "[DEVICE TRUSTED] notify-other-devices not wired yet",
-  );
+  // deviceId is optional here (older/unwired clients still get a normal OTP login) — trust is
+  // simply not established for those, so they'll be asked for OTP again next time too.
+  if (input.deviceId) {
+    const device = await trustDevice({ userId: row.id, deviceId: input.deviceId, label: input.deviceLabel });
+    await insertAuditLog({
+      userId: row.id,
+      action: "auth.device_trusted",
+      entityType: "device",
+      entityId: device.id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      metadata: { deviceId: input.deviceId, label: input.deviceLabel ?? null },
+    });
+    // Extension point: notify the user's other trusted devices ("new device login") once an
+    // SMS/push provider is wired up — same pattern as EXPOSE_OTP_IN_RESPONSE below.
+    logger.info(
+      { userId: row.id, deviceId: input.deviceId, label: input.deviceLabel },
+      "[DEVICE TRUSTED] notify-other-devices not wired yet",
+    );
+  }
 
   return issueSession(withMpin, context, "otp");
 }

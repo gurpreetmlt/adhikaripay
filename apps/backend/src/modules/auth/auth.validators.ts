@@ -81,8 +81,9 @@ export const otpVerifySchema = z.object({
   otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
   portal: z.enum(AUTH_PORTALS).default("agent"),
   role: z.enum(AGENT_LOGIN_ROLES).optional(),
-  /** Trusts this device for MPIN-only login going forward — see auth.service.ts. */
-  deviceId: deviceIdSchema,
+  /** Trusts this device for MPIN-only login going forward — see auth.service.ts. Optional so an
+   * older/unwired client still completes OTP login; it just won't get MPIN-only trust. */
+  deviceId: deviceIdSchema.optional(),
   deviceLabel: deviceLabelSchema,
 });
 export type OtpVerifyInput = z.infer<typeof otpVerifySchema>;
