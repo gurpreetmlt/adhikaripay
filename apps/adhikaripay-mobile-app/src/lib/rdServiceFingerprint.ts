@@ -137,13 +137,22 @@ export async function captureFingerprint(): Promise<string> {
     `http://127.0.0.1:${found.port}/`,
   ].filter((url, index, arr) => arr.indexOf(url) === index);
 
+  // fetch() only throws on a genuine network failure, never for HTTP error statuses (404/405/500),
+  // so a successful fetch to the wrong URL must NOT stop the search — keep trying candidates until
+  // one actually returns 2xx, or we run out.
   let res: Response | undefined;
+  let lastNonOkStatus: { url: string; method: string; status: number; body: string } | undefined;
   const attemptErrors: string[] = [];
   outer: for (const url of captureUrls) {
     for (const method of ["CAPTURE", "POST"]) {
       try {
-        res = await fetchWithTimeout(url, { method, headers, body: pidOptions }, CAPTURE_TIMEOUT_MS + 5000);
-        break outer;
+        const attempt = await fetchWithTimeout(url, { method, headers, body: pidOptions }, CAPTURE_TIMEOUT_MS + 5000);
+        if (attempt.ok) {
+          res = attempt;
+          break outer;
+        }
+        lastNonOkStatus = { url, method, status: attempt.status, body: (await attempt.text().catch(() => "")).slice(0, 200) };
+        attemptErrors.push(`${method} ${url} -> HTTP ${attempt.status}`);
       } catch (err) {
         attemptErrors.push(`${method} ${url} -> ${err instanceof Error ? err.name + ": " + err.message : String(err)}`);
       }
@@ -152,16 +161,19 @@ export async function captureFingerprint(): Promise<string> {
 
   if (!res) {
     const timedOut = attemptErrors.some((e) => e.includes("AbortError"));
-    const detail = timedOut
-      ? "Scanner did not respond in time. Check the device connection and try again."
-      : `Could not reach the RD Service for capture.\n${attemptErrors.join("\n")}`;
-    throw new Error(detail);
+    if (timedOut) {
+      throw new Error("Scanner did not respond in time. Check the device connection and try again.");
+    }
+    if (lastNonOkStatus) {
+      throw new Error(
+        extractError(lastNonOkStatus.body) ??
+          `RD Service rejected the capture request (HTTP ${lastNonOkStatus.status}).\n${attemptErrors.join("\n")}`,
+      );
+    }
+    throw new Error(`Could not reach the RD Service for capture.\n${attemptErrors.join("\n")}`);
   }
 
   const body = await res.text();
-  if (!res.ok) {
-    throw new Error(extractError(body) ?? `RD Service returned HTTP ${res.status}: ${body.slice(0, 200)}`);
-  }
   const error = extractError(body);
   if (error) throw new Error(error);
   if (!body.trim()) throw new Error("RD Service returned no PID data");
