@@ -238,7 +238,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void loadWallets();
-  }, [loadWallets, pathname]);
+    // Intentionally excludes `pathname` — refetching the header balance on every route change
+    // duplicated the page-level wallet fetches already done by dashboard/wallet screens and
+    // added avoidable latency to navigation. The header's manual refresh button covers the case
+    // where a balance needs to be re-checked mid-session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadWallets]);
 
   function handleLogout() {
     logout();
