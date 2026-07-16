@@ -20,7 +20,13 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { B } from "@/lib/brand";
-import { captureFingerprintWeb, getRdProbeLog } from "@/lib/rdServiceFingerprint";
+import {
+  captureFingerprintWeb,
+  formatRdEndpoint,
+  getRdProbeLog,
+  warmRdService,
+  type RdEndpoint,
+} from "@/lib/rdServiceFingerprint";
 
 /* ── Bank data (top Indian banks used in AEPS) ─────────────────────── */
 
@@ -369,12 +375,37 @@ function AepsPageInner() {
   const [deviceSidebarOpen, setDeviceSidebarOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("fingerprint");
   const [scanning, setScanning] = useState(false);
+  const [rdStatus, setRdStatus] = useState<"looking" | "ready" | "missing">("looking");
+  const [rdEndpoint, setRdEndpoint] = useState<RdEndpoint | null>(null);
   const [favBanks, setFavBanks] = useState<string[]>(["bob_vijaya", "pnb_obc", "psb", "sbi", "hdfc", "airtel", "icici", "pgb"]);
 
   useEffect(() => {
     const q = searchParams.get("tab");
     if (q && (AEPS_TABS as readonly string[]).includes(q)) setTab(q as AepsTab);
   }, [searchParams]);
+
+  /** Discover Mantra while user fills bank / Aadhaar — so Scan skips "looking for RD". */
+  useEffect(() => {
+    if (authMode !== "fingerprint") return;
+    let cancelled = false;
+    setRdStatus("looking");
+
+    void (async () => {
+      const ep = await warmRdService();
+      if (cancelled) return;
+      if (ep) {
+        setRdEndpoint(ep);
+        setRdStatus("ready");
+      } else {
+        setRdEndpoint(null);
+        setRdStatus("missing");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authMode]);
 
   const toggleFavBank = useCallback((id: string) => {
     setFavBanks((prev) =>
@@ -383,6 +414,18 @@ function AepsPageInner() {
   }, []);
 
   const showAmount = tab === "Withdraw" || tab === "Deposit";
+
+  async function retryRdWarm() {
+    setRdStatus("looking");
+    const ep = await warmRdService(true);
+    if (ep) {
+      setRdEndpoint(ep);
+      setRdStatus("ready");
+    } else {
+      setRdEndpoint(null);
+      setRdStatus("missing");
+    }
+  }
 
   async function handleScan() {
     if (scanning) return;
@@ -406,18 +449,26 @@ function AepsPageInner() {
       toast.error("Enter amount before scanning");
       return;
     }
+    if (rdStatus === "looking") {
+      toast.error("Scanner still connecting — wait a moment");
+      return;
+    }
+    if (rdStatus === "missing") {
+      toast.error("Mantra RD not found. Open RDService on this PC, then tap Retry.");
+      return;
+    }
 
-    const toastId = toast.loading("Connecting to Mantra… finger ready");
     setScanning(true);
     try {
       const pidData = await captureFingerprintWeb();
-      toast.success(`Fingerprint captured (${activeDevice.name})`, { id: toastId });
+      toast.success(`Fingerprint captured (${activeDevice.name})`);
       sessionStorage.setItem("adhikaripay_aeps_pid", pidData);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Capture failed";
-      toast.error(msg, { id: toastId, duration: 12_000 });
+      toast.error(msg, { duration: 12_000 });
       console.error("[AePS] capture failed", err);
       console.error("[AePS] RD probe log:\n", getRdProbeLog());
+      void retryRdWarm();
     } finally {
       setScanning(false);
     }
@@ -678,6 +729,70 @@ function AepsPageInner() {
               </div>
             </div>
 
+            {/* Scanner status — below mode; discovers while user fills form */}
+            {authMode === "fingerprint" && (
+              <div
+                className={clsx(
+                  "flex items-center gap-4 rounded-2xl border px-4 py-4",
+                  rdStatus === "ready" && "border-green-200 bg-green-50",
+                  rdStatus === "looking" && "border-blue-100 bg-blue-50/60",
+                  rdStatus === "missing" && "border-amber-200 bg-amber-50",
+                )}
+              >
+                <div
+                  className={clsx(
+                    "relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl",
+                    rdStatus === "ready" && "bg-green-100 text-green-700",
+                    rdStatus === "looking" && "bg-blue-100 text-blue-600",
+                    rdStatus === "missing" && "bg-amber-100 text-amber-700",
+                  )}
+                >
+                  <Fingerprint size={28} strokeWidth={2} />
+                  {rdStatus === "looking" && (
+                    <span className="absolute -right-0.5 -top-0.5 h-3 w-3 animate-pulse rounded-full bg-blue-500" />
+                  )}
+                  {rdStatus === "ready" && (
+                    <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-green-500" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  {rdStatus === "looking" && (
+                    <>
+                      <p className="text-sm font-bold text-blue-800">Connecting scanner…</p>
+                      <p className="text-xs text-blue-600/90">
+                        Fill bank &amp; Aadhaar — device ready by the time you scan
+                      </p>
+                    </>
+                  )}
+                  {rdStatus === "ready" && (
+                    <>
+                      <p className="text-sm font-bold text-green-800">Scanner ready</p>
+                      <p className="truncate text-xs font-mono text-green-700/80">
+                        {rdEndpoint ? formatRdEndpoint(rdEndpoint) : "127.0.0.1"}
+                      </p>
+                    </>
+                  )}
+                  {rdStatus === "missing" && (
+                    <>
+                      <p className="text-sm font-bold text-amber-900">Scanner not found</p>
+                      <p className="text-xs text-amber-800/90">
+                        Open Mantra L1 RDService on this PC, then retry
+                      </p>
+                    </>
+                  )}
+                </div>
+                {rdStatus === "missing" && (
+                  <button
+                    type="button"
+                    onClick={() => void retryRdWarm()}
+                    className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-100"
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Biometric device + Scan */}
             <div
               className="flex items-center justify-between rounded-2xl border bg-white p-4"
@@ -704,11 +819,13 @@ function AepsPageInner() {
               </div>
               <button
                 type="button"
-                disabled={scanning}
+                disabled={scanning || (authMode === "fingerprint" && rdStatus !== "ready")}
                 onClick={handleScan}
                 className={clsx(
                   "rounded-xl px-8 py-3 text-sm font-bold text-white shadow-lg transition",
-                  scanning ? "cursor-wait opacity-80" : "hover:opacity-90",
+                  scanning || (authMode === "fingerprint" && rdStatus !== "ready")
+                    ? "cursor-not-allowed opacity-50"
+                    : "hover:opacity-90",
                 )}
                 style={{
                   background: `linear-gradient(135deg, ${B.green} 0%, #0F9E5C 100%)`,

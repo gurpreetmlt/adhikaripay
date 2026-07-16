@@ -277,6 +277,21 @@ export function getRdProbeLog(): string {
   return lastLog.length ? lastLog.join("\n") : "(no probe yet)";
 }
 
+export function getCachedRdEndpoint(): RdEndpoint | null {
+  return sessionEp ?? loadCache();
+}
+
+/** Warm discovery while user fills the form — call on AePS page mount. */
+export async function warmRdService(force = false): Promise<RdEndpoint | null> {
+  if (typeof window === "undefined") return null;
+  if (force) clearCache();
+  return discoverRdEndpoint(force);
+}
+
+export function formatRdEndpoint(ep: RdEndpoint): string {
+  return `${ep.scheme}://127.0.0.1:${ep.port}`;
+}
+
 export async function captureFingerprintWeb(): Promise<string> {
   if (typeof window === "undefined") {
     throw new Error("Fingerprint capture only works in the browser");
