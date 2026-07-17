@@ -2,6 +2,7 @@ import { createApp } from "./app";
 import { env } from "./config/env";
 import { pgPool } from "./db/postgres";
 import { deleteExpiredOtpRequests } from "./db/postgres/repositories/otpRequest";
+import { reconcileStaleTransactions } from "./modules/transactions/txn.service";
 import { logger } from "./utils/logger";
 
 const OTP_SWEEP_INTERVAL_MS = 30 * 60 * 1000;
@@ -22,9 +23,22 @@ async function main() {
     );
   }, OTP_SWEEP_INTERVAL_MS);
 
+  // Settle pending / crash-stale initiated txns so held wallet money is not stuck forever.
+  let reconcileTimer: ReturnType<typeof setInterval> | null = null;
+  if (env.TXN_RECONCILE_INTERVAL_MS > 0) {
+    reconcileTimer = setInterval(() => {
+      reconcileStaleTransactions()
+        .then((r) => {
+          if (r.checked > 0) logger.info(r, "txn reconcile sweep");
+        })
+        .catch((err: unknown) => logger.error({ err }, "txn reconcile sweep failed"));
+    }, env.TXN_RECONCILE_INTERVAL_MS);
+  }
+
   const shutdown = async (signal: string) => {
     logger.info(`${signal} received, shutting down gracefully`);
     clearInterval(otpSweepTimer);
+    if (reconcileTimer) clearInterval(reconcileTimer);
     server.close(async () => {
       await pgPool.end();
       process.exit(0);

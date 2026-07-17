@@ -48,6 +48,10 @@
 - [x] txnAuth ticket (PIN not echoed); RD package allowlist; KYC docs + transfer KYC
 - [x] Flat commission cap; amount max fail-closed; JWT algorithms pinned
 - [x] Double-debit: advisory lock on claim+debit / wallet idempotency; stable client attempt keys (DMT, fund, AEPS wd)
+- [x] Recheck-on-initiated race guard (90s grace) — no reverse while submit in-flight
+- [x] Pending txn auto-reconcile worker (`TXN_RECONCILE_INTERVAL_MS`)
+- [x] Credit settle prefers provider amount; recheck uses stored `txn.walletType`
+- [x] Ledger `(reference_type, reference_id)` unique (partial) — migration `0012`
 - [ ] Android Keystore for bio refresh token (still AsyncStorage)
 - [ ] Cert pinning + httpOnly cookie BFF
 - [ ] History purge for any secrets ever pushed to remote

@@ -48,7 +48,19 @@ export const walletLedgerGroups = pgTable(
     description: text("description"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("wallet_ledger_groups_reference_idx").on(table.referenceType, table.referenceId)],
+  (table) => [
+    index("wallet_ledger_groups_reference_idx").on(table.referenceType, table.referenceId),
+    // Defense-in-depth: one ledger group per (type, business ref) for service_txn/reversal —
+    // Finalize already row-locks, this blocks a second accidental insert. EXCLUDES "commission":
+    // that referenceType fans out to one group per beneficiary (retailer's distributor, master
+    // distributor, ...) sharing the same referenceId (the settled txn) by design — collapsing
+    // them to one row would silently drop every beneficiary after the first. commission_ledger's
+    // own (transactionId, beneficiaryUserId) unique key is what guards against a duplicate payout
+    // there.
+    uniqueIndex("wallet_ledger_groups_ref_uidx")
+      .on(table.referenceType, table.referenceId)
+      .where(sql`${table.referenceId} is not null and ${table.referenceType} <> 'commission'`),
+  ],
 );
 
 // Double-entry lines. amount is always positive; direction is carried by entryType.

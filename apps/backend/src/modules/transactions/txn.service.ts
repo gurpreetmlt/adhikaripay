@@ -1,8 +1,8 @@
-import { and, eq, isNull, desc, sql } from "drizzle-orm";
+import { and, eq, isNull, desc, sql, lt, or } from "drizzle-orm";
 import { db } from "../../db/postgres";
 import { services, transactions, users, wallets } from "../../db/postgres/schema";
 import { transferBetweenWallets } from "../wallet/wallet.ledger";
-import { toPaise } from "../wallet/decimal";
+import { toPaise, fromPaise } from "../wallet/decimal";
 import { resolveProvidersForService, callProvider, type RoutedProvider } from "../providers/provider.router";
 import type { ProviderOperation, ProviderResult } from "../providers/types";
 import { HttpError } from "../../utils/httpError";
@@ -201,6 +201,26 @@ interface FinalizeContext {
   walletType: WalletType;
 }
 
+/**
+ * Credit settlement amount: prefer provider-confirmed amount when it is a valid positive
+ * rupee string; otherwise fall back to the requested/locked amount. Debit reversals always
+ * reverse the locked (already-debited) amount — never trust a provider figure for that.
+ */
+export function resolveCreditSettlementAmount(
+  lockedAmount: string,
+  providerAmount: string | null | undefined,
+): string {
+  if (providerAmount == null || providerAmount === "") return lockedAmount;
+  if (!/^\d{1,12}(\.\d{1,2})?$/.test(providerAmount.trim())) return lockedAmount;
+  try {
+    const paise = toPaise(providerAmount);
+    if (!Number.isFinite(paise) || paise <= 0) return lockedAmount;
+    return fromPaise(paise);
+  } catch {
+    return lockedAmount;
+  }
+}
+
 // Settles a transaction exactly once. The whole thing runs in a single DB transaction that
 // FIRST locks the txn row and re-checks its status: if a concurrent call (a second /recheck,
 // or recheck racing the initial submit) already moved it to a terminal state, this call moves
@@ -226,6 +246,11 @@ async function finalizeTxn(txn: TxnRow, result: ProviderResult, ctx: FinalizeCon
     if (result.status === "success") {
       // Credit services reimburse the retailer only now, after provider confirmation — in the
       // same tx as the status flip, so it commits atomically with "this txn is now settled".
+      // Prefer provider-confirmed amount (partial/dispense mismatch) over the original request.
+      const creditAmount =
+        needsMoney && ctx.direction === "credit"
+          ? resolveCreditSettlementAmount(locked.amount, result.amount)
+          : locked.amount;
       if (needsMoney && ctx.direction === "credit") {
         const systemWallet = await getSystemWallet();
         const userWallet = await getUserWallet(txn.userId, ctx.walletType);
@@ -233,7 +258,7 @@ async function finalizeTxn(txn: TxnRow, result: ProviderResult, ctx: FinalizeCon
           {
             fromWalletId: systemWallet.walletId,
             toWalletId: userWallet.walletId,
-            amount: locked.amount,
+            amount: creditAmount,
             referenceType: "service_txn",
             referenceId: locked.id,
             description: `Service credit ${locked.txnRef}`,
@@ -245,6 +270,7 @@ async function finalizeTxn(txn: TxnRow, result: ProviderResult, ctx: FinalizeCon
         .update(transactions)
         .set({
           status: "success",
+          amount: needsMoney && ctx.direction === "credit" ? creditAmount : locked.amount,
           providerTxnId: result.providerTxnId,
           completedAt: new Date(),
           updatedAt: new Date(),
@@ -256,6 +282,7 @@ async function finalizeTxn(txn: TxnRow, result: ProviderResult, ctx: FinalizeCon
 
     if (result.status === "failed") {
       // Undo the up-front debit with an explicit balanced reversal group.
+      // Always reverse locked.amount (what left the retailer wallet) — not result.amount.
       if (needsMoney && ctx.direction === "debit") {
         const systemWallet = await getSystemWallet();
         const userWallet = await getUserWallet(txn.userId, ctx.walletType);
@@ -301,6 +328,21 @@ async function finalizeTxn(txn: TxnRow, result: ProviderResult, ctx: FinalizeCon
   return settled;
 }
 
+// An `initiated` txn may still be mid-submit inside executeServiceTxn — its own finalize will
+// settle it. Rechecking during that window is a money loophole: a real provider queried by
+// clientRef for a txn it has NOT received yet can answer "not found → failed", which would reverse
+// the up-front debit (refund the retailer) while the in-flight submit is about to succeed — i.e.
+// the service actually happens but the retailer is refunded, a direct platform loss. Only let
+// recheck touch an `initiated` txn once it is older than the widest possible submit window, by
+// which point any in-flight submit has definitely returned (or the process crashed mid-submit —
+// the one legitimate recovery case). `pending` txns are always safe to recheck: the provider has
+// already acknowledged them, so a status query is authoritative.
+export const INITIATED_RECHECK_GRACE_MS = 90_000;
+
+export function canRecheckInitiated(createdAt: Date, now: Date): boolean {
+  return now.getTime() - createdAt.getTime() >= INITIATED_RECHECK_GRACE_MS;
+}
+
 // ── Status recheck (pending -> success/failed) ─────────────────────────────
 export async function recheckTxnStatus(actor: Actor, txnRef: string): Promise<TxnOutcome> {
   const [txn] = await db.select().from(transactions).where(eq(transactions.txnRef, txnRef));
@@ -309,6 +351,11 @@ export async function recheckTxnStatus(actor: Actor, txnRef: string): Promise<Tx
     throw new HttpError(403, "Not your transaction", "FORBIDDEN");
   }
   if (txn.status !== "pending" && txn.status !== "initiated") {
+    return { txn, provider: null };
+  }
+  // Don't race an in-flight initial submit (see canRecheckInitiated) — return as-is; the original
+  // request will settle it, or a later recheck (past the grace window) will recover a crashed one.
+  if (txn.status === "initiated" && !canRecheckInitiated(txn.createdAt, new Date())) {
     return { txn, provider: null };
   }
 
@@ -322,10 +369,10 @@ export async function recheckTxnStatus(actor: Actor, txnRef: string): Promise<Tx
     adapter.checkStatus({ providerTxnId: txn.providerTxnId, clientRef: txn.txnRef }),
   );
 
-  // Recheck context: services where money moved up-front are debit-type; AEPS
-  // credit-type reimbursement happens in finalize on success.
+  // Recheck context: direction from service code; wallet from the stored txn row (not re-derived).
   const direction: MoneyDirection = inferDirectionFromServiceCode(service.code);
-  const walletType: WalletType = direction === "credit" ? "aeps" : "main";
+  const walletType: WalletType =
+    (txn.walletType as WalletType | null) ?? (direction === "credit" ? "aeps" : "main");
   const finalized = await finalizeTxn(txn, result, { direction, walletType });
 
   await insertAuditLog({
@@ -339,6 +386,48 @@ export async function recheckTxnStatus(actor: Actor, txnRef: string): Promise<Tx
   });
 
   return { txn: finalized, provider: result };
+}
+
+/** Pending older than this may be auto-reconciled (provider already acknowledged). */
+export const PENDING_RECONCILE_MIN_AGE_MS = 120_000;
+
+/**
+ * Background sweep: settle pending / crash-stale initiated txns so held wallet money is not
+ * stuck forever when nobody taps /recheck. Skips initiated rows still inside the submit window.
+ * Safe to run concurrently with user rechecks — finalizeTxn row-locks make settlement once-only.
+ */
+export async function reconcileStaleTransactions(limit = 40): Promise<{ checked: number; changed: number }> {
+  const now = Date.now();
+  const initiatedCutoff = new Date(now - INITIATED_RECHECK_GRACE_MS);
+  const pendingCutoff = new Date(now - PENDING_RECONCILE_MIN_AGE_MS);
+
+  const candidates = await db
+    .select()
+    .from(transactions)
+    .where(
+      or(
+        and(eq(transactions.status, "pending"), lt(transactions.updatedAt, pendingCutoff)),
+        and(eq(transactions.status, "initiated"), lt(transactions.createdAt, initiatedCutoff)),
+      ),
+    )
+    .orderBy(transactions.updatedAt)
+    .limit(limit);
+
+  let changed = 0;
+  for (const txn of candidates) {
+    try {
+      const before = txn.status;
+      const outcome = await recheckTxnStatus(
+        { id: txn.userId, role: "admin" },
+        txn.txnRef,
+      );
+      if (outcome.txn.status !== before) changed += 1;
+    } catch (err) {
+      logger.error({ err, txnRef: txn.txnRef }, "txn reconcile failed");
+    }
+  }
+
+  return { checked: candidates.length, changed };
 }
 
 export function inferDirectionFromServiceCode(code: string): MoneyDirection {

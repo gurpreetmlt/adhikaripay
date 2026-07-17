@@ -34,6 +34,11 @@ const envSchema = z.object({
   MAX_MANUAL_FUND_RUPEES: z.coerce.number().positive().default(500000),
   /** Hard ceiling (rupees) on flat commission overrides per transaction. */
   MAX_FLAT_COMMISSION_RUPEES: z.coerce.number().positive().default(500),
+  /**
+   * How often to auto-recheck pending / crash-stale initiated txns (ms).
+   * Set 0 to disable the worker. Default 5 minutes.
+   */
+  TXN_RECONCILE_INTERVAL_MS: z.coerce.number().int().min(0).default(5 * 60 * 1000),
 });
 
 const parsed = envSchema.safeParse(process.env);
