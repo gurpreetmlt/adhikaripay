@@ -1,0 +1,38 @@
+# Pre-commit hooks for Adhikari Pay
+# Blocks secrets before commit; also basic hygiene checks.
+# Install: pre-commit install
+# Run all: pre-commit run --all-files
+
+# Skip generated / vendor / build trees (secrets still caught by gitleaks on staged source)
+exclude: |
+  (?x)^(
+    .*/node_modules/.*|
+    .*/\.cxx/.*|
+    .*/android/\.gradle/.*|
+    .*/android/app/build/.*|
+    .*/\.next/.*|
+    .*/\.turbo/.*|
+    .*/dist/.*|
+    Edu/.*
+  )$
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: detect-private-key
+      - id: check-symlinks
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks

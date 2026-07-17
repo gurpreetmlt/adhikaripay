@@ -1,3 +1,4 @@
+# ── Dependencies & build ─────────────────────────────────────────────
 node_modules/
 .turbo/
 dist/
@@ -5,39 +6,68 @@ build/
 .next/
 out/
 .dev-logs/
+coverage/
+*.log
+npm-debug.log*
+.DS_Store
 
+# ── Environment & secrets (never commit) ─────────────────────────────
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
+!.env.*.example
+*.production.env
 
-# Secrets — never push credentials
+# Creds / ops docs with secrets
 LOGIN.md
 LOGIN.production.md
 account-details.txt
-*.production.env
 
-*.log
-npm-debug.log*
+# Keys, certs, signing
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+!debug.keystore
+*.mobileprovision
+*.cer
+*.crt
 
-.DS_Store
+# Cloud / SaaS credentials
+firebase-adminsdk*.json
+google-services.json
+GoogleService-Info.plist
+service-account*.json
+credentials.json
+*-credentials.json
+*.secret.json
 
-drizzle/meta/
-
-coverage/
-
+# IDE
 .vscode/*
 !.vscode/extensions.json
 
+# Mobile build artifacts
 android/app/build/
 ios/build/
-*.keystore
-!debug.keystore
+**/.cxx/
+**/android/.gradle/
+**/android/app/build/
+**/android/build/
+
+# DB / tooling
+drizzle/meta/
 
 # Non-project folders
 Edu/
 
-# Agent transcripts & local terminal state
+# Agent / local state
 .agent-config/
 .agent-local/
 agent-transcripts/
+
+# Gitleaks reports (local scans)
+gitleaks-report*.json
+gitleaks-report*.sarif
+*.tsbuildinfo

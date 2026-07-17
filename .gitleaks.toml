@@ -1,0 +1,33 @@
+# Gitleaks config for Adhikari Pay monorepo
+# Extends default rules; allowlists only safe examples / false positives.
+title = "Adhikari Pay gitleaks"
+
+[extend]
+useDefault = true
+
+# Paths that commonly hold secrets — still scanned, but document intent
+# Default gitleaks rules already cover AWS, Stripe, JWT, private keys, etc.
+
+[[allowlists]]
+description = "Documented example env templates (no real secrets)"
+paths = [
+  '''\.env\.example$''',
+  '''\.env\.sample$''',
+  '''apps/.*/\.env\.example$''',
+]
+
+[[allowlists]]
+description = "Android debug keystore placeholder (committed intentionally)"
+paths = [
+  '''debug\.keystore$''',
+]
+
+[[allowlists]]
+description = "Vendor lock / package manager noise"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)\.turbo/''',
+  '''(^|/)dist/''',
+  '''(^|/)\.next/''',
+  '''package-lock\.json$''',
+]
