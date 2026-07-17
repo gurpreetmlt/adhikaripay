@@ -78,6 +78,13 @@
       "when": 1784260000000,
       "tag": "0010_security_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784268330835,
+      "tag": "0011_silly_wendell_rand",
+      "breakpoints": true
     }
   ]
 }
