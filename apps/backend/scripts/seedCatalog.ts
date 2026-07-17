@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db, pgPool } from "../src/db/postgres";
 import { serviceCategories, services } from "../src/db/postgres/schema";
 
@@ -119,8 +119,21 @@ const CATALOG: SeedCategory[] = [
   },
 ];
 
-/** Duplicate / retired service codes — hide from catalog but keep DB row. */
+/** Duplicate / retired — hide from catalog, keep DB row. */
 const DEACTIVATE_SERVICE_CODES = ["LIC_SUVIDHA"] as const;
+
+/**
+ * Red-marked: keep tile, clear custom icon (reminder that art is still needed).
+ * Forced after upsert so old DB filenames cannot stick around.
+ */
+const CLEAR_ICON_CODES = [
+  "CASH_DEPOSIT",
+  "NPS",
+  "EDUCATION_FEES",
+  "MUNICIPAL_SERVICES",
+  "HOUSING_SOCIETY",
+  "SUBSCRIPTION",
+] as const;
 
 async function upsertCategory(
   category: SeedCategory,
@@ -218,10 +231,21 @@ async function main() {
     await db.update(services).set({ isActive: false }).where(eq(services.code, code));
   }
 
+  await db
+    .update(services)
+    .set({ icon: null })
+    .where(inArray(services.code, [...CLEAR_ICON_CODES]));
+
+  const check = await db
+    .select({ code: services.code, icon: services.icon, isActive: services.isActive })
+    .from(services)
+    .where(inArray(services.code, [...CLEAR_ICON_CODES, ...DEACTIVATE_SERVICE_CODES]));
+
   console.log(
     `Seeded ${CATALOG.length} categories and ${CATALOG.reduce((n, c) => n + c.services.length, 0)} services.` +
-      ` Deactivated: ${DEACTIVATE_SERVICE_CODES.join(", ") || "(none)"}.`,
+      ` Deactivated: ${DEACTIVATE_SERVICE_CODES.join(", ")}. Cleared icons: ${CLEAR_ICON_CODES.join(", ")}.`,
   );
+  console.log("Verify:", JSON.stringify(check, null, 2));
   await pgPool.end();
 }
 
