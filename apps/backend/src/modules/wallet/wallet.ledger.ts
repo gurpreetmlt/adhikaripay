@@ -53,34 +53,42 @@ interface TransferParams {
   description?: string;
 }
 
+async function doTransfer(tx: Tx, params: TransferParams): Promise<{ groupId: string }> {
+  const { fromWalletId, toWalletId, amount, referenceType, referenceId, description } = params;
+  const [firstId, secondId] = [fromWalletId, toWalletId].sort();
+  const firstWallet = await lockWallet(tx, firstId as string);
+  const secondWallet = await lockWallet(tx, secondId as string);
+
+  const fromWallet = firstWallet.id === fromWalletId ? firstWallet : secondWallet;
+  const toWallet = firstWallet.id === toWalletId ? firstWallet : secondWallet;
+
+  const [group] = await tx
+    .insert(walletLedgerGroups)
+    .values({ referenceType, referenceId, description })
+    .returning();
+  if (!group) throw new HttpError(500, "Failed to create ledger group");
+
+  await applyLockedEntry(tx, fromWallet, group.id, "debit", amount);
+  await applyLockedEntry(tx, toWallet, group.id, "credit", amount);
+
+  return { groupId: group.id };
+}
+
 // Moves money between two wallets as a single balanced journal entry (debit + credit,
 // same group). Locks are always acquired in sorted-id order — independent of transfer
 // direction — so two concurrent transfers between the same wallet pair can never deadlock.
-export async function transferBetweenWallets(params: TransferParams): Promise<{ groupId: string }> {
-  const { fromWalletId, toWalletId, amount, referenceType, referenceId, description } = params;
-  if (fromWalletId === toWalletId) {
+//
+// Pass `existingTx` to run inside a caller's transaction (e.g. so a transaction-status
+// compare-and-swap and the money movement it authorizes commit or roll back together).
+export async function transferBetweenWallets(
+  params: TransferParams,
+  existingTx?: Tx,
+): Promise<{ groupId: string }> {
+  if (params.fromWalletId === params.toWalletId) {
     throw new HttpError(422, "Cannot transfer a wallet to itself", "INVALID_TRANSFER");
   }
-
-  return db.transaction(async (tx) => {
-    const [firstId, secondId] = [fromWalletId, toWalletId].sort();
-    const firstWallet = await lockWallet(tx, firstId as string);
-    const secondWallet = await lockWallet(tx, secondId as string);
-
-    const fromWallet = firstWallet.id === fromWalletId ? firstWallet : secondWallet;
-    const toWallet = firstWallet.id === toWalletId ? firstWallet : secondWallet;
-
-    const [group] = await tx
-      .insert(walletLedgerGroups)
-      .values({ referenceType, referenceId, description })
-      .returning();
-    if (!group) throw new HttpError(500, "Failed to create ledger group");
-
-    await applyLockedEntry(tx, fromWallet, group.id, "debit", amount);
-    await applyLockedEntry(tx, toWallet, group.id, "credit", amount);
-
-    return { groupId: group.id };
-  });
+  if (existingTx) return doTransfer(existingTx, params);
+  return db.transaction((tx) => doTransfer(tx, params));
 }
 
 interface FundParams {

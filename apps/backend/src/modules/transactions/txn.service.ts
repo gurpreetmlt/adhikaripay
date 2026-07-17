@@ -187,75 +187,104 @@ interface FinalizeContext {
   walletType: WalletType;
 }
 
+// Settles a transaction exactly once. The whole thing runs in a single DB transaction that
+// FIRST locks the txn row and re-checks its status: if a concurrent call (a second /recheck,
+// or recheck racing the initial submit) already moved it to a terminal state, this call moves
+// NO money and returns the settled row. Money movement and the status flip that authorizes it
+// commit or roll back together, so a pending txn can never be credited/reversed twice.
 async function finalizeTxn(txn: TxnRow, result: ProviderResult, ctx: FinalizeContext): Promise<TxnRow> {
   const needsMoney = ctx.direction !== "none" && toPaise(txn.amount) > 0;
 
-  if (result.status === "success") {
-    // Credit services reimburse the retailer only now, after provider confirmation.
-    if (needsMoney && ctx.direction === "credit") {
-      const systemWallet = await getSystemWallet();
-      const userWallet = await getUserWallet(txn.userId, ctx.walletType);
-      await transferBetweenWallets({
-        fromWalletId: systemWallet.walletId,
-        toWalletId: userWallet.walletId,
-        amount: txn.amount,
-        referenceType: "service_txn",
-        referenceId: txn.id,
-        description: `Service credit ${txn.txnRef}`,
-      });
-    }
-    const [updated] = await db
-      .update(transactions)
-      .set({
-        status: "success",
-        providerTxnId: result.providerTxnId,
-        completedAt: new Date(),
-        updatedAt: new Date(),
-      })
+  const { row: settled, didSettleSuccess } = await db.transaction(async (tx) => {
+    const [locked] = await tx
+      .select()
+      .from(transactions)
       .where(eq(transactions.id, txn.id))
-      .returning();
+      .for("update");
+    if (!locked) throw new HttpError(404, "Transaction not found", "TXN_NOT_FOUND");
 
-    // Commission distribution hooks in here (fire-and-forget; failure must not
-    // fail the customer's transaction).
-    distributeCommissionSafe(updated!);
-    return updated!;
-  }
-
-  if (result.status === "failed") {
-    // Undo the up-front debit with an explicit balanced reversal group.
-    if (needsMoney && ctx.direction === "debit") {
-      const systemWallet = await getSystemWallet();
-      const userWallet = await getUserWallet(txn.userId, ctx.walletType);
-      await transferBetweenWallets({
-        fromWalletId: systemWallet.walletId,
-        toWalletId: userWallet.walletId,
-        amount: txn.amount,
-        referenceType: "reversal",
-        referenceId: txn.id,
-        description: `Auto-reversal ${txn.txnRef}: ${result.message}`,
-      });
+    // Idempotency guard: only a txn still in flight may be settled. A terminal txn means a
+    // concurrent finalize already ran — return it untouched, moving no money.
+    if (locked.status !== "pending" && locked.status !== "initiated") {
+      return { row: locked, didSettleSuccess: false };
     }
-    const [updated] = await db
-      .update(transactions)
-      .set({
-        status: "failed",
-        providerTxnId: result.providerTxnId,
-        failureReason: result.message,
-        completedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(transactions.id, txn.id))
-      .returning();
-    return updated!;
-  }
 
-  // pending: money (if any) stays held with the system wallet until recheck resolves it.
-  const [updated] = await db
-    .update(transactions)
-    .set({ status: "pending", providerTxnId: result.providerTxnId, updatedAt: new Date() })
-    .where(eq(transactions.id, txn.id))
-    .returning();
-  return updated!;
+    if (result.status === "success") {
+      // Credit services reimburse the retailer only now, after provider confirmation — in the
+      // same tx as the status flip, so it commits atomically with "this txn is now settled".
+      if (needsMoney && ctx.direction === "credit") {
+        const systemWallet = await getSystemWallet();
+        const userWallet = await getUserWallet(txn.userId, ctx.walletType);
+        await transferBetweenWallets(
+          {
+            fromWalletId: systemWallet.walletId,
+            toWalletId: userWallet.walletId,
+            amount: locked.amount,
+            referenceType: "service_txn",
+            referenceId: locked.id,
+            description: `Service credit ${locked.txnRef}`,
+          },
+          tx,
+        );
+      }
+      const [updated] = await tx
+        .update(transactions)
+        .set({
+          status: "success",
+          providerTxnId: result.providerTxnId,
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(transactions.id, locked.id))
+        .returning();
+      return { row: updated!, didSettleSuccess: true };
+    }
+
+    if (result.status === "failed") {
+      // Undo the up-front debit with an explicit balanced reversal group.
+      if (needsMoney && ctx.direction === "debit") {
+        const systemWallet = await getSystemWallet();
+        const userWallet = await getUserWallet(txn.userId, ctx.walletType);
+        await transferBetweenWallets(
+          {
+            fromWalletId: systemWallet.walletId,
+            toWalletId: userWallet.walletId,
+            amount: locked.amount,
+            referenceType: "reversal",
+            referenceId: locked.id,
+            description: `Auto-reversal ${locked.txnRef}: ${result.message}`,
+          },
+          tx,
+        );
+      }
+      const [updated] = await tx
+        .update(transactions)
+        .set({
+          status: "failed",
+          providerTxnId: result.providerTxnId,
+          failureReason: result.message,
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(transactions.id, locked.id))
+        .returning();
+      return { row: updated!, didSettleSuccess: false };
+    }
+
+    // pending: money (if any) stays held with the system wallet until recheck resolves it.
+    const [updated] = await tx
+      .update(transactions)
+      .set({ status: "pending", providerTxnId: result.providerTxnId, updatedAt: new Date() })
+      .where(eq(transactions.id, locked.id))
+      .returning();
+    return { row: updated!, didSettleSuccess: false };
+  });
+
+  // Commission runs only for the single call that actually settled the txn to success, and only
+  // after that commit — never for a concurrent no-op finalize. Fire-and-forget: a payout failure
+  // must not fail the customer's transaction.
+  if (didSettleSuccess) distributeCommissionSafe(settled);
+  return settled;
 }
 
 // ── Status recheck (pending -> success/failed) ─────────────────────────────
