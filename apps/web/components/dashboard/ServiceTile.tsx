@@ -6,7 +6,7 @@ import { toast } from "react-hot-toast";
 import clsx from "clsx";
 import { Minus, Star } from "lucide-react";
 import { serviceIconPath } from "@adhikaripay/shared-types";
-import { DesignIcon, designTileColors, serviceCodeToDesignKey } from "@/lib/designIcons";
+import { designTileColors } from "@/lib/designIcons";
 import { useLongPress } from "@/lib/useLongPress";
 
 const AEPS_TAB_MAP: Record<string, string> = {
@@ -47,7 +47,6 @@ export function ServiceTile({
 }: ServiceTileProps) {
   const router = useRouter();
   const tile = designTileColors(index, false);
-  const iconName = serviceCodeToDesignKey(code);
   const assetSrc = serviceIconPath(icon);
   const [assetFailed, setAssetFailed] = useState(false);
   const showAsset = Boolean(assetSrc) && !assetFailed;
@@ -128,9 +127,7 @@ export function ServiceTile({
               className="h-9 w-9 object-contain"
               onError={() => setAssetFailed(true)}
             />
-          ) : (
-            <DesignIcon name={iconName} size={26} color={tile.fg} strokeWidth={2.4} />
-          )}
+          ) : null}
         </span>
         <span className="text-xs font-medium leading-tight text-gray-700">{name}</span>
       </button>

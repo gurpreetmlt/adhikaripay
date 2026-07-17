@@ -8,7 +8,7 @@ import { fetchApi } from "@/lib/api";
 import type { CatalogCategoryView } from "@/lib/types";
 import { B } from "@/lib/brand";
 import { serviceIconPath } from "@adhikaripay/shared-types";
-import { DesignIcon, designTileColors, serviceCodeToDesignKey } from "@/lib/designIcons";
+import { designTileColors } from "@/lib/designIcons";
 import { flattenCatalogServices } from "@/lib/catalog";
 import { extractApiError } from "@/lib/onboarding";
 import { MAX_FAVORITES, selectFavoriteCodes, useFavoritesStore } from "@/lib/favorites";
@@ -46,7 +46,6 @@ function ServiceIconCard({
   onOpen?: () => void;
 }) {
   const tile = designTileColors(index, false);
-  const iconName = serviceCodeToDesignKey(svc.code);
   const assetSrc = serviceIconPath(svc.icon);
   const [assetFailed, setAssetFailed] = useState(false);
   const showAsset = Boolean(assetSrc) && !assetFailed;
@@ -85,9 +84,7 @@ function ServiceIconCard({
               className="h-9 w-9 object-contain"
               onError={() => setAssetFailed(true)}
             />
-          ) : (
-            <DesignIcon name={iconName} size={22} color={tile.fg} strokeWidth={2.4} />
-          )}
+          ) : null}
         </div>
         <div className="pr-5">
           <div className="text-sm font-semibold leading-snug" style={{ color: B.blue }}>
