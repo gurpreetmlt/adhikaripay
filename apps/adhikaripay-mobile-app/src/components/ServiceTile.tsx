@@ -2,11 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { Minus, Star } from "lucide-react-native";
 import { SvgXml } from "react-native-svg";
-import {
-  DesignIcon,
-  designTileColors,
-  serviceCodeToDesignKey,
-} from "../lib/designIcons";
+import { designTileColors } from "../lib/designIcons";
 import { SERVICE_ICON_XML } from "../assets/serviceIconXml";
 import { useLongPress } from "../lib/useLongPress";
 import { colors } from "../theme/colors";
@@ -46,7 +42,7 @@ export function ServiceTile({
   const { tokens, scheme } = useTheme();
   const wiggleAnim = useRef(new Animated.Value(0)).current;
   const tile = designTileColors(index, scheme === "dark");
-  const iconName = serviceCodeToDesignKey(code);
+  // Catalog filename → bundled SVG. Missing / pending art → blank box (same as web).
   const iconXml = icon ? (SERVICE_ICON_XML[icon] ?? null) : null;
 
   useEffect(() => {
@@ -117,11 +113,7 @@ export function ServiceTile({
           </View>
         ) : null}
         <View style={[styles.iconBox, { backgroundColor: iconXml ? "transparent" : tile.bg }]}>
-          {iconXml ? (
-            <SvgXml xml={iconXml} width={36} height={36} />
-          ) : (
-            <DesignIcon name={iconName} size={28} color={tile.fg} strokeWidth={2.4} />
-          )}
+          {iconXml ? <SvgXml xml={iconXml} width={36} height={36} /> : null}
         </View>
         <Text style={[styles.name, { color: tokens.txt2 }]} numberOfLines={2}>
           {name}
