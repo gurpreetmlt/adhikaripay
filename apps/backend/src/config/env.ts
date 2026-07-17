@@ -21,6 +21,12 @@ const envSchema = z.object({
    * OTP delivery exists to bypass anyway). Turn this off the moment SMS delivery goes live.
    */
   EXPOSE_OTP_IN_RESPONSE: z.coerce.boolean().default(false),
+  /**
+   * Allow stub/mock provider adapters to serve traffic in production. Default false: with real
+   * providers not yet integrated, a mock returns "success" for any AEPS/DMT/BBPS call, which
+   * would let a retailer mint float without a real bank payout. Only turn this on in dev/staging.
+   */
+  ALLOW_STUB_PROVIDERS: z.coerce.boolean().default(false),
 });
 
 const parsed = envSchema.safeParse(process.env);

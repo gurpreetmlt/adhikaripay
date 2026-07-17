@@ -32,6 +32,8 @@ function mockOutcome(amount: string | undefined): "success" | "failed" | "pendin
 
 export abstract class MockAdapterBase implements ProviderAdapter {
   abstract readonly code: string;
+  // Marks every subclass as a stub so the router can refuse to settle money on it in production.
+  readonly isStub = true;
 
   private async respond<TData extends Record<string, unknown>>(
     operation: string,

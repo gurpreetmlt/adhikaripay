@@ -75,6 +75,12 @@ export interface CheckStatusParams {
 
 export interface ProviderAdapter {
   readonly code: string;
+  /**
+   * True for stub/mock adapters that fabricate provider responses (always "success") without
+   * calling a real rail. Money must NEVER be settled on a stub's word in production — the router
+   * refuses to route through a stub in prod unless ALLOW_STUB_PROVIDERS is explicitly set.
+   */
+  readonly isStub?: boolean;
 
   aepsBalanceEnquiry(params: AepsParams): Promise<ProviderResult<{ balance: string }>>;
   aepsWithdraw(params: AepsParams): Promise<ProviderResult>;

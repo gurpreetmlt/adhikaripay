@@ -5,7 +5,21 @@ import { insertProviderLog } from "../../db/postgres/repositories/providerLog";
 import { getAdapterByCode } from "./provider.registry";
 import { HttpError } from "../../utils/httpError";
 import { logger } from "../../utils/logger";
+import { env } from "../../config/env";
 import type { ProviderAdapter, ProviderOperation, ProviderResult } from "./types";
+
+/**
+ * A stub adapter fabricates "success" without a real rail, so settling money on its word would
+ * mint float. Block stubs in production unless explicitly opted in (ALLOW_STUB_PROVIDERS) — pure
+ * and env-injected so it's unit-testable without a DB.
+ */
+export function isStubBlocked(
+  adapter: Pick<ProviderAdapter, "isStub">,
+  nodeEnv: string,
+  allowStub: boolean,
+): boolean {
+  return Boolean(adapter.isStub) && nodeEnv === "production" && !allowStub;
+}
 
 export interface RoutedProvider {
   adapter: ProviderAdapter;
@@ -43,6 +57,14 @@ export async function resolveProvidersForService(serviceCode: string): Promise<R
     const adapter = getAdapterByCode(row.providerCode);
     if (!adapter) {
       logger.warn({ providerCode: row.providerCode }, "provider row exists but no adapter registered");
+      continue;
+    }
+    if (isStubBlocked(adapter, env.NODE_ENV, env.ALLOW_STUB_PROVIDERS)) {
+      // A mock in production would settle money with no real payout — refuse to route through it.
+      logger.error(
+        { providerCode: row.providerCode, serviceCode },
+        "stub provider blocked in production — set ALLOW_STUB_PROVIDERS only in dev/staging",
+      );
       continue;
     }
     usable.push({ adapter, providerId: row.providerId, providerServiceCode: row.providerServiceCode });
