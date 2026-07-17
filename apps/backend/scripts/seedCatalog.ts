@@ -10,16 +10,25 @@ interface SeedService {
   icon?: string;
 }
 
+/**
+ * Icon filenames live in `Icons/` + `apps/web/public/service-icons/`.
+ * Prefer distinct art per service; skip near-duplicates:
+ *   Aeps.svg ≈ adharPay.svg (fingerprint) → Aeps=AEPS cash, adharPay=Aadhaar Pay
+ *   dth.svg ≈ DTH_Web.svg → use DTH_Web only
+ *   poorna_suraksha.svg ≈ ic_insurance.png → use SVG only
+ *   credit_card.svg ≈ ic_credit_card.png → use SVG
+ *   Postpaid_Web.svg = receipt/lines+₹ → Mini Statement (not postpaid bills)
+ */
 const CATALOG: { code: string; name: string; icon: string; services: SeedService[] }[] = [
   {
     code: "BANKING_SERVICES",
     name: "Banking Services",
     icon: "landmark",
     services: [
-      { code: "CASH_WITHDRAW", name: "Cash Withdraw", icon: "Aeps.svg" },
-      { code: "MINI_STATEMENT", name: "Mini Statement", icon: "Aeps.svg" },
-      { code: "CASH_DEPOSIT", name: "Cash Deposit", icon: "Aeps.svg" },
-      { code: "BALANCE_ENQUIRY", name: "Balance Enquiry", icon: "Aeps.svg" },
+      { code: "CASH_WITHDRAW", name: "Cash Withdraw", icon: "micro_atm_withdrawal.svg" },
+      { code: "MINI_STATEMENT", name: "Mini Statement", icon: "Postpaid_Web.svg" },
+      { code: "CASH_DEPOSIT", name: "Cash Deposit", icon: "ic_recurring_deposit.png" },
+      { code: "BALANCE_ENQUIRY", name: "Balance Enquiry", icon: "credit-score-icon.svg" },
       { code: "UPI_CASH_POINT", name: "UPI Cash Point", badge: "NEW" },
       { code: "MONEY_TRANSFER", name: "Money Transfer", icon: "money_transfer.svg" },
     ],
@@ -29,9 +38,9 @@ const CATALOG: { code: string; name: string; icon: string; services: SeedService
     name: "Recharges and Bills",
     icon: "receipt",
     services: [
-      { code: "MOBILE_PREPAID", name: "Mobile Prepaid", badge: "Upto 2%", icon: "bill_payments-new.svg" },
-      { code: "LOAN_REPAYMENT", name: "Loan Repayment", badge: "Flat 0.15%", icon: "loan_serviceLogo.svg" },
-      { code: "ELECTRICITY", name: "Electricity", badge: "Flat ₹1" },
+      { code: "MOBILE_PREPAID", name: "Mobile Prepaid", badge: "Upto 2%", icon: "MobilePrepaid_Web.png" },
+      { code: "LOAN_REPAYMENT", name: "Loan Repayment", badge: "Flat 0.15%", icon: "ic_loan.png" },
+      { code: "ELECTRICITY", name: "Electricity", badge: "Flat ₹1", icon: "ic_electric.png" },
       { code: "DTH", name: "DTH", badge: "Upto 1.50%", icon: "DTH_Web.svg" },
       { code: "AGENT_COLLECTION", name: "Agent Collection", badge: "Flat 0.11%", icon: "AgentCollection_Web.svg" },
       { code: "CASH_COLLECTION", name: "Cash Collection", icon: "cash_collection.svg" },
@@ -39,17 +48,17 @@ const CATALOG: { code: string; name: string; icon: string; services: SeedService
       { code: "INSURANCE", name: "Insurance", icon: "poorna_suraksha.svg" },
       { code: "CREDIT_CARDS", name: "Credit Cards", icon: "apply-credit-card.svg" },
       { code: "CREDIT_CARD_BILL", name: "Credit Card", badge: "Flat ₹0.5", icon: "credit_card.svg" },
-      { code: "FASTAG_RECHARGE", name: "Fastag Recharge", badge: "Flat 0.15%", icon: "FleetCard_Web.svg" },
-      { code: "MOBILE_POSTPAID", name: "Mobile Postpaid", badge: "Flat ₹2", icon: "Postpaid_Web.svg" },
-      { code: "WATER", name: "Water", badge: "Flat ₹1" },
-      { code: "LANDLINE_POSTPAID", name: "Landline Postpaid", badge: "Flat ₹2", icon: "Postpaid_Web.svg" },
-      { code: "GAS_PIPELINE", name: "Gas Pipeline", badge: "Flat ₹1" },
+      { code: "FASTAG_RECHARGE", name: "Fastag Recharge", badge: "Flat 0.15%", icon: "ic_fastag.png" },
+      { code: "MOBILE_POSTPAID", name: "Mobile Postpaid", badge: "Flat ₹2", icon: "ic_other_bills.svg" },
+      { code: "WATER", name: "Water", badge: "Flat ₹1", icon: "ic_water.png" },
+      { code: "LANDLINE_POSTPAID", name: "Landline Postpaid", badge: "Flat ₹2", icon: "ic_other_bills.svg" },
+      { code: "GAS_PIPELINE", name: "Gas Pipeline", badge: "Flat ₹1", icon: "ic_gas_pipeline.png" },
       { code: "INSURANCE_PREMIUM", name: "Insurance Premium", badge: "Upto ₹5", icon: "poorna_suraksha.svg" },
-      { code: "BROADBAND_POSTPAID", name: "Broadband Postpaid", badge: "Flat ₹2", icon: "Postpaid_Web.svg" },
-      { code: "SUBSCRIPTION", name: "Subscription", badge: "Flat 0.25%" },
-      { code: "EDUCATION_FEES", name: "Education Fees", badge: "Upto ₹4.75" },
-      { code: "LPG_CYLINDER", name: "LPG Cylinder", badge: "Flat ₹1" },
-      { code: "MUNICIPAL_TAXES", name: "Municipal Taxes", badge: "Upto ₹2.5", icon: "Municipal_Taxes_Web.svg" },
+      { code: "BROADBAND_POSTPAID", name: "Broadband Postpaid", badge: "Flat ₹2", icon: "ic_other_bills.svg" },
+      { code: "SUBSCRIPTION", name: "Subscription", badge: "Flat 0.25%", icon: "ic_subscription_fees.png" },
+      { code: "EDUCATION_FEES", name: "Education Fees", badge: "Upto ₹4.75", icon: "ic_education_fees.png" },
+      { code: "LPG_CYLINDER", name: "LPG Cylinder", badge: "Flat ₹1", icon: "ic_lpg_gas_booking.png" },
+      { code: "MUNICIPAL_TAXES", name: "Municipal Taxes", badge: "Upto ₹2.5", icon: "ic_municipal_taxes.png" },
       { code: "ECHALLAN", name: "eChallan", badge: "Flat ₹0.5", icon: "eChallan_Web.svg" },
       { code: "CABLE_TV", name: "Cable TV", badge: "Flat ₹2", icon: "CableTV_Web.svg" },
       { code: "DONATION", name: "Donation", badge: "Flat ₹1", icon: "Donation_Web.svg" },
@@ -58,7 +67,7 @@ const CATALOG: { code: string; name: string; icon: string; services: SeedService
       { code: "NCMC_RECHARGE", name: "NCMC Recharge", badge: "Flat ₹2", icon: "NCMC_Web.svg" },
       { code: "FLEET_CARD_RECHARGE", name: "Fleet Card Recharge", badge: "Flat 0.25%", icon: "FleetCard_Web.svg" },
       { code: "EV_RECHARGE", name: "EV Recharge", badge: "Upto ₹5", icon: "EVRecharge_Web.svg" },
-      { code: "HOUSING_SOCIETY", name: "Housing Society", badge: "Upto ₹5", icon: "Clubs_and_Associations_Web.svg" },
+      { code: "HOUSING_SOCIETY", name: "Housing Society", badge: "Upto ₹5", icon: "ic_housing_society.png" },
       { code: "LIC", name: "LIC", icon: "ic_LIC.svg" },
       { code: "RENTAL", name: "Rental", badge: "Upto ₹5", icon: "Rental_Web.svg" },
       { code: "CLUBS_AND_ASSOCIATIONS", name: "Clubs and Associations", badge: "Upto ₹5", icon: "Clubs_and_Associations_Web.svg" },
@@ -82,8 +91,8 @@ const CATALOG: { code: string; name: string; icon: string; services: SeedService
     name: "SHG Services",
     icon: "users",
     services: [
-      { code: "SHG_WITHDRAW_CASH", name: "Withdraw Cash" },
-      { code: "SHG_DEPOSIT_CASH", name: "Deposit Cash" },
+      { code: "SHG_WITHDRAW_CASH", name: "Withdraw Cash", icon: "micro_atm_withdrawal.svg" },
+      { code: "SHG_DEPOSIT_CASH", name: "Deposit Cash", icon: "cash_collection.svg" },
     ],
   },
 ];
