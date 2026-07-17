@@ -75,7 +75,7 @@ const CATALOG: SeedCategory[] = [
       { code: "MUNICIPAL_TAXES", name: "Municipal Taxes", badge: "Upto ₹2.5", icon: "Municipal-Taxes.svg" },
       { code: "MUNICIPAL_SERVICES", name: "Municipal Services", badge: "Upto ₹2.5", icon: "Municipal-Taxes.svg" },
       { code: "HOUSING_SOCIETY", name: "Housing Society", badge: "Upto ₹5" },
-      { code: "CLUBS_AND_ASSOCIATIONS", name: "Clubs & Associations", badge: "Upto ₹5", icon: "Club-Associates.svg" },
+      { code: "CLUBS_AND_ASSOCIATIONS", name: "Clubs & Associations", badge: "Upto ₹5", icon: "Clubs-Associations.svg" },
       { code: "RENTAL", name: "Rental", badge: "Upto ₹5", icon: "Rental.svg" },
       { code: "ECHALLAN", name: "eChallan", badge: "Flat ₹0.5", icon: "eChallan.svg" },
       { code: "DONATION", name: "Donation", badge: "Flat ₹1", icon: "Donation.svg" },
@@ -86,7 +86,7 @@ const CATALOG: SeedCategory[] = [
     code: "ACCEPT_PAYMENTS",
     name: "Accept Payments",
     icon: "fingerprint",
-    services: [{ code: "AADHAAR_PAY", name: "Aadhaar Pay", icon: "AadhaarPay.svg" }],
+    services: [{ code: "AADHAAR_PAY", name: "Aadhaar Pay", icon: "Aadhaar-Pay.svg" }],
   },
   {
     code: "MORE_SERVICES",
@@ -95,7 +95,7 @@ const CATALOG: SeedCategory[] = [
     services: [
       { code: "AGENT_COLLECTION", name: "Agent Collection", badge: "Flat 0.11%", icon: "Agent-Collection.svg" },
       { code: "CASH_COLLECTION", name: "Cash Collection", icon: "Cash-Collection.svg" },
-      { code: "LOANS", name: "Loans", icon: "Loans.svg" },
+      { code: "LOANS", name: "Loans", icon: "Loan.svg" },
       { code: "INSURANCE", name: "Insurance", icon: "Insurance.svg" },
       { code: "CREDIT_CARDS", name: "Apply Credit Card", icon: "Apply-Credit-Card.svg" },
     ],
@@ -111,8 +111,8 @@ const CATALOG: SeedCategory[] = [
     name: "SHG Services",
     icon: "users",
     services: [
-      { code: "SHG_WITHDRAW_CASH", name: "Withdraw Cash" },
-      { code: "SHG_DEPOSIT_CASH", name: "Deposit Cash" },
+      { code: "SHG_WITHDRAW_CASH", name: "Withdraw Cash", icon: "Cash-Withdraw.svg" },
+      { code: "SHG_DEPOSIT_CASH", name: "Deposit Cash", icon: "Cash-Collection.svg" },
     ],
   },
 ];
