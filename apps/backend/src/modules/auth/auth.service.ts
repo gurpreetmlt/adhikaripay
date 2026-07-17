@@ -508,9 +508,15 @@ export async function loginWithMpin(
 
   // Device trust gate: MPIN-only login is only allowed within the rolling trust window.
   // Stale / missing / revoked device → client must force OTP or password (not "wrong MPIN").
+  // Always evaluate trust BEFORE comparing MPIN so expiry never surfaces as MPIN_INCORRECT.
   const device = await findDevice(row.id, input.deviceId);
-  const isFresh = device && !device.revokedAt && Date.now() - device.lastAuthAt.getTime() < DEVICE_TRUST_WINDOW_MS;
-  if (!isFresh) {
+  const lastAuthMs = device ? new Date(device.lastAuthAt).getTime() : NaN;
+  const isFresh =
+    Boolean(device) &&
+    !device!.revokedAt &&
+    Number.isFinite(lastAuthMs) &&
+    Date.now() - lastAuthMs < DEVICE_TRUST_WINDOW_MS;
+  if (!device || !isFresh) {
     throw new HttpError(
       401,
       "Session expired. Login again with OTP or password, then MPIN will work on this device.",

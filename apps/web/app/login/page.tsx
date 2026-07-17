@@ -53,6 +53,7 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mpin, setMpin] = useState("");
+  const [mpinFails, setMpinFails] = useState(0);
   const [remembered, setRemembered] = useState<RememberedLogin | null>(null);
   // Show the fast MPIN "welcome back" unlock when this browser has a remembered agent.
   const [unlockMode, setUnlockMode] = useState(false);
@@ -84,6 +85,16 @@ export default function LoginPage() {
     setDevOtp(null);
   }
 
+  function leaveWelcomeBackForOtp(mobileHint: string) {
+    setMobile(mobileHint);
+    setMpin("");
+    setMpinFails(0);
+    setUnlockMode(false);
+    setMethod("otp");
+    setOtpStep("mobile");
+    setDevOtp(null);
+  }
+
   async function unlockWithMpin(e?: FormEvent) {
     e?.preventDefault();
     if (!remembered || mpin.length !== 4) return;
@@ -96,26 +107,39 @@ export default function LoginPage() {
         deviceId: getDeviceId(),
       });
       if (!data.success) throw new Error(data.message);
+      setMpinFails(0);
       finishLogin(data.data);
     } catch (err) {
-      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
-      // Trust window expired / never trusted / MPIN not set → leave welcome-back, force OTP or password.
-      if (code === "DEVICE_NOT_TRUSTED" || code === "MPIN_NOT_SET") {
+      const body = (err as { response?: { data?: { code?: string; message?: string } } })?.response?.data;
+      const code = body?.code;
+      const message = body?.message ?? (err instanceof Error ? err.message : "");
+      // Trust window expired / never trusted / MPIN not set → leave welcome-back, force OTP.
+      // Also match message text in case a proxy strips `code`.
+      const needsOtp =
+        code === "DEVICE_NOT_TRUSTED" ||
+        code === "MPIN_NOT_SET" ||
+        /session expired|not trusted|mpin is not set|verify with otp|24h/i.test(message);
+      if (needsOtp) {
         toast.error(
-          code === "MPIN_NOT_SET"
+          code === "MPIN_NOT_SET" || /not set/i.test(message)
             ? "MPIN set nahi hai — pehle OTP ya password se login karein"
             : "24h session khatam — OTP ya password se dubara login karein",
         );
-        setMobile(remembered.mobile);
-        setMpin("");
-        setUnlockMode(false);
-        setMethod("otp");
-        setOtpStep("mobile");
-        setDevOtp(null);
+        leaveWelcomeBackForOtp(remembered.mobile);
         return;
       }
-      toast.error(extractApiError(err, "Incorrect MPIN"));
+      const nextFails = mpinFails + 1;
+      setMpinFails(nextFails);
       setMpin("");
+      // Wrong PIN on a still-trusted device — after 2 tries, stop looping the welcome-back screen.
+      if (nextFails >= 2) {
+        toast.error("MPIN match nahi hua — OTP se login karein");
+        leaveWelcomeBackForOtp(remembered.mobile);
+        return;
+      }
+      toast.error(
+        extractApiError(err, "Incorrect MPIN") + " — bhool gaye ho to Use OTP instead",
+      );
     } finally {
       setLoading(false);
     }
