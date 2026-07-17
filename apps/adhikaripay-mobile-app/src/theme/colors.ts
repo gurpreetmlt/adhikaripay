@@ -42,16 +42,6 @@ export const colors = {
   onGradient: brand.white,
   onGradientMuted: "rgba(255,255,255,0.82)",
 
-  // Legacy accent aliases → brand blue (keeps existing imports working)
-  purple: brand.blue.flat,
-  purpleDark: brand.blue.dark,
-  purpleDeep: brand.blue.dark,
-  purpleLight: "#e8eef9",
-  magenta: brand.blue.light,
-  red: brand.blue.dark,
-  redDark: brand.blue.dark,
-  redLight: "#fee2e2",
-
   // Semantic — debit, logout, errors
   danger: "#dc2626",
   dangerDark: "#b91c1c",
@@ -63,14 +53,6 @@ export const colors = {
   text: "#1f2333",
   textMuted: "#6b7280",
   textLight: "#9ca3af",
-};
-
-export const spacing = {
-  xs: 4,
-  sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
 };
 
 export const gradientDirection = {

@@ -100,7 +100,3 @@ export const useFavoritesStore = create<FavoritesState>()((set, get) => ({
 export function selectFavoriteCodes(state: FavoritesState, userId: string): string[] {
   return state.byUser[userId] ?? EMPTY_CODES;
 }
-
-export function selectIsFavorite(state: FavoritesState, userId: string, code: string): boolean {
-  return (state.byUser[userId] ?? EMPTY_CODES).includes(code);
-}

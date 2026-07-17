@@ -65,7 +65,3 @@ export function resolveDevApiHost(): string {
 
   return "localhost";
 }
-
-export function getResolvedDevApiHost(): string {
-  return resolveDevApiHost();
-}

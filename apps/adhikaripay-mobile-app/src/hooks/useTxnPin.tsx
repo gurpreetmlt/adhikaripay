@@ -37,23 +37,3 @@ export function useTxnPin() {
 
   return { promptPin, TxnPinPrompt };
 }
-
-/** Stable idempotency key for a single in-flight action (survives double-tap). */
-export function useIdempotencyKey(prefix: string) {
-  const ref = useRef<string | null>(null);
-  return {
-    peek: () => {
-      if (!ref.current) {
-        const rand =
-          typeof globalThis.crypto?.randomUUID === "function"
-            ? globalThis.crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
-        ref.current = `${prefix}-${rand}`;
-      }
-      return ref.current;
-    },
-    clear: () => {
-      ref.current = null;
-    },
-  };
-}

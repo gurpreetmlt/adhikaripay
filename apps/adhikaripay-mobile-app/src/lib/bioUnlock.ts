@@ -1,15 +1,27 @@
 import { NativeModules } from "react-native";
 import { showAlert } from "../components/AppAlert";
 import { createAppStorage } from "./appStorage";
+import {
+  getSecureRefreshToken,
+  setSecureRefreshToken,
+  clearSecureRefreshToken,
+} from "./secureStorage";
 import type { LoginRoleChip } from "../screens/LoginScreen";
 
 const storage = createAppStorage();
 /**
- * Biometric unlock stores a refresh token for Welcome Back.
- * SECURITY: prefer Android Keystore / EncryptedSharedPreferences before production AEPS.
+ * Biometric unlock: mobile/role/enabled (not sensitive) stay in plain app storage; refreshToken
+ * goes to Android Keystore / iOS Keychain (see secureStorage.ts) — hardware-encrypted, doesn't
+ * survive a rooted-device or adb-backup extraction the way plain AsyncStorage does. If the native
+ * keychain module isn't linked yet (dev build before rebuild), falls back to app storage for the
+ * token too, so the feature degrades instead of breaking; upgrades to Keystore automatically once
+ * the app is rebuilt with react-native-keychain linked.
  * Logout MUST call disableBioUnlock().
  */
-const BIO_KEY = "adhikari.bioUnlock.v1";
+const BIO_META_KEY = "adhikari.bioUnlock.meta.v1";
+const BIO_FALLBACK_TOKEN_KEY = "adhikari.bioUnlock.fallbackToken.v1";
+// Pre-Keystore format: refreshToken lived inline in this record. Migrated on first read.
+const BIO_LEGACY_KEY = "adhikari.bioUnlock.v1";
 
 export type BioUnlockRecord = {
   mobile: string;
@@ -18,14 +30,49 @@ export type BioUnlockRecord = {
   enabled: boolean;
 };
 
-export async function getBioUnlock(): Promise<BioUnlockRecord | null> {
+type BioMeta = { mobile: string; role: LoginRoleChip; enabled: boolean };
+
+async function readMeta(): Promise<BioMeta | null> {
   try {
-    const raw = await storage.getItem(BIO_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as BioUnlockRecord;
+    const raw = await storage.getItem(BIO_META_KEY);
+    if (raw) return JSON.parse(raw) as BioMeta;
+  } catch {
+    /* fall through to legacy migration */
+  }
+
+  try {
+    const legacyRaw = await storage.getItem(BIO_LEGACY_KEY);
+    if (!legacyRaw) return null;
+    const legacy = JSON.parse(legacyRaw) as BioUnlockRecord;
+    if (!legacy.enabled) {
+      await storage.removeItem(BIO_LEGACY_KEY);
+      return null;
+    }
+    const meta: BioMeta = { mobile: legacy.mobile, role: legacy.role, enabled: true };
+    await storeRefreshToken(legacy.refreshToken);
+    await storage.setItem(BIO_META_KEY, JSON.stringify(meta));
+    await storage.removeItem(BIO_LEGACY_KEY);
+    return meta;
   } catch {
     return null;
   }
+}
+
+async function storeRefreshToken(refreshToken: string): Promise<void> {
+  const storedSecurely = await setSecureRefreshToken(refreshToken);
+  if (storedSecurely) {
+    await storage.removeItem(BIO_FALLBACK_TOKEN_KEY);
+  } else {
+    await storage.setItem(BIO_FALLBACK_TOKEN_KEY, refreshToken);
+  }
+}
+
+export async function getBioUnlock(): Promise<BioUnlockRecord | null> {
+  const meta = await readMeta();
+  if (!meta?.enabled) return null;
+  const refreshToken = (await getSecureRefreshToken()) ?? (await storage.getItem(BIO_FALLBACK_TOKEN_KEY));
+  if (!refreshToken) return null;
+  return { ...meta, refreshToken };
 }
 
 export async function enableBioUnlock(input: {
@@ -33,21 +80,22 @@ export async function enableBioUnlock(input: {
   role: LoginRoleChip;
   refreshToken: string;
 }): Promise<void> {
-  const record: BioUnlockRecord = {
-    ...input,
-    enabled: true,
-  };
-  await storage.setItem(BIO_KEY, JSON.stringify(record));
+  const meta: BioMeta = { mobile: input.mobile, role: input.role, enabled: true };
+  await storage.setItem(BIO_META_KEY, JSON.stringify(meta));
+  await storeRefreshToken(input.refreshToken);
 }
 
 export async function disableBioUnlock(): Promise<void> {
-  await storage.removeItem(BIO_KEY);
+  await storage.removeItem(BIO_META_KEY);
+  await storage.removeItem(BIO_FALLBACK_TOKEN_KEY);
+  await storage.removeItem(BIO_LEGACY_KEY);
+  await clearSecureRefreshToken();
 }
 
 export async function updateBioRefreshToken(refreshToken: string): Promise<void> {
-  const existing = await getBioUnlock();
-  if (!existing?.enabled) return;
-  await storage.setItem(BIO_KEY, JSON.stringify({ ...existing, refreshToken }));
+  const meta = await readMeta();
+  if (!meta?.enabled) return;
+  await storeRefreshToken(refreshToken);
 }
 
 export type BioPromptResult = "success" | "cancel" | "unavailable";

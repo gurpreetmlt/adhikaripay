@@ -1,5 +1,6 @@
 import { API_BASE, setAuthHeader } from "./api";
 import { disableBioUnlock } from "./bioUnlock";
+import { clearRememberedLogin } from "./rememberedLogin";
 import { useAuthStore } from "../store/auth";
 import axios from "axios";
 
@@ -18,6 +19,7 @@ export async function logoutEverywhere(): Promise<void> {
     /* still clear local state */
   }
   await disableBioUnlock();
+  await clearRememberedLogin();
   setAuthHeader(null);
   logout();
 }
