@@ -688,13 +688,15 @@ export async function refreshSession(
   }
 }
 
-/** Revoke every refresh token + trusted device for the user (real logout). */
+/** Revoke every refresh token for the user (logout).
+ * Device trust is intentionally kept — Welcome-back MPIN should still work within the
+ * rolling 24h window after logout. Devices are revoked only via Account → Trusted devices,
+ * MPIN change, failed-MPIN lockout, or refresh-token reuse. */
 export async function revokeAllSessionsForUser(userId: string): Promise<void> {
   await db
     .update(refreshTokens)
     .set({ revokedAt: new Date() })
     .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
-  await revokeAllDevicesForUser(userId);
 }
 
 export async function logoutUser(opts: {

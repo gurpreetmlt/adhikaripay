@@ -262,8 +262,8 @@ export function WelcomeBackScreen({ mobile, role, devOtp: initialDevOtp, preferM
       const msg = apiError(err, "Incorrect MPIN");
       if (code === "DEVICE_NOT_TRUSTED") {
         showAlert(
-          "Session expired",
-          "24h window khatam. OTP se dubara verify karein — uske baad MPIN kaam karega.",
+          "Verify this device",
+          "Is device pe pehle OTP ya password se login karein — uske baad 24h tak MPIN chalega.",
           [
             {
               text: "Open OTP",

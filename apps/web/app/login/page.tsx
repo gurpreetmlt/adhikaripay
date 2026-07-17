@@ -110,6 +110,7 @@ export default function LoginPage() {
       setMpinFails(0);
       finishLogin(data.data);
     } catch (err) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
       const body = (err as { response?: { data?: { code?: string; message?: string } } })?.response?.data;
       const code = body?.code;
       const message = body?.message ?? (err instanceof Error ? err.message : "");
@@ -123,7 +124,17 @@ export default function LoginPage() {
         toast.error(
           code === "MPIN_NOT_SET" || /not set/i.test(message)
             ? "MPIN set nahi hai — pehle OTP ya password se login karein"
-            : "24h session khatam — OTP ya password se dubara login karein",
+            : "Is browser pe OTP ya password se verify karein — phir MPIN chalega",
+        );
+        leaveWelcomeBackForOtp(remembered.mobile);
+        return;
+      }
+      // Server/DB faults are not "wrong MPIN" — don't append the forgot-PIN hint.
+      if (status === 500 || code === "DB_SCHEMA_OUTDATED" || /internal server error|out of date/i.test(message)) {
+        toast.error(
+          code === "DB_SCHEMA_OUTDATED" || /out of date/i.test(message)
+            ? "Server DB update pending — OTP se login karein"
+            : "Server error on MPIN — OTP ya password se login karein",
         );
         leaveWelcomeBackForOtp(remembered.mobile);
         return;
@@ -131,15 +142,12 @@ export default function LoginPage() {
       const nextFails = mpinFails + 1;
       setMpinFails(nextFails);
       setMpin("");
-      // Wrong PIN on a still-trusted device — after 2 tries, stop looping the welcome-back screen.
       if (nextFails >= 2) {
         toast.error("MPIN match nahi hua — OTP se login karein");
         leaveWelcomeBackForOtp(remembered.mobile);
         return;
       }
-      toast.error(
-        extractApiError(err, "Incorrect MPIN") + " — bhool gaye ho to Use OTP instead",
-      );
+      toast.error(`${extractApiError(err, "Incorrect MPIN")} — bhool gaye ho to Use OTP instead`);
     } finally {
       setLoading(false);
     }

@@ -1,8 +1,9 @@
 /**
  * Remembers the last agent who logged in on this browser so the login page can offer a fast
  * MPIN "welcome back" unlock (skip OTP) on a trusted device, instead of forcing OTP every time.
- * Survives logout on purpose — device trust is what gates MPIN login server-side (rolling 12h
- * window; see DEVICE_TRUST_WINDOW_MS in the backend), so it's safe to remember who to greet.
+ * Survives logout on purpose — device trust is what gates MPIN login server-side (rolling 24h
+ * window; see DEVICE_TRUST_WINDOW_MS in the backend). Logout only kills JWT refresh tokens;
+ * it must not revoke device trust, otherwise Welcome-back MPIN always fails after logout.
  * Cleared when the user picks "use a different number".
  */
 

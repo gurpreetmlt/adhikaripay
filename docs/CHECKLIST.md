@@ -43,7 +43,7 @@
 - [x] Txn PIN lockout + AEPS withdraw requires PIN
 - [x] Per-user txn idempotency + wallet fund/transfer idempotency
 - [x] `apps/login.text` untracked; Dependabot added
-- [x] Real logout (revoke all refresh + devices); refresh reuse → kill family
+- [x] Real logout (revoke all refresh tokens; device trust kept for Welcome-back MPIN); refresh reuse → kill family + devices
 - [x] OTP role oracle closed; OTP keyed by mobile; old OTPs invalidated
 - [x] txnAuth ticket (PIN not echoed); RD package allowlist; KYC docs + transfer KYC
 - [x] Flat commission cap; amount max fail-closed; JWT algorithms pinned
