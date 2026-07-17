@@ -38,7 +38,8 @@ const CATALOG: SeedCategory[] = [
     services: [
       { code: "CASH_WITHDRAW", name: "Cash Withdraw", icon: "Cash-Withdraw.svg" },
       { code: "MINI_STATEMENT", name: "Mini Statement", icon: "Mini-Statement.svg" },
-      { code: "CASH_DEPOSIT", name: "Cash Deposit", icon: "Cash-Collection.svg" },
+      // Icon pending — tile stays so we know art is still needed
+      { code: "CASH_DEPOSIT", name: "Cash Deposit" },
       { code: "BALANCE_ENQUIRY", name: "Balance Enquiry", icon: "Balance-Enquiry.svg" },
       { code: "UPI_CASH_POINT", name: "UPI Cash Point", badge: "NEW", icon: "UPI-Cash-Point.svg" },
       { code: "MONEY_TRANSFER", name: "Money Transfer", icon: "Money-Transfer.svg" },
@@ -68,18 +69,19 @@ const CATALOG: SeedCategory[] = [
       { code: "CREDIT_CARD_BILL", name: "Credit Card Bill", badge: "Flat ₹0.5", icon: "Credit-Bill.svg" },
       { code: "LOAN_REPAYMENT", name: "Loan Repayment", badge: "Flat 0.15%", icon: "Loan-Repayment.svg" },
       { code: "INSURANCE_PREMIUM", name: "Insurance Premium", badge: "Upto ₹5", icon: "Insurance.svg" },
+      // Single LIC tile (LIC Suvidha deactivated below)
       { code: "LIC", name: "LIC", icon: "LIC.svg" },
-      { code: "LIC_SUVIDHA", name: "LIC Suvidha", icon: "LIC.svg" },
-      { code: "NPS", name: "NPS", badge: "NEW", icon: "Cibil-Score.svg" },
-      { code: "EDUCATION_FEES", name: "Education Fees", badge: "Upto ₹4.75", icon: "Other-Bills.svg" },
+      // Icon pending — tiles kept as reminders
+      { code: "NPS", name: "NPS", badge: "NEW" },
+      { code: "EDUCATION_FEES", name: "Education Fees", badge: "Upto ₹4.75" },
       { code: "MUNICIPAL_TAXES", name: "Municipal Taxes", badge: "Upto ₹2.5", icon: "Municipal-Taxes.svg" },
-      { code: "MUNICIPAL_SERVICES", name: "Municipal Services", badge: "Upto ₹2.5", icon: "Municipal-Taxes.svg" },
-      { code: "HOUSING_SOCIETY", name: "Housing Society", badge: "Upto ₹5", icon: "Clubs-Associations.svg" },
+      { code: "MUNICIPAL_SERVICES", name: "Municipal Services", badge: "Upto ₹2.5" },
+      { code: "HOUSING_SOCIETY", name: "Housing Society", badge: "Upto ₹5" },
       { code: "CLUBS_AND_ASSOCIATIONS", name: "Clubs & Associations", badge: "Upto ₹5", icon: "Clubs-Associations.svg" },
       { code: "RENTAL", name: "Rental", badge: "Upto ₹5", icon: "Rental.svg" },
       { code: "ECHALLAN", name: "eChallan", badge: "Flat ₹0.5", icon: "eChallan.svg" },
       { code: "DONATION", name: "Donation", badge: "Flat ₹1", icon: "Donation.svg" },
-      { code: "SUBSCRIPTION", name: "Subscription", badge: "Flat 0.25%", icon: "Other-Bills.svg" },
+      { code: "SUBSCRIPTION", name: "Subscription", badge: "Flat 0.25%" },
     ],
   },
   {
@@ -116,6 +118,9 @@ const CATALOG: SeedCategory[] = [
     ],
   },
 ];
+
+/** Duplicate / retired service codes — hide from catalog but keep DB row. */
+const DEACTIVATE_SERVICE_CODES = ["LIC_SUVIDHA"] as const;
 
 async function upsertCategory(
   category: SeedCategory,
@@ -191,6 +196,7 @@ async function main() {
             badge: service.badge ?? null,
             icon: service.icon ?? null,
             displayOrder: serviceIndex,
+            isActive: true,
           })
           .where(eq(services.id, existingService.id));
         continue;
@@ -203,12 +209,18 @@ async function main() {
         badge: service.badge ?? null,
         icon: service.icon ?? null,
         displayOrder: serviceIndex,
+        isActive: true,
       });
     }
   }
 
+  for (const code of DEACTIVATE_SERVICE_CODES) {
+    await db.update(services).set({ isActive: false }).where(eq(services.code, code));
+  }
+
   console.log(
-    `Seeded ${CATALOG.length} categories and ${CATALOG.reduce((n, c) => n + c.services.length, 0)} services.`,
+    `Seeded ${CATALOG.length} categories and ${CATALOG.reduce((n, c) => n + c.services.length, 0)} services.` +
+      ` Deactivated: ${DEACTIVATE_SERVICE_CODES.join(", ") || "(none)"}.`,
   );
   await pgPool.end();
 }
