@@ -44,7 +44,9 @@ export function CategorySection({
   const headerAccent =
     category.code === "BANKING_SERVICES"
       ? "#2A5CDD"
-      : category.code.includes("PAYMENT") || category.code.includes("RECHARGE")
+      : category.code === "BILL_PAYMENT_BBPS" ||
+          category.code.includes("PAYMENT") ||
+          category.code.includes("RECHARGE")
         ? "#7A56D6"
         : "#E8843C";
 

@@ -45,6 +45,7 @@ export function serviceCodeToDesignKey(code: string): DesignIconName {
     INSURANCE_PREMIUM: "insurance",
     LIC: "insurance",
     LIC_SUVIDHA: "insurance",
+    NPS: "bank",
     CREDIT_CARDS: "card",
     CREDIT_CARD_BILL: "card",
     LANDLINE_POSTPAID: "landline",

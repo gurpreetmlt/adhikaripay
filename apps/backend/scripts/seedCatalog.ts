@@ -10,16 +10,26 @@ interface SeedService {
   icon?: string;
 }
 
+interface SeedCategory {
+  code: string;
+  name: string;
+  icon: string;
+  /** Older category code to rename in place (avoids orphan rows). */
+  migrateFrom?: string;
+  services: SeedService[];
+}
+
 /**
- * Icon filenames live in `Icons/` + `apps/web/public/service-icons/`.
- * Prefer distinct art per service; skip near-duplicates:
- *   Aeps.svg ≈ adharPay.svg (fingerprint) → Aeps=AEPS cash, adharPay=Aadhaar Pay
- *   dth.svg ≈ DTH_Web.svg → use DTH_Web only
- *   poorna_suraksha.svg ≈ ic_insurance.png → use SVG only
- *   credit_card.svg ≈ ic_credit_card.png → use SVG
- *   Postpaid_Web.svg = receipt/lines+₹ → Mini Statement (not postpaid bills)
+ * Dashboard layout:
+ *   1) Banking Services — AEPS / DMT / UPI (not BBPS)
+ *   2) Bill Payment (BBPS) — every NPCI BBPS-style biller we support
+ *   3) Accept Payments — Aadhaar Pay
+ *   4) More Services — non-BBPS products (loans apply, collections, etc.)
+ *   5) Govt. / SHG
+ *
+ * Icon files: `Icons/` + `apps/web/public/service-icons/`.
  */
-const CATALOG: { code: string; name: string; icon: string; services: SeedService[] }[] = [
+const CATALOG: SeedCategory[] = [
   {
     code: "BANKING_SERVICES",
     name: "Banking Services",
@@ -34,44 +44,46 @@ const CATALOG: { code: string; name: string; icon: string; services: SeedService
     ],
   },
   {
-    code: "RECHARGE_AND_BILLS",
-    name: "Recharges and Bills",
+    code: "BILL_PAYMENT_BBPS",
+    name: "Bill Payment (BBPS)",
     icon: "receipt",
+    migrateFrom: "RECHARGE_AND_BILLS",
     services: [
+      // Telecom & entertainment
       { code: "MOBILE_PREPAID", name: "Mobile Prepaid", badge: "Upto 2%", icon: "MobilePrepaid_Web.png" },
-      { code: "LOAN_REPAYMENT", name: "Loan Repayment", badge: "Flat 0.15%", icon: "ic_loan.png" },
-      { code: "ELECTRICITY", name: "Electricity", badge: "Flat ₹1", icon: "ic_electric.png" },
-      { code: "DTH", name: "DTH", badge: "Upto 1.50%", icon: "DTH_Web.svg" },
-      { code: "AGENT_COLLECTION", name: "Agent Collection", badge: "Flat 0.11%", icon: "AgentCollection_Web.svg" },
-      { code: "CASH_COLLECTION", name: "Cash Collection", icon: "cash_collection.svg" },
-      { code: "LOANS", name: "Loans", icon: "loan_serviceLogo.svg" },
-      { code: "INSURANCE", name: "Insurance", icon: "poorna_suraksha.svg" },
-      { code: "CREDIT_CARDS", name: "Credit Cards", icon: "apply-credit-card.svg" },
-      { code: "CREDIT_CARD_BILL", name: "Credit Card", badge: "Flat ₹0.5", icon: "credit_card.svg" },
-      { code: "FASTAG_RECHARGE", name: "Fastag Recharge", badge: "Flat 0.15%", icon: "ic_fastag.png" },
       { code: "MOBILE_POSTPAID", name: "Mobile Postpaid", badge: "Flat ₹2", icon: "ic_other_bills.svg" },
-      { code: "WATER", name: "Water", badge: "Flat ₹1", icon: "ic_water.png" },
-      { code: "LANDLINE_POSTPAID", name: "Landline Postpaid", badge: "Flat ₹2", icon: "ic_other_bills.svg" },
-      { code: "GAS_PIPELINE", name: "Gas Pipeline", badge: "Flat ₹1", icon: "ic_gas_pipeline.png" },
-      { code: "INSURANCE_PREMIUM", name: "Insurance Premium", badge: "Upto ₹5", icon: "poorna_suraksha.svg" },
-      { code: "BROADBAND_POSTPAID", name: "Broadband Postpaid", badge: "Flat ₹2", icon: "ic_other_bills.svg" },
-      { code: "SUBSCRIPTION", name: "Subscription", badge: "Flat 0.25%", icon: "ic_subscription_fees.png" },
-      { code: "EDUCATION_FEES", name: "Education Fees", badge: "Upto ₹4.75", icon: "ic_education_fees.png" },
-      { code: "LPG_CYLINDER", name: "LPG Cylinder", badge: "Flat ₹1", icon: "ic_lpg_gas_booking.png" },
-      { code: "MUNICIPAL_TAXES", name: "Municipal Taxes", badge: "Upto ₹2.5", icon: "ic_municipal_taxes.png" },
-      { code: "ECHALLAN", name: "eChallan", badge: "Flat ₹0.5", icon: "eChallan_Web.svg" },
+      { code: "DTH", name: "DTH", badge: "Upto 1.50%", icon: "DTH_Web.svg" },
       { code: "CABLE_TV", name: "Cable TV", badge: "Flat ₹2", icon: "CableTV_Web.svg" },
-      { code: "DONATION", name: "Donation", badge: "Flat ₹1", icon: "Donation_Web.svg" },
-      { code: "MUNICIPAL_SERVICES", name: "Municipal Services", badge: "Upto ₹2.5", icon: "Municipal_Taxes_Web.svg" },
+      { code: "LANDLINE_POSTPAID", name: "Landline Postpaid", badge: "Flat ₹2", icon: "ic_other_bills.svg" },
+      { code: "BROADBAND_POSTPAID", name: "Broadband Postpaid", badge: "Flat ₹2", icon: "ic_other_bills.svg" },
+      // Utilities
+      { code: "ELECTRICITY", name: "Electricity", badge: "Flat ₹1", icon: "ic_electric.png" },
+      { code: "WATER", name: "Water", badge: "Flat ₹1", icon: "ic_water.png" },
+      { code: "GAS_PIPELINE", name: "Gas Pipeline", badge: "Flat ₹1", icon: "ic_gas_pipeline.png" },
+      { code: "LPG_CYLINDER", name: "LPG Cylinder", badge: "Flat ₹1", icon: "ic_lpg_gas_booking.png" },
       { code: "PREPAID_METER", name: "Prepaid Meter", badge: "Flat ₹0.20", icon: "PrepaidMeter_Web.svg" },
+      // Mobility
+      { code: "FASTAG_RECHARGE", name: "FASTag Recharge", badge: "Flat 0.15%", icon: "ic_fastag.png" },
       { code: "NCMC_RECHARGE", name: "NCMC Recharge", badge: "Flat ₹2", icon: "NCMC_Web.svg" },
-      { code: "FLEET_CARD_RECHARGE", name: "Fleet Card Recharge", badge: "Flat 0.25%", icon: "FleetCard_Web.svg" },
+      { code: "FLEET_CARD_RECHARGE", name: "Fleet Card", badge: "Flat 0.25%", icon: "FleetCard_Web.svg" },
       { code: "EV_RECHARGE", name: "EV Recharge", badge: "Upto ₹5", icon: "EVRecharge_Web.svg" },
-      { code: "HOUSING_SOCIETY", name: "Housing Society", badge: "Upto ₹5", icon: "ic_housing_society.png" },
+      // Finance bills
+      { code: "CREDIT_CARD_BILL", name: "Credit Card Bill", badge: "Flat ₹0.5", icon: "credit_card.svg" },
+      { code: "LOAN_REPAYMENT", name: "Loan Repayment", badge: "Flat 0.15%", icon: "ic_loan.png" },
+      { code: "INSURANCE_PREMIUM", name: "Insurance Premium", badge: "Upto ₹5", icon: "poorna_suraksha.svg" },
       { code: "LIC", name: "LIC", icon: "ic_LIC.svg" },
-      { code: "RENTAL", name: "Rental", badge: "Upto ₹5", icon: "Rental_Web.svg" },
-      { code: "CLUBS_AND_ASSOCIATIONS", name: "Clubs and Associations", badge: "Upto ₹5", icon: "Clubs_and_Associations_Web.svg" },
       { code: "LIC_SUVIDHA", name: "LIC Suvidha", icon: "ic_LIC.svg" },
+      { code: "NPS", name: "NPS", badge: "NEW", icon: "NPS_Web.svg" },
+      // Civic / education / society
+      { code: "EDUCATION_FEES", name: "Education Fees", badge: "Upto ₹4.75", icon: "ic_education_fees.png" },
+      { code: "MUNICIPAL_TAXES", name: "Municipal Taxes", badge: "Upto ₹2.5", icon: "ic_municipal_taxes.png" },
+      { code: "MUNICIPAL_SERVICES", name: "Municipal Services", badge: "Upto ₹2.5", icon: "Municipal_Taxes_Web.svg" },
+      { code: "HOUSING_SOCIETY", name: "Housing Society", badge: "Upto ₹5", icon: "ic_housing_society.png" },
+      { code: "CLUBS_AND_ASSOCIATIONS", name: "Clubs & Associations", badge: "Upto ₹5", icon: "Clubs_and_Associations_Web.svg" },
+      { code: "RENTAL", name: "Rental", badge: "Upto ₹5", icon: "Rental_Web.svg" },
+      { code: "ECHALLAN", name: "eChallan", badge: "Flat ₹0.5", icon: "eChallan_Web.svg" },
+      { code: "DONATION", name: "Donation", badge: "Flat ₹1", icon: "Donation_Web.svg" },
+      { code: "SUBSCRIPTION", name: "Subscription", badge: "Flat 0.25%", icon: "ic_subscription_fees.png" },
     ],
   },
   {
@@ -79,6 +91,18 @@ const CATALOG: { code: string; name: string; icon: string; services: SeedService
     name: "Accept Payments",
     icon: "fingerprint",
     services: [{ code: "AADHAAR_PAY", name: "Aadhaar Pay", icon: "adharPay.svg" }],
+  },
+  {
+    code: "MORE_SERVICES",
+    name: "More Services",
+    icon: "grid",
+    services: [
+      { code: "AGENT_COLLECTION", name: "Agent Collection", badge: "Flat 0.11%", icon: "AgentCollection_Web.svg" },
+      { code: "CASH_COLLECTION", name: "Cash Collection", icon: "cash_collection.svg" },
+      { code: "LOANS", name: "Loans", icon: "loan_serviceLogo.svg" },
+      { code: "INSURANCE", name: "Insurance", icon: "poorna_suraksha.svg" },
+      { code: "CREDIT_CARDS", name: "Apply Credit Card", icon: "apply-credit-card.svg" },
+    ],
   },
   {
     code: "GOVT_SERVICES",
@@ -97,28 +121,64 @@ const CATALOG: { code: string; name: string; icon: string; services: SeedService
   },
 ];
 
-async function main() {
-  for (const [categoryIndex, category] of CATALOG.entries()) {
-    const [existingCategory] = await db
+async function upsertCategory(
+  category: SeedCategory,
+  displayOrder: number,
+): Promise<string> {
+  const [byNewCode] = await db
+    .select({ id: serviceCategories.id })
+    .from(serviceCategories)
+    .where(eq(serviceCategories.code, category.code));
+
+  if (byNewCode) {
+    await db
+      .update(serviceCategories)
+      .set({
+        name: category.name,
+        icon: category.icon,
+        displayOrder,
+      })
+      .where(eq(serviceCategories.id, byNewCode.id));
+    return byNewCode.id;
+  }
+
+  if (category.migrateFrom) {
+    const [legacy] = await db
       .select({ id: serviceCategories.id })
       .from(serviceCategories)
-      .where(eq(serviceCategories.code, category.code));
+      .where(eq(serviceCategories.code, category.migrateFrom));
 
-    const categoryId =
-      existingCategory?.id ??
-      (
-        await db
-          .insert(serviceCategories)
-          .values({
-            code: category.code,
-            name: category.name,
-            icon: category.icon,
-            displayOrder: categoryIndex,
-          })
-          .returning({ id: serviceCategories.id })
-      )[0]?.id;
+    if (legacy) {
+      await db
+        .update(serviceCategories)
+        .set({
+          code: category.code,
+          name: category.name,
+          icon: category.icon,
+          displayOrder,
+        })
+        .where(eq(serviceCategories.id, legacy.id));
+      return legacy.id;
+    }
+  }
 
-    if (!categoryId) throw new Error(`Failed to create category ${category.code}`);
+  const [created] = await db
+    .insert(serviceCategories)
+    .values({
+      code: category.code,
+      name: category.name,
+      icon: category.icon,
+      displayOrder,
+    })
+    .returning({ id: serviceCategories.id });
+
+  if (!created) throw new Error(`Failed to create category ${category.code}`);
+  return created.id;
+}
+
+async function main() {
+  for (const [categoryIndex, category] of CATALOG.entries()) {
+    const categoryId = await upsertCategory(category, categoryIndex);
 
     for (const [serviceIndex, service] of category.services.entries()) {
       const [existingService] = await db
@@ -151,7 +211,9 @@ async function main() {
     }
   }
 
-  console.log(`Seeded ${CATALOG.length} categories and ${CATALOG.reduce((n, c) => n + c.services.length, 0)} services.`);
+  console.log(
+    `Seeded ${CATALOG.length} categories and ${CATALOG.reduce((n, c) => n + c.services.length, 0)} services.`,
+  );
   await pgPool.end();
 }
 
