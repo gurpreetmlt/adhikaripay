@@ -63,6 +63,8 @@ drizzle/meta/
 
 # Non-project folders
 Edu/
+Icons/
+Latest-Icons/
 
 # Agent / local state
 .agent-config/

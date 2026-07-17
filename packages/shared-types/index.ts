@@ -112,7 +112,7 @@ export interface CatalogService {
   code: string;
   name: string;
   badge: string | null;
-  /** SVG filename from Icons/ folder, e.g. "Aeps.svg". null = use default icon. */
+  /** SVG filename under apps/web/public/service-icons/, e.g. "Cash-Withdraw.svg". null = default icon. */
   icon: string | null;
 }
 
