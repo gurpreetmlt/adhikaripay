@@ -1,6 +1,7 @@
 export * from "./enums";
 export * from "./users";
 export * from "./devices";
+export * from "./biometricReplay";
 export * from "./wallets";
 export * from "./catalog";
 export * from "./transactions";

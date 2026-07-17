@@ -31,6 +31,10 @@ export const users = pgTable(
     txnPinLockedUntil: timestamp("txn_pin_locked_until", { withTimezone: true }),
     // 4-digit login MPIN (bcrypt) — quick unlock on mobile Welcome-back screen.
     loginMpinHash: text("login_mpin_hash"),
+    // Retailer's OWN biometric proof-of-presence at the counter — separate from the customer's
+    // AEPS biometric. Money-moving AEPS/DMT ops require this within a rolling window (see
+    // AGENT_AUTH_WINDOW_MS in modules/auth/agentAuth.ts). Null = never agent-authed on record.
+    lastAgentAuthAt: timestamp("last_agent_auth_at", { withTimezone: true }),
     // PAN/Aadhaar stored AES-256-GCM encrypted at rest, never in plaintext
     panNumberEncrypted: text("pan_number_encrypted"),
     aadhaarNumberEncrypted: text("aadhaar_number_encrypted"),

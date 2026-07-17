@@ -26,6 +26,7 @@ import {
   revokeUserDevice,
 } from "./auth.service";
 import { setTxnPin, verifyTxnPinAndIssueAuth } from "./txnPin";
+import { verifyAndRecordAgentAuth } from "./agentAuth";
 import { db } from "../../db/postgres";
 import { users } from "../../db/postgres/schema";
 import { comparePassword } from "../../utils/password";
@@ -180,4 +181,19 @@ export async function verifyTransactionPin(req: Request, res: Response): Promise
   const input = verifyTxnPinSchema.parse(req.body);
   const result = await verifyTxnPinAndIssueAuth(req.auth.sub, input.pin);
   sendSuccess(res, result, "Transaction PIN verified");
+}
+
+const agentAuthSchema = z.object({
+  biometricPayload: z.string().min(1),
+});
+
+export async function agentAuth(req: Request, res: Response): Promise<void> {
+  if (!req.auth) throw new HttpError(401, "Authentication required", "UNAUTHENTICATED");
+  const input = agentAuthSchema.parse(req.body);
+  const result = await verifyAndRecordAgentAuth(
+    { id: req.auth.sub },
+    input.biometricPayload,
+    { ipAddress: req.ip ?? null, userAgent: req.headers["user-agent"] ?? null },
+  );
+  sendSuccess(res, result, "Fingerprint verified — session unlocked");
 }

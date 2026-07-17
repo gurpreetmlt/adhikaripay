@@ -15,9 +15,10 @@ import {
   signupVerify,
   setTransactionPin,
   verifyTransactionPin,
+  agentAuth,
 } from "./auth.controller";
 import { requireAuth } from "../../middleware/auth.middleware";
-import { authLimiter, otpRequestLimiter } from "../../middleware/rateLimiter";
+import { authLimiter, otpRequestLimiter, walletTxnLimiter } from "../../middleware/rateLimiter";
 
 export const authRouter = Router();
 
@@ -41,3 +42,5 @@ authRouter.post("/signup/verify", authLimiter, signupVerify);
 
 authRouter.post("/txn-pin", requireAuth, setTransactionPin);
 authRouter.post("/txn-pin/verify", requireAuth, authLimiter, verifyTransactionPin);
+
+authRouter.post("/agent-auth", requireAuth, walletTxnLimiter, agentAuth);

@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import { executeServiceTxn, recheckTxnStatus, listMyTransactions, getReceipt } from "./txn.service";
 import { assertTxnAuthorization } from "../auth/txnPin";
+import { assertAgentAuthFresh } from "../auth/agentAuth";
+import { assertFreshBiometric } from "./biometricReplay";
 import { resolveProvidersForService, callProvider } from "../providers/provider.router";
 import { sendSuccess } from "../../utils/apiResponse";
 import type {
@@ -100,6 +102,7 @@ export async function dmtAddBeneficiary(req: Request, res: Response): Promise<vo
 
 export async function dmtTransfer(req: Request, res: Response): Promise<void> {
   const body = req.body as z.infer<typeof dmtTransferSchema>;
+  await assertAgentAuthFresh(actor(req).id);
   await assertTxnAuthorization(actor(req).id, { txnPin: body.txnPin, txnAuth: body.txnAuth });
 
   const outcome = await executeServiceTxn({
@@ -126,6 +129,8 @@ export async function dmtTransfer(req: Request, res: Response): Promise<void> {
 // ── AEPS ────────────────────────────────────────────────────────────────────
 export async function aepsBalanceEnquiry(req: Request, res: Response): Promise<void> {
   const body = req.body as z.infer<typeof aepsEnquirySchema>;
+  await assertAgentAuthFresh(actor(req).id);
+  await assertFreshBiometric(body.biometricPayload);
   const routedProviders = await resolveProvidersForService("aeps_balance_enquiry");
   const result = await callProvider(
     routedProviders[0]!,
@@ -139,6 +144,8 @@ export async function aepsBalanceEnquiry(req: Request, res: Response): Promise<v
 
 export async function aepsMiniStatement(req: Request, res: Response): Promise<void> {
   const body = req.body as z.infer<typeof aepsEnquirySchema>;
+  await assertAgentAuthFresh(actor(req).id);
+  await assertFreshBiometric(body.biometricPayload);
   const routedProviders = await resolveProvidersForService("aeps_mini_statement");
   const result = await callProvider(
     routedProviders[0]!,
@@ -152,6 +159,8 @@ export async function aepsMiniStatement(req: Request, res: Response): Promise<vo
 
 export async function aepsWithdraw(req: Request, res: Response): Promise<void> {
   const body = req.body as z.infer<typeof aepsWithdrawSchema>;
+  await assertAgentAuthFresh(actor(req).id);
+  await assertFreshBiometric(body.biometricPayload);
   await assertTxnAuthorization(actor(req).id, { txnPin: body.txnPin, txnAuth: body.txnAuth });
 
   const outcome = await executeServiceTxn({
@@ -178,6 +187,8 @@ export async function aepsWithdraw(req: Request, res: Response): Promise<void> {
 
 export async function aadhaarPay(req: Request, res: Response): Promise<void> {
   const body = req.body as z.infer<typeof aadhaarPaySchema>;
+  await assertAgentAuthFresh(actor(req).id);
+  await assertFreshBiometric(body.biometricPayload);
   await assertTxnAuthorization(actor(req).id, { txnPin: body.txnPin, txnAuth: body.txnAuth });
 
   const outcome = await executeServiceTxn({

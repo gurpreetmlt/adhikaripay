@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   AepsParams,
+  AgentAuthParams,
   BbpsFetchBillParams,
   BbpsPayBillParams,
   CheckStatusParams,
@@ -114,5 +115,9 @@ export abstract class MockAdapterBase implements ProviderAdapter {
     // Mock: anything re-checked is confirmed successful, so pending flows can be
     // driven to completion from the UI.
     return this.respond("Status check", undefined, {});
+  }
+
+  agentAuth(params: AgentAuthParams): Promise<ProviderResult<Record<string, never>>> {
+    return this.respond("Agent authentication", undefined, {});
   }
 }

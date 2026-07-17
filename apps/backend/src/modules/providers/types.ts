@@ -71,6 +71,13 @@ export interface CheckStatusParams {
   clientRef: string;
 }
 
+/** Retailer proving THEIR OWN identity (not the customer's) — see modules/auth/agentAuth.ts. */
+export interface AgentAuthParams {
+  retailerUserId: string;
+  aadhaarNumber: string;
+  biometricPayload: string;
+}
+
 // ── Adapter contract ────────────────────────────────────────────────────────
 
 export interface ProviderAdapter {
@@ -100,6 +107,8 @@ export interface ProviderAdapter {
   recharge(params: RechargeParams): Promise<ProviderResult>;
 
   checkStatus(params: CheckStatusParams): Promise<ProviderResult>;
+
+  agentAuth(params: AgentAuthParams): Promise<ProviderResult>;
 }
 
 /** Operation names — used for provider_logs and per-operation routing. */
@@ -113,4 +122,5 @@ export type ProviderOperation =
   | "bbps_fetch_bill"
   | "bbps_pay_bill"
   | "recharge"
-  | "check_status";
+  | "check_status"
+  | "agent_auth";
