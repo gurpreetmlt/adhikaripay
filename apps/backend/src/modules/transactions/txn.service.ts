@@ -92,7 +92,10 @@ function assertAmountWithinLimits(
   if (service.minAmount && paise < toPaise(service.minAmount)) {
     throw new HttpError(422, `Minimum amount for ${service.name} is ₹${service.minAmount}`, "AMOUNT_BELOW_MIN");
   }
-  if (service.maxAmount && paise > toPaise(service.maxAmount)) {
+  if (!service.maxAmount) {
+    throw new HttpError(503, `${service.name} has no max amount configured`, "AMOUNT_LIMIT_MISSING");
+  }
+  if (paise > toPaise(service.maxAmount)) {
     throw new HttpError(422, `Maximum amount for ${service.name} is ₹${service.maxAmount}`, "AMOUNT_ABOVE_MAX");
   }
 }
@@ -103,11 +106,11 @@ function assertAmountWithinLimits(
 export async function executeServiceTxn(input: ExecuteTxnInput): Promise<TxnOutcome> {
   const { actor, serviceCode, amount, idempotencyKey, operation, direction, walletType, metadata, invoke } = input;
 
-  // Idempotent replay: same key returns the original outcome, never re-executes.
+  // Idempotent replay: same key for this user returns the original outcome, never re-executes.
   const [existing] = await db
     .select()
     .from(transactions)
-    .where(eq(transactions.idempotencyKey, idempotencyKey));
+    .where(and(eq(transactions.idempotencyKey, idempotencyKey), eq(transactions.userId, actor.id)));
   if (existing) return { txn: existing, provider: null };
 
   await assertCanTransact(actor);
@@ -145,7 +148,7 @@ export async function executeServiceTxn(input: ExecuteTxnInput): Promise<TxnOutc
     const [raced] = await db
       .select()
       .from(transactions)
-      .where(eq(transactions.idempotencyKey, idempotencyKey));
+      .where(and(eq(transactions.idempotencyKey, idempotencyKey), eq(transactions.userId, actor.id)));
     if (raced) return { txn: raced, provider: null };
     throw err;
   }
@@ -328,8 +331,8 @@ export async function recheckTxnStatus(actor: Actor, txnRef: string): Promise<Tx
 }
 
 export function inferDirectionFromServiceCode(code: string): MoneyDirection {
-  if (code.startsWith("aeps_") || code === "aadhaar_pay") return "credit";
   if (code === "aeps_balance_enquiry" || code === "aeps_mini_statement") return "none";
+  if (code.startsWith("aeps_") || code === "aadhaar_pay") return "credit";
   return "debit";
 }
 

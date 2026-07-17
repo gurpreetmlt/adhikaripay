@@ -7,6 +7,7 @@ import type { ApiResponse, AuthUser } from "@adhikaripay/shared-types";
 import { api, setAuthHeader } from "../lib/api";
 import { useAuthStore } from "../store/auth";
 import { apiError } from "../utils/apiError";
+import { getDeviceId, getDeviceLabel } from "../lib/deviceId";
 import { CodeGrid } from "../components/CodeGrid";
 import { NumericKeypad } from "../components/NumericKeypad";
 import { colors } from "../theme/colors";
@@ -65,7 +66,7 @@ export function OtpScreen({ mobile, role, devOtp: initialDevOtp, onBack }: OtpSc
         { mobile, portal: "agent", role },
       );
       if (!data.success) throw new Error(data.message);
-      if (data.data.otp) {
+      if (__DEV__ && data.data.otp) {
         setDevOtp(data.data.otp);
         setOtp(data.data.otp);
       } else {
@@ -86,11 +87,14 @@ export function OtpScreen({ mobile, role, devOtp: initialDevOtp, onBack }: OtpSc
     }
     setLoading(true);
     try {
+      const deviceId = await getDeviceId();
       const { data } = await api.post<ApiResponse<LoginResponse>>("/auth/otp/verify", {
         mobile,
         otp: value,
         portal: "agent",
         role,
+        deviceId,
+        deviceLabel: getDeviceLabel(),
       });
       if (!data.success) throw new Error(data.message);
       setAuthHeader(data.data.accessToken);
@@ -114,11 +118,13 @@ export function OtpScreen({ mobile, role, devOtp: initialDevOtp, onBack }: OtpSc
     }
     setLoading(true);
     try {
+      const deviceId = await getDeviceId();
       const { data } = await api.post<ApiResponse<LoginResponse>>("/auth/mpin/login", {
         mobile,
         mpin,
         portal: "agent",
         role,
+        deviceId,
       });
       if (!data.success) throw new Error(data.message);
       setAuthHeader(data.data.accessToken);
@@ -127,6 +133,24 @@ export function OtpScreen({ mobile, role, devOtp: initialDevOtp, onBack }: OtpSc
         refreshToken: data.data.refreshToken,
       });
     } catch (err) {
+      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
+      if (code === "DEVICE_NOT_TRUSTED") {
+        setMpin("");
+        autoSubmitRef.current = "";
+        setTab("otp");
+        showAlert(
+          "Session expired",
+          "24h window khatam. OTP se dubara verify karein — uske baad MPIN kaam karega.",
+        );
+        void resendOtp();
+        return;
+      }
+      if (code === "MPIN_NOT_SET") {
+        setMpin("");
+        setTab("otp");
+        showAlert("MPIN not set", "Pehle OTP se login karein, phir Account se MPIN set karein.");
+        return;
+      }
       showAlert("MPIN login failed", apiError(err, "Incorrect MPIN"));
       setMpin("");
       autoSubmitRef.current = "";
@@ -204,7 +228,7 @@ export function OtpScreen({ mobile, role, devOtp: initialDevOtp, onBack }: OtpSc
             </Pressable>
           </View>
 
-          {tab === "otp" && devOtp ? (
+          {__DEV__ && tab === "otp" && devOtp ? (
             <View style={styles.devOtpBox}>
               <Text style={styles.devOtpLabel}>Dev OTP · no SMS wired yet</Text>
               <Text style={styles.devOtpCode}>{devOtp.split("").join(" ")}</Text>

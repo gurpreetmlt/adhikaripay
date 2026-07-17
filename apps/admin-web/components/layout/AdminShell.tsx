@@ -290,8 +290,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
     setDrawer(false);
   }, [pathname]);
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    const { logoutEverywhere } = await import("@/lib/logout");
+    await logoutEverywhere();
     window.location.href = "/login";
   }
 

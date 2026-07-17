@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import LinearGradient from "react-native-linear-gradient";
-import { ChevronRight, Moon, Smartphone, Sun } from "lucide-react-native";
+import { ChevronRight, Moon, ShieldCheck, Smartphone, Sun } from "lucide-react-native";
 import { ROLE_LABELS, type ApiResponse, type AuthUser } from "@adhikaripay/shared-types";
 import { ModalSheet } from "../../components/ModalSheet";
 import { PinInput } from "../../components/PinInput";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { api, setAuthHeader } from "../../lib/api";
+import { api } from "../../lib/api";
+import { logoutEverywhere } from "../../lib/logout";
 import { apiError } from "../../utils/apiError";
 import { useAuthStore } from "../../store/auth";
 import { useTheme, type ThemeMode } from "../../theme/ThemeContext";
@@ -28,12 +29,12 @@ const THEME_OPTIONS: { key: ThemeMode; label: string; icon: typeof Sun }[] = [
 
 export function AccountScreen() {
   const user = useAuthStore((s) => s.user)!;
-  const logout = useAuthStore((s) => s.logout);
   const updateUser = useAuthStore((s) => s.updateUser);
   const refreshToken = useAuthStore((s) => s.refreshToken);
   const { tokens, mode, setMode } = useTheme();
   const [showSetPin, setShowSetPin] = useState(false);
   const [showSetMpin, setShowSetMpin] = useState(false);
+  const [showDevices, setShowDevices] = useState(false);
   const [bioEnabled, setBioEnabled] = useState(false);
 
   useEffect(() => {
@@ -77,8 +78,7 @@ export function AccountScreen() {
         text: "Logout",
         style: "destructive",
         onPress: () => {
-          setAuthHeader(null);
-          logout();
+          void logoutEverywhere();
         },
       },
     ]);
@@ -167,6 +167,13 @@ export function AccountScreen() {
         </Pressable>
         <Pressable
           style={[styles.menuItem, { backgroundColor: tokens.card, borderColor: tokens.cardBorder }]}
+          onPress={() => setShowDevices(true)}
+        >
+          <Text style={[styles.menuText, { color: tokens.txt }]}>Trusted devices</Text>
+          <ChevronRight size={18} color={tokens.mute} />
+        </Pressable>
+        <Pressable
+          style={[styles.menuItem, { backgroundColor: tokens.card, borderColor: tokens.cardBorder }]}
           onPress={() => showAlert("Coming soon", "Support tickets")}
         >
           <Text style={[styles.menuText, { color: tokens.txt }]}>Help & support</Text>
@@ -197,6 +204,7 @@ export function AccountScreen() {
         }}
       />
       <SetTxnPinModal visible={showSetPin} onClose={() => setShowSetPin(false)} />
+      <TrustedDevicesModal visible={showDevices} onClose={() => setShowDevices(false)} />
     </SafeAreaView>
   );
 }
@@ -271,6 +279,119 @@ function SetLoginMpinModal({
     </ModalSheet>
   );
 }
+
+interface DeviceRow {
+  id: string;
+  label: string | null;
+  trustedAt: string;
+  lastAuthAt: string;
+}
+
+function timeAgo(iso: string): string {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+function TrustedDevicesModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { tokens } = useTheme();
+  const [devices, setDevices] = useState<DeviceRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const { data } = await api.get<ApiResponse<{ devices: DeviceRow[] }>>("/auth/devices");
+      if (!data.success) throw new Error(data.message);
+      setDevices(data.data.devices);
+    } catch (err) {
+      showAlert("Failed", apiError(err, "Could not load trusted devices"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (visible) void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  function confirmRevoke(device: DeviceRow) {
+    showAlert("Sign out this device?", `${device.label ?? "This device"} will need to verify with OTP again to log in.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign out",
+        style: "destructive",
+        onPress: () => void revoke(device.id),
+      },
+    ]);
+  }
+
+  async function revoke(id: string) {
+    setRevokingId(id);
+    try {
+      const { data } = await api.post<ApiResponse<null>>(`/auth/devices/${id}/revoke`);
+      if (!data.success) throw new Error(data.message);
+      setDevices((prev) => prev.filter((d) => d.id !== id));
+    } catch (err) {
+      showAlert("Failed", apiError(err, "Could not sign out device"));
+    } finally {
+      setRevokingId(null);
+    }
+  }
+
+  return (
+    <ModalSheet visible={visible} title="Trusted devices" onClose={onClose}>
+      <Text style={styles.pinSub}>
+        Ye devices bina OTP ke sirf MPIN se login kar sakte hain (12 ghante rolling window). Naya
+        device pehli baar OTP maangega.
+      </Text>
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 16 }} color={colors.blueFlat} />
+      ) : devices.length === 0 ? (
+        <Text style={[styles.pinSub, { marginTop: 8 }]}>Koi trusted device nahi hai abhi.</Text>
+      ) : (
+        devices.map((d) => (
+          <View
+            key={d.id}
+            style={[deviceStyles.row, { backgroundColor: tokens.card, borderColor: tokens.cardBorder }]}
+          >
+            <ShieldCheck size={18} color={colors.blueFlat} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={[deviceStyles.label, { color: tokens.txt }]}>{d.label ?? "Unknown device"}</Text>
+              <Text style={[deviceStyles.sub, { color: tokens.sub }]}>Last used {timeAgo(d.lastAuthAt)}</Text>
+            </View>
+            <Pressable onPress={() => confirmRevoke(d)} disabled={revokingId === d.id} hitSlop={8}>
+              <Text style={deviceStyles.signOut}>
+                {revokingId === d.id ? "…" : "Sign out"}
+              </Text>
+            </Pressable>
+          </View>
+        ))
+      )}
+    </ModalSheet>
+  );
+}
+
+const deviceStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 10,
+  },
+  label: { fontSize: 14, fontWeight: "700" },
+  sub: { fontSize: 12, marginTop: 2 },
+  signOut: { fontSize: 12.5, fontWeight: "800", color: "#DC2626" },
+});
 
 function SetTxnPinModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const [password, setPassword] = useState("");

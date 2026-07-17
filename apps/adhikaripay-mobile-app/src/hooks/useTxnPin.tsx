@@ -3,7 +3,7 @@ import { TxnPinModal } from "../components/TxnPinModal";
 
 export function useTxnPin() {
   const [visible, setVisible] = useState(false);
-  const resolver = useRef<((pin: string) => void) | null>(null);
+  const resolver = useRef<((txnAuth: string) => void) | null>(null);
   const rejecter = useRef<(() => void) | null>(null);
 
   const promptPin = useCallback(
@@ -23,9 +23,9 @@ export function useTxnPin() {
     rejecter.current = null;
   }, []);
 
-  const onVerified = useCallback((pin: string) => {
+  const onVerified = useCallback((txnAuth: string) => {
     setVisible(false);
-    resolver.current?.(pin);
+    resolver.current?.(txnAuth);
     resolver.current = null;
     rejecter.current = null;
   }, []);
@@ -36,4 +36,24 @@ export function useTxnPin() {
   );
 
   return { promptPin, TxnPinPrompt };
+}
+
+/** Stable idempotency key for a single in-flight action (survives double-tap). */
+export function useIdempotencyKey(prefix: string) {
+  const ref = useRef<string | null>(null);
+  return {
+    peek: () => {
+      if (!ref.current) {
+        const rand =
+          typeof globalThis.crypto?.randomUUID === "function"
+            ? globalThis.crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+        ref.current = `${prefix}-${rand}`;
+      }
+      return ref.current;
+    },
+    clear: () => {
+      ref.current = null;
+    },
+  };
 }

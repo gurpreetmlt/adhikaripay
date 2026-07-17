@@ -16,11 +16,25 @@ import com.facebook.react.bridge.WritableArray
 /**
  * UIDAI L1 fingerprint capture via Android Intent API.
  * Discovers installed RD Service apps by CAPTURE intent — package names vary by vendor/version.
+ * Only vendor prefixes on the allowlist are used (no arbitrary Intent hijack fallback).
  */
 class RdServiceModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext), ActivityEventListener {
 
   private var capturePromise: Promise? = null
+
+  companion object {
+    private val ALLOWED_RD_PREFIXES =
+        listOf(
+            "com.mantra",
+            "com.acpl",
+            "com.scl",
+            "com.linkwell",
+            "com.evolute",
+            "com.precision",
+            "com.mantralabsindia",
+        )
+  }
 
   init {
     reactContext.addActivityEventListener(this)
@@ -46,22 +60,26 @@ class RdServiceModule(private val reactContext: ReactApplicationContext) :
   }
 
   private fun resolveRdPackage(preferred: String?): String? {
-    val found = discoverRdPackages()
+    val found = discoverRdPackages().filter { isAllowedRdPackage(it) }
     if (found.isEmpty()) return null
 
     val pref = preferred?.trim().orEmpty()
-    if (pref.isNotEmpty() && found.contains(pref)) return pref
-
-    // Prefer Mantra if user selected Mantra but package id differs from our hardcoded list
-    if (pref.contains("mantra", ignoreCase = true) || pref.isEmpty()) {
-      found.firstOrNull { it.contains("mantra", ignoreCase = true) }?.let { return it }
-    }
-
     if (pref.isNotEmpty()) {
-      // Preferred package not installed — still use any available RD (chooser-like)
-      return found.first()
+      if (!isAllowedRdPackage(pref)) return null
+      if (found.contains(pref)) return pref
+      // Preferred Mantra label vs actual package — only match within allowlist
+      if (pref.contains("mantra", ignoreCase = true)) {
+        return found.firstOrNull { it.contains("mantra", ignoreCase = true) }
+      }
+      return null
     }
-    return found.first()
+
+    return found.firstOrNull { it.contains("mantra", ignoreCase = true) } ?: found.firstOrNull()
+  }
+
+  private fun isAllowedRdPackage(pkg: String): Boolean {
+    val p = pkg.lowercase()
+    return ALLOWED_RD_PREFIXES.any { p.startsWith(it) }
   }
 
   @ReactMethod
@@ -80,28 +98,30 @@ class RdServiceModule(private val reactContext: ReactApplicationContext) :
   @ReactMethod
   fun isPackageAvailable(rdPackage: String, promise: Promise) {
     try {
-      val found = discoverRdPackages()
+      val found = discoverRdPackages().filter { isAllowedRdPackage(it) }
       if (found.isEmpty()) {
         promise.resolve(false)
         return
       }
       val pref = rdPackage.trim()
       if (pref.isEmpty()) {
-        promise.resolve(true)
+        promise.resolve(found.isNotEmpty())
+        return
+      }
+      if (!isAllowedRdPackage(pref)) {
+        promise.resolve(false)
         return
       }
       if (found.contains(pref)) {
         promise.resolve(true)
         return
       }
-      // Mantra UI label vs actual Play Store package often differs — treat any Mantra RD as OK
       if (pref.contains("mantra", ignoreCase = true) &&
           found.any { it.contains("mantra", ignoreCase = true) }) {
         promise.resolve(true)
         return
       }
-      // Any RD installed counts as available for capture (we auto-pick)
-      promise.resolve(true)
+      promise.resolve(false)
     } catch (e: Exception) {
       promise.reject("RD_CHECK_FAILED", e.message, e)
     }

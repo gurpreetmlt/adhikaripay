@@ -54,7 +54,7 @@ export function createApp(): Express {
           : (origin, callback) => {
               // No Origin header (server-to-server, mobile app, curl) — allow.
               if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-              callback(new Error(`Origin ${origin} not allowed by CORS`));
+              callback(null, false);
             },
       credentials: true,
     }),

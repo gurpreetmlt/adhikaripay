@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { executeServiceTxn, recheckTxnStatus, listMyTransactions, getReceipt } from "./txn.service";
-import { verifyTxnPinOrThrow } from "../auth/txnPin";
+import { assertTxnAuthorization } from "../auth/txnPin";
 import { resolveProvidersForService, callProvider } from "../providers/provider.router";
 import { sendSuccess } from "../../utils/apiResponse";
 import type {
@@ -22,7 +22,7 @@ function actor(req: Request) {
 // ── Recharge ────────────────────────────────────────────────────────────────
 export async function recharge(req: Request, res: Response): Promise<void> {
   const body = req.body as z.infer<typeof rechargeSchema>;
-  await verifyTxnPinOrThrow(actor(req).id, body.txnPin);
+  await assertTxnAuthorization(actor(req).id, { txnPin: body.txnPin, txnAuth: body.txnAuth });
 
   const outcome = await executeServiceTxn({
     actor: actor(req),
@@ -61,7 +61,7 @@ export async function bbpsFetchBill(req: Request, res: Response): Promise<void> 
 
 export async function bbpsPayBill(req: Request, res: Response): Promise<void> {
   const body = req.body as z.infer<typeof bbpsPayBillSchema>;
-  await verifyTxnPinOrThrow(actor(req).id, body.txnPin);
+  await assertTxnAuthorization(actor(req).id, { txnPin: body.txnPin, txnAuth: body.txnAuth });
 
   const outcome = await executeServiceTxn({
     actor: actor(req),
@@ -100,7 +100,7 @@ export async function dmtAddBeneficiary(req: Request, res: Response): Promise<vo
 
 export async function dmtTransfer(req: Request, res: Response): Promise<void> {
   const body = req.body as z.infer<typeof dmtTransferSchema>;
-  await verifyTxnPinOrThrow(actor(req).id, body.txnPin);
+  await assertTxnAuthorization(actor(req).id, { txnPin: body.txnPin, txnAuth: body.txnAuth });
 
   const outcome = await executeServiceTxn({
     actor: actor(req),
@@ -152,6 +152,7 @@ export async function aepsMiniStatement(req: Request, res: Response): Promise<vo
 
 export async function aepsWithdraw(req: Request, res: Response): Promise<void> {
   const body = req.body as z.infer<typeof aepsWithdrawSchema>;
+  await assertTxnAuthorization(actor(req).id, { txnPin: body.txnPin, txnAuth: body.txnAuth });
 
   const outcome = await executeServiceTxn({
     actor: actor(req),
@@ -177,7 +178,7 @@ export async function aepsWithdraw(req: Request, res: Response): Promise<void> {
 
 export async function aadhaarPay(req: Request, res: Response): Promise<void> {
   const body = req.body as z.infer<typeof aadhaarPaySchema>;
-  await verifyTxnPinOrThrow(actor(req).id, body.txnPin);
+  await assertTxnAuthorization(actor(req).id, { txnPin: body.txnPin, txnAuth: body.txnAuth });
 
   const outcome = await executeServiceTxn({
     actor: actor(req),

@@ -4,6 +4,11 @@ import { createAppStorage } from "./appStorage";
 import type { LoginRoleChip } from "../screens/LoginScreen";
 
 const storage = createAppStorage();
+/**
+ * Biometric unlock stores a refresh token for Welcome Back.
+ * SECURITY: prefer Android Keystore / EncryptedSharedPreferences before production AEPS.
+ * Logout MUST call disableBioUnlock().
+ */
 const BIO_KEY = "adhikari.bioUnlock.v1";
 
 export type BioUnlockRecord = {

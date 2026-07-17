@@ -8,6 +8,7 @@ import {
   timestamp,
   jsonb,
   index,
+  uniqueIndex,
   check,
 } from "drizzle-orm/pg-core";
 import { transactionStatusEnum, walletTypeEnum } from "./enums";
@@ -20,8 +21,8 @@ export const transactions = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     // customer/partner-facing reference, e.g. LKP-20260702-XXXXXX
     txnRef: varchar("txn_ref", { length: 40 }).notNull().unique(),
-    // caller-supplied key — retried requests with the same key must not double-debit the wallet
-    idempotencyKey: varchar("idempotency_key", { length: 100 }).notNull().unique(),
+    // caller-supplied key — uniqueness is per-user (see uniqueIndex below)
+    idempotencyKey: varchar("idempotency_key", { length: 100 }).notNull(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -45,6 +46,7 @@ export const transactions = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    uniqueIndex("transactions_user_idempotency_uidx").on(table.userId, table.idempotencyKey),
     index("transactions_user_id_idx").on(table.userId, table.createdAt),
     index("transactions_status_idx").on(table.status),
     index("transactions_service_id_idx").on(table.serviceId),

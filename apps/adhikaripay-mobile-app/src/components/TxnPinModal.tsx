@@ -7,12 +7,14 @@ import { api } from "../lib/api";
 import { apiError } from "../utils/apiError";
 import { colors } from "../theme/colors";
 import { showAlert } from "./AppAlert";
+import type { ApiResponse } from "@adhikaripay/shared-types";
 
 interface TxnPinModalProps {
   visible: boolean;
   title?: string;
   onClose: () => void;
-  onVerified: (pin: string) => void;
+  /** Receives short-lived txnAuth — never the raw PIN. */
+  onVerified: (txnAuth: string) => void;
 }
 
 export function TxnPinModal({
@@ -35,9 +37,11 @@ export function TxnPinModal({
     }
     setLoading(true);
     try {
-      await api.post("/auth/txn-pin/verify", { pin });
-      onVerified(pin);
+      const { data } = await api.post<ApiResponse<{ txnAuth: string }>>("/auth/txn-pin/verify", { pin });
+      if (!data.success || !data.data?.txnAuth) throw new Error(data.message || "PIN verify failed");
+      const auth = data.data.txnAuth;
       setPin("");
+      onVerified(auth);
     } catch (err) {
       showAlert("PIN failed", apiError(err, "Incorrect transaction PIN"));
       setPin("");

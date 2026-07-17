@@ -15,6 +15,18 @@ export interface InsertOtpRequestInput {
 }
 
 export async function insertOtpRequest(input: InsertOtpRequestInput): Promise<void> {
+  // Invalidate any prior live codes for this mobile+purpose (single active OTP).
+  await db
+    .update(otpRequests)
+    .set({ consumedAt: new Date() })
+    .where(
+      and(
+        eq(otpRequests.mobile, input.mobile),
+        eq(otpRequests.purpose, input.purpose),
+        isNull(otpRequests.consumedAt),
+      ),
+    );
+
   await db.insert(otpRequests).values({
     mobile: input.mobile,
     otpHash: input.otpHash,

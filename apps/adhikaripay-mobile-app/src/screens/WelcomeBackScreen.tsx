@@ -261,18 +261,21 @@ export function WelcomeBackScreen({ mobile, role, devOtp: initialDevOtp, preferM
       const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
       const msg = apiError(err, "Incorrect MPIN");
       if (code === "DEVICE_NOT_TRUSTED") {
-        // Trust lapsed / new device → OTP verification is required again on this phone.
-        showAlert("Verify with OTP", "For your security, verify with OTP again on this device.", [
-          {
-            text: "Open OTP",
-            style: "primary",
-            onPress: () => {
-              setTab("otp");
-              setMpin("");
-              void resendOtp();
+        showAlert(
+          "Session expired",
+          "24h window khatam. OTP se dubara verify karein — uske baad MPIN kaam karega.",
+          [
+            {
+              text: "Open OTP",
+              style: "primary",
+              onPress: () => {
+                setTab("otp");
+                setMpin("");
+                void resendOtp();
+              },
             },
-          },
-        ]);
+          ],
+        );
       } else if (code === "MPIN_NOT_SET" || msg.toLowerCase().includes("not set")) {
         showAlert("MPIN not set", "Pehle OTP tab se login karo, phir 4-digit MPIN set karo.", [
           {

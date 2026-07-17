@@ -4,6 +4,7 @@ import { db } from "../../db/postgres";
 import { users, transactions, services, serviceCategories, wallets, userCommissionRates } from "../../db/postgres/schema";
 import { HttpError } from "../../utils/httpError";
 import { decryptPII } from "../../utils/aes";
+import { env } from "../../config/env";
 import { findLatestAuditLog, insertAuditLog } from "../../db/postgres/repositories/auditLog";
 import type { UserRole, KycStatus, TransactionStatus } from "@adhikaripay/shared-types";
 
@@ -265,7 +266,20 @@ export async function listAdminUsers(opts: {
 }
 
 export async function setUserActive(adminId: string, userId: string, isActive: boolean) {
-  const [row] = await db.update(users).set({ isActive, updatedAt: new Date() }).where(eq(users.id, userId)).returning();
+  if (userId === adminId) {
+    throw new HttpError(403, "You cannot change your own active status", "CANNOT_SELF_DEACTIVATE");
+  }
+  const [target] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!target) throw new HttpError(404, "User not found", "USER_NOT_FOUND");
+  if (target.role === "admin") {
+    throw new HttpError(403, "Admin accounts cannot be activated or deactivated here", "ADMIN_PROTECTED");
+  }
+
+  const [row] = await db
+    .update(users)
+    .set({ isActive, updatedAt: new Date() })
+    .where(eq(users.id, userId))
+    .returning();
   if (!row) throw new HttpError(404, "User not found", "USER_NOT_FOUND");
   await insertAuditLog({
     userId: adminId,
@@ -306,6 +320,16 @@ export async function decideKyc(adminId: string, userId: string, decision: "veri
   const [user] = await db.select().from(users).where(eq(users.id, userId));
   if (!user) throw new HttpError(404, "User not found", "USER_NOT_FOUND");
   if (user.role === "admin") throw new HttpError(400, "Cannot change admin KYC", "INVALID_TARGET");
+
+  if (decision === "verified") {
+    if (!user.panNumberEncrypted || !user.aadhaarNumberEncrypted) {
+      throw new HttpError(
+        422,
+        "Cannot verify KYC without PAN and Aadhaar on file",
+        "KYC_DOCS_REQUIRED",
+      );
+    }
+  }
 
   const [updated] = await db
     .update(users)
@@ -495,6 +519,11 @@ export async function upsertAdminUserCommissions(
     }
     if (rate.ruleType === "percentage" && valueNum > 100) {
       throw new HttpError(400, "Percentage cannot exceed 100", "INVALID_VALUE");
+    }
+    // Flat rupee overrides: hard ceiling to prevent float drain from misconfig.
+    const flatCap = env.MAX_FLAT_COMMISSION_RUPEES ?? 500;
+    if (rate.ruleType === "flat" && valueNum > flatCap) {
+      throw new HttpError(400, `Flat commission cannot exceed ₹${flatCap}`, "INVALID_VALUE");
     }
 
     const value = valueNum.toFixed(4);

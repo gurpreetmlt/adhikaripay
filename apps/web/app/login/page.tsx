@@ -99,13 +99,19 @@ export default function LoginPage() {
       finishLogin(data.data);
     } catch (err) {
       const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
+      // Trust window expired / never trusted / MPIN not set → leave welcome-back, force OTP or password.
       if (code === "DEVICE_NOT_TRUSTED" || code === "MPIN_NOT_SET") {
-        // Trust lapsed / no MPIN yet → fall back to OTP with the remembered number prefilled.
-        toast(code === "MPIN_NOT_SET" ? "Set your MPIN after logging in with OTP" : "Please verify with OTP again");
+        toast.error(
+          code === "MPIN_NOT_SET"
+            ? "MPIN set nahi hai — pehle OTP ya password se login karein"
+            : "24h session khatam — OTP ya password se dubara login karein",
+        );
         setMobile(remembered.mobile);
         setMpin("");
         setUnlockMode(false);
-        void requestOtp();
+        setMethod("otp");
+        setOtpStep("mobile");
+        setDevOtp(null);
         return;
       }
       toast.error(extractApiError(err, "Incorrect MPIN"));
@@ -124,6 +130,8 @@ export default function LoginPage() {
         mobile,
         password,
         portal: "agent",
+        deviceId: getDeviceId(),
+        deviceLabel: getDeviceLabel(),
       });
       if (!data.success) throw new Error(data.message);
       finishLogin(data.data);

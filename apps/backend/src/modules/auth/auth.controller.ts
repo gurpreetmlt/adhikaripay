@@ -25,7 +25,7 @@ import {
   listUserDevices,
   revokeUserDevice,
 } from "./auth.service";
-import { setTxnPin, verifyTxnPinOrThrow } from "./txnPin";
+import { setTxnPin, verifyTxnPinAndIssueAuth } from "./txnPin";
 import { db } from "../../db/postgres";
 import { users } from "../../db/postgres/schema";
 import { comparePassword } from "../../utils/password";
@@ -56,8 +56,23 @@ export async function refresh(req: Request, res: Response): Promise<void> {
 }
 
 export async function logout(req: Request, res: Response): Promise<void> {
-  const input = refreshSchema.parse(req.body);
-  await logoutUser(input.refreshToken);
+  const input = z.object({ refreshToken: z.string().min(1).optional() }).parse(req.body ?? {});
+
+  let userId: string | null = null;
+  const header = req.headers.authorization;
+  if (header?.startsWith("Bearer ")) {
+    try {
+      const { verifyAccessToken } = await import("../../utils/jwt");
+      userId = verifyAccessToken(header.slice("Bearer ".length)).sub;
+    } catch {
+      /* expired access is fine — refreshToken still kills sessions */
+    }
+  }
+
+  await logoutUser({
+    userId,
+    refreshToken: input.refreshToken ?? null,
+  });
   sendSuccess(res, null, "Logged out successfully");
 }
 
@@ -135,7 +150,7 @@ export async function signupVerify(req: Request, res: Response): Promise<void> {
 }
 
 const setTxnPinSchema = z.object({
-  password: z.string().min(1).optional(),
+  password: z.string().min(1),
   pin: z.string().regex(/^\d{4}$/, "PIN must be 4 digits"),
 });
 
@@ -146,16 +161,12 @@ export async function setTransactionPin(req: Request, res: Response): Promise<vo
   const [user] = await db.select().from(users).where(eq(users.id, req.auth.sub));
   if (!user) throw new HttpError(404, "User not found", "USER_NOT_FOUND");
 
-  const isFirstSet = !user.txnPinHash;
-  let passwordOk = false;
-  if (!isFirstSet) {
-    if (!input.password) {
-      throw new HttpError(422, "Password is required to change PIN", "PASSWORD_REQUIRED");
-    }
-    passwordOk = await comparePassword(input.password, user.passwordHash);
+  if (!input.password) {
+    throw new HttpError(422, "Password is required to set or change PIN", "PASSWORD_REQUIRED");
   }
+  const passwordOk = await comparePassword(input.password, user.passwordHash);
 
-  await setTxnPin(req.auth.sub, input.pin, { passwordOk, isFirstSet });
+  await setTxnPin(req.auth.sub, input.pin, { passwordOk });
   const meUser = await getAuthMe(req.auth.sub);
   sendSuccess(res, { user: meUser }, "Transaction PIN set successfully");
 }
@@ -167,6 +178,6 @@ const verifyTxnPinSchema = z.object({
 export async function verifyTransactionPin(req: Request, res: Response): Promise<void> {
   if (!req.auth) throw new HttpError(401, "Authentication required", "UNAUTHENTICATED");
   const input = verifyTxnPinSchema.parse(req.body);
-  await verifyTxnPinOrThrow(req.auth.sub, input.pin);
-  sendSuccess(res, { valid: true }, "Transaction PIN verified");
+  const result = await verifyTxnPinAndIssueAuth(req.auth.sub, input.pin);
+  sendSuccess(res, result, "Transaction PIN verified");
 }

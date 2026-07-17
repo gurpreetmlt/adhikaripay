@@ -32,6 +32,7 @@ import { api } from "../../lib/api";
 import { apiError } from "../../utils/apiError";
 import { formatINR } from "../../lib/format";
 import { captureFingerprint } from "../../lib/rdServiceFingerprint";
+import { useTxnPin } from "../../hooks/useTxnPin";
 import { useTheme } from "../../theme/ThemeContext";
 import { colors, gradientDirection } from "../../theme/colors";
 
@@ -420,6 +421,7 @@ interface AepsScreenProps {
 
 export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps) {
   const { tokens } = useTheme();
+  const { promptPin, TxnPinPrompt } = useTxnPin();
 
   const resolvedInitial = useMemo(() => {
     if (initialTab) return initialTab;
@@ -475,15 +477,15 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
     return digits.replace(/(\d{4})(?=\d)/g, "$1 ");
   }
 
-  // Industry-standard Aadhaar masking (UIDAI convention): only the last 4 digits are ever shown,
-  // e.g. "XXXX XXXX 1234". Only used while the field is blurred and not force-revealed — while the
-  // user is actively typing, the real formatted digits are shown so onChangeText never has to parse
-  // mask characters back out (that corrupted the stored value in an earlier version of this field).
+  // Mask for display overlay only — never put "X" into TextInput (Android opens QWERTY for letters).
   function maskAadhaarDisplay(v: string) {
     const digits = v.replace(/\D/g, "");
     if (digits.length <= 4) return digits;
     return `XXXX XXXX ${digits.slice(-4)}`;
   }
+
+  const showAadhaarPlain = aadhaarFocused || aadhaarVisible;
+  const aadhaarInputRef = useRef<TextInput>(null);
 
   const canScan =
     !!selectedBank &&
@@ -514,12 +516,19 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
 
     try {
       if (tab === "Withdraw") {
+        let txnAuth: string;
+        try {
+          txnAuth = await promptPin();
+        } catch {
+          return;
+        }
         setSubmitting(true);
-        const idempotencyKey = `aeps-wd-${Date.now()}`;
+        const idempotencyKey = `aeps-wd-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
         const { data } = await api.post<ApiResponse<{ txn: { txnRef: string; status: string } }>>(
           "/txn/aeps/withdraw",
           {
             idempotencyKey,
+            txnAuth,
             aadhaarNumber: aadhaar,
             bankIin: selectedBank.iin,
             mobile,
@@ -639,21 +648,50 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
 
         {/* Form fields */}
         <View style={[s.card, { backgroundColor: tokens.card, borderColor: tokens.cardBorder }]}>
-          {/* Aadhaar */}
+          {/* Aadhaar — TextInput always digits-only so Android stays on number-pad */}
           <Text style={[s.fieldLabel, { color: tokens.sub }]}>AADHAAR / VID NUMBER</Text>
           <View style={[s.inputRow, { borderColor: tokens.inputBorder, backgroundColor: tokens.inputBg }]}>
-            <TextInput
-              value={aadhaarFocused || aadhaarVisible ? formatAadhaar(aadhaar) : maskAadhaarDisplay(aadhaar)}
-              onChangeText={(v) => setAadhaar(v.replace(/\D/g, "").slice(0, 12))}
-              onFocus={() => setAadhaarFocused(true)}
-              onBlur={() => setAadhaarFocused(false)}
-              placeholder="XXXX XXXX XXXX"
-              placeholderTextColor={tokens.mute}
-              keyboardType="number-pad"
-              maxLength={14}
-              style={[s.input, { color: tokens.txt }]}
-            />
-            <Pressable onPress={() => setAadhaarVisible((v) => !v)} hitSlop={10}>
+            <View style={{ flex: 1, position: "relative", justifyContent: "center" }}>
+              <TextInput
+                ref={aadhaarInputRef}
+                value={formatAadhaar(aadhaar)}
+                onChangeText={(v) => setAadhaar(v.replace(/\D/g, "").slice(0, 12))}
+                onFocus={() => setAadhaarFocused(true)}
+                onBlur={() => setAadhaarFocused(false)}
+                placeholder="XXXX XXXX XXXX"
+                placeholderTextColor={tokens.mute}
+                keyboardType="number-pad"
+                inputMode="numeric"
+                maxLength={14}
+                style={[
+                  s.input,
+                  { color: showAadhaarPlain ? tokens.txt : "transparent" },
+                ]}
+              />
+              {!showAadhaarPlain && aadhaar.length > 0 && (
+                <Pressable
+                  style={StyleSheet.absoluteFillObject}
+                  onPress={() => {
+                    setAadhaarFocused(true);
+                    aadhaarInputRef.current?.focus();
+                  }}
+                >
+                  <View style={{ flex: 1, justifyContent: "center" }}>
+                    <Text style={[s.input, { color: tokens.txt }]} pointerEvents="none">
+                      {maskAadhaarDisplay(aadhaar)}
+                    </Text>
+                  </View>
+                </Pressable>
+              )}
+            </View>
+            <Pressable
+              onPress={() => {
+                setAadhaarVisible((v) => !v);
+                // Keep number-pad — never remount as text field
+                requestAnimationFrame(() => aadhaarInputRef.current?.focus());
+              }}
+              hitSlop={10}
+            >
               {aadhaarVisible ? (
                 <EyeOff size={18} color={tokens.mute} />
               ) : (
@@ -853,6 +891,8 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
           </Text>
         </View>
       </ScrollView>
+
+      <TxnPinPrompt />
 
       {/* Bank modal */}
       <BankModal

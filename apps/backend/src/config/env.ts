@@ -15,10 +15,8 @@ const envSchema = z.object({
   /** Comma-separated list of allowed origins (one per web portal) — e.g. "https://a.com,https://b.com" */
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
   /**
-   * Temporary testing toggle — echoes the OTP in the API response even in production.
-   * SECURITY: with this on, anyone who knows a registered mobile number can log into that
-   * account without SMS access. Only safe while no real SMS provider is wired up (so no real
-   * OTP delivery exists to bypass anyway). Turn this off the moment SMS delivery goes live.
+   * Dev-only: echo OTP in API response for local testing without SMS.
+   * SECURITY: Ignored when NODE_ENV=production (always false). Opt-in even in development.
    */
   EXPOSE_OTP_IN_RESPONSE: z.coerce.boolean().default(false),
   /**
@@ -34,6 +32,8 @@ const envSchema = z.object({
    * replace this ceiling before scale.
    */
   MAX_MANUAL_FUND_RUPEES: z.coerce.number().positive().default(500000),
+  /** Hard ceiling (rupees) on flat commission overrides per transaction. */
+  MAX_FLAT_COMMISSION_RUPEES: z.coerce.number().positive().default(500),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -44,3 +44,8 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+/** Never expose OTP over the wire in production, even if the env flag is mis-set. */
+export function shouldExposeOtpInResponse(): boolean {
+  return env.NODE_ENV !== "production" && env.EXPOSE_OTP_IN_RESPONSE;
+}

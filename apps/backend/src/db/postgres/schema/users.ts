@@ -27,6 +27,8 @@ export const users = pgTable(
     // 4-6 digit transaction PIN (bcrypt) — required on every money-moving endpoint,
     // separate from the login password so a hijacked session alone can't move funds.
     txnPinHash: text("txn_pin_hash"),
+    txnPinFailedAttempts: integer("txn_pin_failed_attempts").notNull().default(0),
+    txnPinLockedUntil: timestamp("txn_pin_locked_until", { withTimezone: true }),
     // 4-digit login MPIN (bcrypt) — quick unlock on mobile Welcome-back screen.
     loginMpinHash: text("login_mpin_hash"),
     // PAN/Aadhaar stored AES-256-GCM encrypted at rest, never in plaintext

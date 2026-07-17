@@ -37,7 +37,23 @@
 - [ ] KYC CRUD routes
 - [ ] Commission payout report
 
+## Security (2026-07-17)
+- [x] Default MPIN / OTP-in-prod / hardcoded admin seed removed
+- [x] JWT `requireAuth` revalidates `isActive` + role from DB
+- [x] Txn PIN lockout + AEPS withdraw requires PIN
+- [x] Per-user txn idempotency + wallet fund/transfer idempotency
+- [x] `apps/login.text` untracked; Dependabot added
+- [x] Real logout (revoke all refresh + devices); refresh reuse → kill family
+- [x] OTP role oracle closed; OTP keyed by mobile; old OTPs invalidated
+- [x] txnAuth ticket (PIN not echoed); RD package allowlist; KYC docs + transfer KYC
+- [x] Flat commission cap; amount max fail-closed; JWT algorithms pinned
+- [ ] Android Keystore for bio refresh token (still AsyncStorage)
+- [ ] Cert pinning + httpOnly cookie BFF
+- [ ] History purge for any secrets ever pushed to remote
+
 ## Last updated
+2026-07-17 — Round-2 hacker fixes: session kill, OTP oracles, txnAuth, RD allowlist, KYC gates
+2026-07-17 — Security hardening: Critical+High remediations (auth, wallet, mobile, web storage, release signing, Dependabot)
 2026-07-14 — Wallet pending balance: `GET /api/wallet/me` adds `pendingBalance` per wallet (sum of pending/initiated txns); agent web Wallet + mobile Wallet show Pending
 2026-07-14 — Branding: product = Adhikari Pay; npm scopes `@adhikaripay/*`; folder renamed to `apps/mobile` (Android applicationId `com.lokalpaymobile` kept for Play Store continuity)
 2026-07-14 — Empty Retailer txns: migrate 0005 blocked by non-idempotent 0004; seed now funds Wallet 1/2 + logs userId

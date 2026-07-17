@@ -8,18 +8,16 @@ import { generateUid } from "../src/utils/uid";
 import type { UserRole } from "@adhikaripay/shared-types";
 
 /**
- * Seeds the demo agent hierarchy: Admin → Super Distributor → Distributor → Retailer
- * with parentId relationships so the "My Network" dashboard card shows real data.
+ * Seeds the demo agent hierarchy. Passwords come from SEED_NETWORK_PASSWORD (required).
+ * No hardcoded credentials in source.
  *
- * Run: npm run seed:network -w @adhikaripay/backend
- * (Run seed:admin first if admin doesn't exist)
+ * Run: SEED_NETWORK_PASSWORD='...' npm run seed:network -w @adhikaripay/backend
  */
 
 interface AgentSeed {
   mobile: string;
   name: string;
   role: UserRole;
-  password: string;
 }
 
 /**
@@ -45,65 +43,65 @@ interface TreeNode extends AgentSeed {
 
 const NETWORK_TREE: TreeNode[] = [
   {
-    mobile: "9111111111", name: "Rajiv Sharma", role: "master_distributor", password: "MdPass123",
+    mobile: "9111111111", name: "Rajiv Sharma", role: "master_distributor",
     children: [
       {
-        mobile: "9222222222", name: "Amit Verma", role: "distributor", password: "DsPass123",
+        mobile: "9222222222", name: "Amit Verma", role: "distributor",
         children: [
-          { mobile: "9333333333", name: "Suresh Yadav", role: "retailer", password: "RtPass123" },
-          { mobile: "9333333334", name: "Priya Kumari", role: "retailer", password: "RtPass123" },
-          { mobile: "9333333335", name: "Rakesh Gupta", role: "retailer", password: "RtPass123" },
-          { mobile: "9333333339", name: "Neha Sinha", role: "retailer", password: "RtPass123" },
-          { mobile: "9333333340", name: "Vijay Tiwari", role: "retailer", password: "RtPass123" },
+          { mobile: "9333333333", name: "Suresh Yadav", role: "retailer" },
+          { mobile: "9333333334", name: "Priya Kumari", role: "retailer" },
+          { mobile: "9333333335", name: "Rakesh Gupta", role: "retailer" },
+          { mobile: "9333333339", name: "Neha Sinha", role: "retailer" },
+          { mobile: "9333333340", name: "Vijay Tiwari", role: "retailer" },
         ],
       },
       {
-        mobile: "9222222223", name: "Kavita Mishra", role: "distributor", password: "DsPass123",
+        mobile: "9222222223", name: "Kavita Mishra", role: "distributor",
         children: [
-          { mobile: "9333333336", name: "Deepak Patel", role: "retailer", password: "RtPass123" },
-          { mobile: "9333333337", name: "Anjali Devi", role: "retailer", password: "RtPass123" },
-          { mobile: "9333333341", name: "Rohit Jha", role: "retailer", password: "RtPass123" },
+          { mobile: "9333333336", name: "Deepak Patel", role: "retailer" },
+          { mobile: "9333333337", name: "Anjali Devi", role: "retailer" },
+          { mobile: "9333333341", name: "Rohit Jha", role: "retailer" },
         ],
       },
       {
-        mobile: "9222222225", name: "Sanjay Dubey", role: "distributor", password: "DsPass123",
+        mobile: "9222222225", name: "Sanjay Dubey", role: "distributor",
         children: [
-          { mobile: "9333333342", name: "Pooja Rani", role: "retailer", password: "RtPass123" },
-          { mobile: "9333333343", name: "Manoj Kumar", role: "retailer", password: "RtPass123" },
+          { mobile: "9333333342", name: "Pooja Rani", role: "retailer" },
+          { mobile: "9333333343", name: "Manoj Kumar", role: "retailer" },
         ],
       },
     ],
   },
   {
-    mobile: "9111111112", name: "Sunita Agarwal", role: "master_distributor", password: "MdPass123",
+    mobile: "9111111112", name: "Sunita Agarwal", role: "master_distributor",
     children: [
       {
-        mobile: "9222222224", name: "Ravi Chauhan", role: "distributor", password: "DsPass123",
+        mobile: "9222222224", name: "Ravi Chauhan", role: "distributor",
         children: [
-          { mobile: "9333333338", name: "Geeta Devi", role: "retailer", password: "RtPass123" },
-          { mobile: "9333333344", name: "Ashok Pandey", role: "retailer", password: "RtPass123" },
-          { mobile: "9333333345", name: "Meena Kumari", role: "retailer", password: "RtPass123" },
-          { mobile: "9333333346", name: "Santosh Rai", role: "retailer", password: "RtPass123" },
+          { mobile: "9333333338", name: "Geeta Devi", role: "retailer" },
+          { mobile: "9333333344", name: "Ashok Pandey", role: "retailer" },
+          { mobile: "9333333345", name: "Meena Kumari", role: "retailer" },
+          { mobile: "9333333346", name: "Santosh Rai", role: "retailer" },
         ],
       },
       {
-        mobile: "9222222226", name: "Nisha Thakur", role: "distributor", password: "DsPass123",
+        mobile: "9222222226", name: "Nisha Thakur", role: "distributor",
         children: [
-          { mobile: "9333333347", name: "Arun Singh", role: "retailer", password: "RtPass123" },
-          { mobile: "9333333348", name: "Sundar Lal", role: "retailer", password: "RtPass123" },
-          { mobile: "9333333349", name: "Kamla Devi", role: "retailer", password: "RtPass123" },
+          { mobile: "9333333347", name: "Arun Singh", role: "retailer" },
+          { mobile: "9333333348", name: "Sundar Lal", role: "retailer" },
+          { mobile: "9333333349", name: "Kamla Devi", role: "retailer" },
         ],
       },
     ],
   },
   {
-    mobile: "9111111113", name: "Pankaj Mehta", role: "master_distributor", password: "MdPass123",
+    mobile: "9111111113", name: "Pankaj Mehta", role: "master_distributor",
     children: [
       {
-        mobile: "9222222227", name: "Dinesh Soni", role: "distributor", password: "DsPass123",
+        mobile: "9222222227", name: "Dinesh Soni", role: "distributor",
         children: [
-          { mobile: "9333333350", name: "Babita Sharma", role: "retailer", password: "RtPass123" },
-          { mobile: "9333333351", name: "Lalit Prasad", role: "retailer", password: "RtPass123" },
+          { mobile: "9333333350", name: "Babita Sharma", role: "retailer" },
+          { mobile: "9333333351", name: "Lalit Prasad", role: "retailer" },
         ],
       },
     ],
@@ -123,7 +121,11 @@ async function ensureUser(agent: AgentSeed, parentId: string): Promise<string> {
     return existing.id;
   }
 
-  const passwordHash = await hashPassword(agent.password);
+  const password = process.env.SEED_NETWORK_PASSWORD;
+  if (!password || password.length < 10) {
+    throw new Error("SEED_NETWORK_PASSWORD env is required (min 10 characters). No hardcoded seed passwords.");
+  }
+  const passwordHash = await hashPassword(password);
   const uid = generateUid(agent.role);
 
   const [created] = await db.transaction(async (tx) => {

@@ -5,6 +5,7 @@ import {
   wallets,
   walletLedgerEntries,
   walletLedgerGroups,
+  walletIdempotency,
   users,
   transactions,
 } from "../../db/postgres/schema";
@@ -14,6 +15,14 @@ import { HttpError } from "../../utils/httpError";
 import { env } from "../../config/env";
 import { insertAuditLog } from "../../db/postgres/repositories/auditLog";
 import type { UserRole, WalletType } from "@adhikaripay/shared-types";
+
+async function assertActorKycVerified(actorId: string): Promise<void> {
+  const [user] = await db.select().from(users).where(eq(users.id, actorId));
+  if (!user || !user.isActive) throw new HttpError(403, "Account is not active", "ACCOUNT_INACTIVE");
+  if (user.kycStatus !== "verified") {
+    throw new HttpError(403, "Complete KYC verification to transact", "KYC_NOT_VERIFIED");
+  }
+}
 
 /**
  * Rejects a manual top-up above the configured single-call ceiling. Pure + cap-injected so the
@@ -97,7 +106,20 @@ export async function transferToChild(
   walletType: WalletType,
   amount: string,
   description?: string,
+  idempotencyKey?: string,
 ): Promise<{ groupId: string }> {
+  await assertActorKycVerified(actor.id);
+
+  if (idempotencyKey) {
+    const [prior] = await db
+      .select()
+      .from(walletIdempotency)
+      .where(
+        and(eq(walletIdempotency.userId, actor.id), eq(walletIdempotency.idempotencyKey, idempotencyKey)),
+      );
+    if (prior) return { groupId: prior.ledgerGroupId };
+  }
+
   const [target] = await db.select().from(users).where(eq(users.id, targetUserId));
   if (!target) throw new HttpError(404, "Target user not found", "USER_NOT_FOUND");
   if (target.parentId !== actor.id) {
@@ -107,7 +129,7 @@ export async function transferToChild(
   const fromWallet = await getWalletOrThrow(actor.id, "main");
   const toWallet = await getWalletOrThrow(targetUserId, walletType);
 
-  return transferBetweenWallets({
+  const result = await transferBetweenWallets({
     fromWalletId: fromWallet.id,
     toWalletId: toWallet.id,
     amount,
@@ -115,6 +137,26 @@ export async function transferToChild(
     referenceId: targetUserId,
     description,
   });
+
+  if (idempotencyKey) {
+    try {
+      await db.insert(walletIdempotency).values({
+        userId: actor.id,
+        idempotencyKey,
+        ledgerGroupId: result.groupId,
+      });
+    } catch {
+      const [raced] = await db
+        .select()
+        .from(walletIdempotency)
+        .where(
+          and(eq(walletIdempotency.userId, actor.id), eq(walletIdempotency.idempotencyKey, idempotencyKey)),
+        );
+      if (raced) return { groupId: raced.ledgerGroupId };
+    }
+  }
+
+  return result;
 }
 
 // Admin-only entry point for money entering the system from outside (bank reconciliation).
@@ -123,16 +165,52 @@ export async function adminFundOwnWallet(
   actor: Actor,
   amount: string,
   description?: string,
+  idempotencyKey?: string,
 ): Promise<{ groupId: string }> {
   assertWithinManualFundCap(amount, env.MAX_MANUAL_FUND_RUPEES);
+
+  if (idempotencyKey) {
+    const [prior] = await db
+      .select()
+      .from(walletIdempotency)
+      .where(
+        and(eq(walletIdempotency.userId, actor.id), eq(walletIdempotency.idempotencyKey, idempotencyKey)),
+      );
+    if (prior) return { groupId: prior.ledgerGroupId };
+  }
+
   const wallet = await getWalletOrThrow(actor.id, "main");
   const result = await fundWallet({ walletId: wallet.id, amount, description });
+
+  if (idempotencyKey) {
+    try {
+      await db.insert(walletIdempotency).values({
+        userId: actor.id,
+        idempotencyKey,
+        ledgerGroupId: result.groupId,
+      });
+    } catch {
+      const [raced] = await db
+        .select()
+        .from(walletIdempotency)
+        .where(
+          and(eq(walletIdempotency.userId, actor.id), eq(walletIdempotency.idempotencyKey, idempotencyKey)),
+        );
+      if (raced) return { groupId: raced.ledgerGroupId };
+    }
+  }
+
   await insertAuditLog({
     userId: actor.id,
     action: "wallet.manual_fund",
     entityType: "wallet",
     entityId: wallet.id,
-    metadata: { amount, description: description ?? null, ledgerGroupId: result.groupId },
+    metadata: {
+      amount,
+      description: description ?? null,
+      ledgerGroupId: result.groupId,
+      idempotencyKey: idempotencyKey ?? null,
+    },
   });
   return result;
 }

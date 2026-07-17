@@ -20,8 +20,9 @@ export function WalletHeader({ wallets, onRefresh, refreshing }: WalletHeaderPro
 
   const mainWallet = wallets.find((w) => w.walletType === "main");
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    const { logoutEverywhere } = await import("@/lib/logout");
+    await logoutEverywhere();
     router.replace("/login");
   }
 

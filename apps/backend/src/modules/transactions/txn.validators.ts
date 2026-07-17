@@ -4,18 +4,31 @@ const amount = z
   .string()
   .regex(/^\d+(\.\d{1,2})?$/, "Amount must be a positive number with up to 2 decimals");
 
-const base = {
+const txnAuthFields = {
   idempotencyKey: z.string().min(8).max(100),
-  txnPin: z.string().regex(/^\d{4,6}$/, "PIN must be 4-6 digits"),
+  txnPin: z.string().regex(/^\d{4,6}$/).optional(),
+  txnAuth: z.string().min(20).optional(),
 };
 
-export const rechargeSchema = z.object({
-  ...base,
-  serviceCode: z.string().min(2).max(60), // mobile_prepaid / dth / fastag...
-  operatorCode: z.string().min(1).max(60),
-  accountRef: z.string().min(3).max(40),
-  amount,
-});
+const requireTxnProof = (data: { txnPin?: string; txnAuth?: string }, ctx: z.RefinementCtx) => {
+  if (!data.txnPin && !data.txnAuth) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Transaction PIN or txnAuth is required",
+      path: ["txnAuth"],
+    });
+  }
+};
+
+export const rechargeSchema = z
+  .object({
+    ...txnAuthFields,
+    serviceCode: z.string().min(2).max(60),
+    operatorCode: z.string().min(1).max(60),
+    accountRef: z.string().min(3).max(40),
+    amount,
+  })
+  .superRefine(requireTxnProof);
 
 export const bbpsFetchBillSchema = z.object({
   serviceCode: z.string().min(2).max(60),
@@ -23,14 +36,16 @@ export const bbpsFetchBillSchema = z.object({
   customerParams: z.record(z.string(), z.string()).default({}),
 });
 
-export const bbpsPayBillSchema = z.object({
-  ...base,
-  serviceCode: z.string().min(2).max(60),
-  billerCode: z.string().min(1).max(80),
-  customerParams: z.record(z.string(), z.string()).default({}),
-  billFetchRef: z.string().min(1).max(100),
-  amount,
-});
+export const bbpsPayBillSchema = z
+  .object({
+    ...txnAuthFields,
+    serviceCode: z.string().min(2).max(60),
+    billerCode: z.string().min(1).max(80),
+    customerParams: z.record(z.string(), z.string()).default({}),
+    billFetchRef: z.string().min(1).max(100),
+    amount,
+  })
+  .superRefine(requireTxnProof);
 
 export const dmtBeneficiarySchema = z.object({
   customerMobile: z.string().regex(/^\d{10}$/),
@@ -39,13 +54,15 @@ export const dmtBeneficiarySchema = z.object({
   ifsc: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/),
 });
 
-export const dmtTransferSchema = z.object({
-  ...base,
-  customerMobile: z.string().regex(/^\d{10}$/),
-  beneficiaryId: z.string().min(1).max(100),
-  amount,
-  mode: z.enum(["imps", "neft"]).default("imps"),
-});
+export const dmtTransferSchema = z
+  .object({
+    ...txnAuthFields,
+    customerMobile: z.string().regex(/^\d{10}$/),
+    beneficiaryId: z.string().min(1).max(100),
+    amount,
+    mode: z.enum(["imps", "neft"]).default("imps"),
+  })
+  .superRefine(requireTxnProof);
 
 const aepsBase = {
   aadhaarNumber: z.string().regex(/^\d{12}$/),
@@ -56,12 +73,18 @@ const aepsBase = {
 
 export const aepsEnquirySchema = z.object({ ...aepsBase });
 
-// AEPS withdrawal is authorized by the customer's Aadhaar + biometric capture (UIDAI two-factor)
-// rather than the retailer's wallet PIN — no txnPin here, unlike the other debit operations above.
-export const aepsWithdrawSchema = z.object({
-  idempotencyKey: z.string().min(8).max(100),
-  ...aepsBase,
-  amount,
-});
+export const aepsWithdrawSchema = z
+  .object({
+    ...txnAuthFields,
+    ...aepsBase,
+    amount,
+  })
+  .superRefine(requireTxnProof);
 
-export const aadhaarPaySchema = z.object({ ...base, ...aepsBase, amount });
+export const aadhaarPaySchema = z
+  .object({
+    ...txnAuthFields,
+    ...aepsBase,
+    amount,
+  })
+  .superRefine(requireTxnProof);

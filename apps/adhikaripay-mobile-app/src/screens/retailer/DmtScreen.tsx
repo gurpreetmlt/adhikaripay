@@ -82,14 +82,14 @@ export function DmtScreen({ onBack }: DmtScreenProps) {
   async function confirmTransfer() {
     if (!selected || !amount) return;
     try {
-      const pin = await promptPin();
+      const txnAuth = await promptPin();
       setSending(true);
-      const idempotencyKey = `dmt-${selected.id}-${Date.now()}`;
+      const idempotencyKey = `dmt-${selected.id}-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
       const { data } = await api.post<ApiResponse<{ txn: { txnRef: string; status: string } }>>(
         "/txn/dmt/transfer",
         {
           idempotencyKey,
-          txnPin: pin,
+          txnAuth,
           customerMobile: selected.mobile,
           beneficiaryId: selected.id,
           amount,

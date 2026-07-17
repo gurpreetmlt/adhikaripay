@@ -9,6 +9,7 @@ import {
   timestamp,
   index,
   uniqueIndex,
+  primaryKey,
   check,
 } from "drizzle-orm/pg-core";
 import { walletTypeEnum, ledgerEntryTypeEnum } from "./enums";
@@ -71,4 +72,18 @@ export const walletLedgerEntries = pgTable(
     index("wallet_ledger_entries_group_idx").on(table.groupId),
     check("wallet_ledger_entries_amount_positive", sql`${table.amount} > 0`),
   ],
+);
+
+/** Per-user idempotency for admin fund / downline transfer (prevents double-submit). */
+export const walletIdempotency = pgTable(
+  "wallet_idempotency",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    idempotencyKey: varchar("idempotency_key", { length: 100 }).notNull(),
+    ledgerGroupId: uuid("ledger_group_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.idempotencyKey] })],
 );

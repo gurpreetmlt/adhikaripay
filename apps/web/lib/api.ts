@@ -10,6 +10,12 @@ const api = axios.create({
   timeout: 15000,
 });
 
+/** Login/OTP/MPIN 401s must reach the UI with their error codes (e.g. DEVICE_NOT_TRUSTED). */
+function isAuthEndpoint(url: string | undefined): boolean {
+  if (!url) return false;
+  return /\/auth\/(login|refresh|logout|otp|mpin|signup)/.test(url);
+}
+
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;
   if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -20,7 +26,12 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
+    if (
+      error.response?.status === 401 &&
+      original &&
+      !original._retry &&
+      !isAuthEndpoint(original.url)
+    ) {
       original._retry = true;
       const refreshToken = useAuthStore.getState().refreshToken;
       if (refreshToken) {

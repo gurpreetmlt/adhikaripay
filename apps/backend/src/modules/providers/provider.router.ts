@@ -88,6 +88,9 @@ export async function callProvider<T extends Record<string, unknown>>(
   const startedAt = Date.now();
   const redactedRequest = { ...requestPayload };
   if ("biometricPayload" in redactedRequest) redactedRequest.biometricPayload = "[REDACTED]";
+  if ("aadhaarNumber" in redactedRequest) redactedRequest.aadhaarNumber = "[REDACTED]";
+  if ("accountNumber" in redactedRequest) redactedRequest.accountNumber = "[REDACTED]";
+  if ("panNumber" in redactedRequest) redactedRequest.panNumber = "[REDACTED]";
 
   let result: ProviderResult<T>;
   try {

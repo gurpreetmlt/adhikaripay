@@ -15,13 +15,24 @@ interface FundSelfFormProps {
 export function FundSelfForm({ onClose, onSuccess }: FundSelfFormProps) {
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
+  const [txnPin, setTxnPin] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!/^\d{4}$/.test(txnPin)) {
+      toast.error("Enter your 4-digit transaction PIN");
+      return;
+    }
     setLoading(true);
     try {
-      await api.post("/wallet/fund", { amount, ...(description ? { description } : {}) });
+      const idempotencyKey = `admin-fund-${crypto.randomUUID()}`;
+      await api.post("/wallet/fund", {
+        amount,
+        txnPin,
+        idempotencyKey,
+        ...(description ? { description } : {}),
+      });
       toast.success(`₹${amount} added to your wallet`);
       onSuccess();
       onClose();
@@ -54,7 +65,20 @@ export function FundSelfForm({ onClose, onSuccess }: FundSelfFormProps) {
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="e.g. Bank reconciliation ref #1234"
+            placeholder="e.g. Bank reconciliation ref"
+            className="w-full rounded-lg border border-border-subtle px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Transaction PIN</label>
+          <input
+            required
+            type="password"
+            inputMode="numeric"
+            maxLength={4}
+            value={txnPin}
+            onChange={(e) => setTxnPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            placeholder="••••"
             className="w-full rounded-lg border border-border-subtle px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
           />
         </div>

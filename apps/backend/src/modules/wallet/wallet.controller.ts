@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { fundWalletSchema, transferWalletSchema, ledgerQuerySchema } from "./wallet.validators";
 import { getWalletBalances, transferToChild, adminFundOwnWallet, getWalletLedger } from "./wallet.service";
-import { verifyTxnPinOrThrow } from "../auth/txnPin";
+import { assertTxnAuthorization } from "../auth/txnPin";
 import { sendSuccess } from "../../utils/apiResponse";
 import { HttpError } from "../../utils/httpError";
 
@@ -19,15 +19,23 @@ export async function getMyWallets(req: Request, res: Response): Promise<void> {
 export async function fund(req: Request, res: Response): Promise<void> {
   const actor = requireActor(req);
   const input = fundWalletSchema.parse(req.body);
-  const result = await adminFundOwnWallet(actor, input.amount, input.description);
+  await assertTxnAuthorization(actor.id, { txnPin: input.txnPin, txnAuth: input.txnAuth });
+  const result = await adminFundOwnWallet(actor, input.amount, input.description, input.idempotencyKey);
   sendSuccess(res, result, "Wallet funded successfully");
 }
 
 export async function transfer(req: Request, res: Response): Promise<void> {
   const actor = requireActor(req);
   const input = transferWalletSchema.parse(req.body);
-  await verifyTxnPinOrThrow(actor.id, input.txnPin);
-  const result = await transferToChild(actor, input.targetUserId, input.walletType, input.amount, input.description);
+  await assertTxnAuthorization(actor.id, { txnPin: input.txnPin, txnAuth: input.txnAuth });
+  const result = await transferToChild(
+    actor,
+    input.targetUserId,
+    input.walletType,
+    input.amount,
+    input.description,
+    input.idempotencyKey,
+  );
   sendSuccess(res, result, "Transfer completed successfully");
 }
 

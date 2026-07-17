@@ -28,6 +28,7 @@ export function FundForm({ target, onClose, onSuccess }: FundFormProps) {
         walletType: "main",
         amount,
         txnPin,
+        idempotencyKey: `xfer-${target.id}-${crypto.randomUUID()}`,
         ...(description ? { description } : {}),
       });
       toast.success(`₹${amount} sent to ${target.name}`);

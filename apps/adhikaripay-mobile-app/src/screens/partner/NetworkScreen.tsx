@@ -212,9 +212,9 @@ function FundModal({
       showAlert("Invalid amount", "Enter a valid amount.");
       return;
     }
-    let txnPin: string;
+    let txnAuth: string;
     try {
-      txnPin = await promptPin();
+      txnAuth = await promptPin();
     } catch {
       return;
     }
@@ -224,7 +224,8 @@ function FundModal({
         targetUserId: target.id,
         walletType: "main",
         amount,
-        txnPin,
+        txnAuth,
+        idempotencyKey: `xfer-${target.id}-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`,
         ...(note ? { description: note } : {}),
       });
       showAlert("Success", `₹${amount} sent to ${target.name}`);

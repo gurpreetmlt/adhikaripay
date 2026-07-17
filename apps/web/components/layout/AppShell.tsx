@@ -247,8 +247,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadWallets]);
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    const { logoutEverywhere } = await import("@/lib/logout");
+    await logoutEverywhere();
     window.location.href = "/login";
   }
 

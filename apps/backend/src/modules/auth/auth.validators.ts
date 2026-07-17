@@ -28,6 +28,9 @@ export const registerSchema = z.object({
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 
+const deviceIdSchema = z.string().trim().min(8).max(100);
+const deviceLabelSchema = z.string().trim().max(150).optional();
+
 /** Agent: 10-digit mobile. Admin: username `admin` only (no OTP, no mobile login). */
 export const loginSchema = z
   .object({
@@ -35,6 +38,9 @@ export const loginSchema = z
     username: z.string().trim().optional(),
     password: z.string().min(1),
     portal: z.enum(AUTH_PORTALS).default("agent"),
+    /** After password login, trust this browser/device for MPIN (same as OTP verify). */
+    deviceId: deviceIdSchema.optional(),
+    deviceLabel: deviceLabelSchema,
   })
   .superRefine((data, ctx) => {
     if (data.portal === "admin") {
@@ -72,9 +78,6 @@ export const otpRequestSchema = z.object({
   role: z.enum(AGENT_LOGIN_ROLES).optional(),
 });
 export type OtpRequestInput = z.infer<typeof otpRequestSchema>;
-
-const deviceIdSchema = z.string().trim().min(8).max(100);
-const deviceLabelSchema = z.string().trim().max(150).optional();
 
 export const otpVerifySchema = z.object({
   mobile: mobileSchema,

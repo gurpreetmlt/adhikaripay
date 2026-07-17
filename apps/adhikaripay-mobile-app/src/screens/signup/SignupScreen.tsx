@@ -87,7 +87,7 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
       );
       if (!data.success) throw new Error(data.message);
       setOtpSent(true);
-      if (data.data.otp) {
+      if (__DEV__ && data.data.otp) {
         setDevOtp(data.data.otp);
         setOtp(data.data.otp);
       }
@@ -352,7 +352,7 @@ function StepDetails(props: {
         </Pressable>
       ) : (
         <View style={styles.otpBlock}>
-          {props.devOtp ? (
+          {__DEV__ && props.devOtp ? (
             <View style={[styles.devOtpBox, { borderColor: colors.green, backgroundColor: colors.greenBg }]}>
               <Text style={[styles.devOtpText, { color: colors.greenDark }]}>Dev OTP: {props.devOtp}</Text>
             </View>

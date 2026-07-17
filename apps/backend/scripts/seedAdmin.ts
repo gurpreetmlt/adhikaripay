@@ -8,13 +8,15 @@ import { generateUid } from "../src/utils/uid";
 
 /** Fixed admin portal credentials — username `admin` (not mobile). OTP disabled for admin. */
 const ADMIN_LOGIN_USER = "admin";
-const DEFAULT_MOBILE = "9999999999";
-const DEFAULT_PASSWORD = "Dg99@cr89";
 
 // Creates or resets the single root admin. Run: npm run seed:admin -w @adhikaripay/backend
+// Requires SEED_ADMIN_PASSWORD (min 12 chars). No hardcoded password in source.
 async function main() {
-  const mobile = process.env.SEED_ADMIN_MOBILE ?? DEFAULT_MOBILE;
-  const password = process.env.SEED_ADMIN_PASSWORD ?? DEFAULT_PASSWORD;
+  const mobile = process.env.SEED_ADMIN_MOBILE ?? "9999999999";
+  const password = process.env.SEED_ADMIN_PASSWORD;
+  if (!password || password.length < 12) {
+    throw new Error("SEED_ADMIN_PASSWORD env is required (min 12 characters). No default password.");
+  }
   const passwordHash = await hashPassword(password);
 
   const [existing] = await db
@@ -35,7 +37,7 @@ async function main() {
       .where(eq(users.id, existing.id));
 
     console.log(
-      `Root admin updated — login username: ${ADMIN_LOGIN_USER}, password: ${password} (mobile in DB: ${existing.mobile})`,
+      `Root admin updated — login username: ${ADMIN_LOGIN_USER} (password from SEED_ADMIN_PASSWORD; not printed)`,
     );
     await pgPool.end();
     return;
@@ -63,9 +65,7 @@ async function main() {
     await provisionWalletsForUser(tx, admin.id, admin.role);
   });
 
-  console.log(
-    `Root admin created — login username: ${ADMIN_LOGIN_USER}, password: ${password}, uid: ${uid}`,
-  );
+  console.log(`Root admin created — login username: ${ADMIN_LOGIN_USER} (password from env; not printed)`);
   await pgPool.end();
 }
 

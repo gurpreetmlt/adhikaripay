@@ -87,8 +87,11 @@ export function Sidebar() {
         <button
           type="button"
           onClick={() => {
-            logout();
-            window.location.href = "/login";
+            void import("@/lib/logout").then(({ logoutEverywhere }) =>
+              logoutEverywhere().then(() => {
+                window.location.href = "/login";
+              }),
+            );
           }}
           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-surface"
         >

@@ -22,6 +22,8 @@ npm-debug.log*
 LOGIN.md
 LOGIN.production.md
 account-details.txt
+apps/login.text
+**/login.text
 
 # Keys, certs, signing
 *.pem

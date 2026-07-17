@@ -1,5 +1,5 @@
-import { randomBytes, randomInt } from "node:crypto";
-import { eq, and, gt, isNull } from "drizzle-orm";
+import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { eq, and, isNull } from "drizzle-orm";
 import { db } from "../../db/postgres";
 import { users, userHierarchy, refreshTokens } from "../../db/postgres/schema";
 import { provisionWalletsForUser } from "../wallet/wallet.service";
@@ -8,8 +8,9 @@ import { encryptPII } from "../../utils/aes";
 import { generateUid, hashToken } from "../../utils/uid";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../utils/jwt";
 import { HttpError } from "../../utils/httpError";
-import { env } from "../../config/env";
+import { env, shouldExposeOtpInResponse } from "../../config/env";
 import { logger } from "../../utils/logger";
+import { assertStrongPin } from "../../utils/weakPin";
 import { insertAuditLog } from "../../db/postgres/repositories/auditLog";
 import {
   MAX_OTP_ATTEMPTS,
@@ -30,7 +31,7 @@ import {
   type DeviceRow,
 } from "../../db/postgres/repositories/device";
 import type { AuthPortal, AuthUser, UserRole } from "@adhikaripay/shared-types";
-import { isAdminRole, isAgentPortalRole, ROLE_LABELS } from "@adhikaripay/shared-types";
+import { isAdminRole, isAgentPortalRole } from "@adhikaripay/shared-types";
 import type {
   RegisterInput,
   LoginInput,
@@ -60,22 +61,11 @@ const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // keep in sync with JWT_
 // biometric on every transaction, so this only controls convenience of app access, not funds.
 const DEVICE_TRUST_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/** Default login MPIN for agent accounts that never set one (seed + first OTP/password login). */
-export const DEFAULT_AGENT_LOGIN_MPIN = "1234";
-
-async function ensureDefaultLoginMpin(
-  row: typeof users.$inferSelect,
-): Promise<typeof users.$inferSelect> {
-  if (row.loginMpinHash || isAdminRole(row.role) || !isAgentPortalRole(row.role)) {
-    return row;
-  }
-  const loginMpinHash = await hashPassword(DEFAULT_AGENT_LOGIN_MPIN);
-  const [updated] = await db
-    .update(users)
-    .set({ loginMpinHash, updatedAt: new Date() })
-    .where(eq(users.id, row.id))
-    .returning();
-  return updated ?? { ...row, loginMpinHash };
+function otpHashesEqual(storedHash: string, candidateOtp: string): boolean {
+  const a = Buffer.from(storedHash, "hex");
+  const b = Buffer.from(hashToken(candidateOtp), "hex");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 function toAuthUser(row: typeof users.$inferSelect): AuthUser {
@@ -239,17 +229,17 @@ async function findRootAdmin() {
   return row ?? null;
 }
 
-/** Dev-only: unlock admin login with fixed password even if DB still has old seed hash. */
-const FIXED_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? "Dg99@cr89";
-const FIXED_ADMIN_MOBILE = process.env.SEED_ADMIN_MOBILE ?? "9999999999";
-
+/** Dev-only: unlock admin when SEED_ADMIN_PASSWORD is set in env (no hardcoded fallback). */
 async function ensureDevAdminCredentials(
   candidatePassword: string,
 ): Promise<typeof users.$inferSelect | null> {
   if (env.NODE_ENV === "production") return null;
-  if (candidatePassword !== FIXED_ADMIN_PASSWORD) return null;
+  const seedPassword = process.env.SEED_ADMIN_PASSWORD;
+  const seedMobile = process.env.SEED_ADMIN_MOBILE ?? "9999999999";
+  if (!seedPassword || seedPassword.length < 12) return null;
+  if (candidatePassword !== seedPassword) return null;
 
-  const passwordHash = await hashPassword(FIXED_ADMIN_PASSWORD);
+  const passwordHash = await hashPassword(seedPassword);
   let row = await findRootAdmin();
 
   if (row) {
@@ -262,7 +252,7 @@ async function ensureDevAdminCredentials(
         kycStatus: "verified",
       })
       .where(eq(users.id, row.id));
-    logger.info({ userId: row.id }, "[DEV] Admin password/name synced to fixed credentials");
+    logger.info({ userId: row.id }, "[DEV] Admin password synced from SEED_ADMIN_PASSWORD");
     return { ...row, passwordHash, name: "Adhikari Pay Admin", isActive: true, kycStatus: "verified" };
   }
 
@@ -275,7 +265,7 @@ async function ensureDevAdminCredentials(
         parentId: null,
         role: "admin",
         name: "Adhikari Pay Admin",
-        mobile: FIXED_ADMIN_MOBILE,
+        mobile: seedMobile,
         passwordHash,
         kycStatus: "verified",
       })
@@ -286,7 +276,7 @@ async function ensureDevAdminCredentials(
     return admin;
   });
 
-  logger.info({ uid: created.uid }, "[DEV] Root admin created on first login with fixed credentials");
+  logger.info({ uid: created.uid }, "[DEV] Root admin created from SEED_ADMIN_PASSWORD");
   return created;
 }
 
@@ -350,8 +340,17 @@ export async function loginUser(
 
   assertPortalAccess(row.role, input.portal);
 
-  const withMpin = await ensureDefaultLoginMpin(row);
-  return issueSession(withMpin, context, "password");
+  // Password login on a known browser should establish the same device trust as OTP,
+  // otherwise Welcome-back MPIN always fails until the user does OTP once.
+  if (input.deviceId && isAgentPortalRole(row.role)) {
+    await trustDevice({
+      userId: row.id,
+      deviceId: input.deviceId,
+      label: input.deviceLabel,
+    });
+  }
+
+  return issueSession(row, context, "password");
 }
 
 const OTP_TTL_MS = 5 * 60 * 1000;
@@ -365,77 +364,63 @@ const OTP_TTL_MS = 5 * 60 * 1000;
 function assertExpectedLoginRole(accountRole: UserRole, expected?: UserRole) {
   if (!expected) return;
   if (accountRole === expected) return;
-  throw new HttpError(
-    403,
-    `This number is registered as ${ROLE_LABELS[accountRole]}. Change “Continue as” to ${ROLE_LABELS[accountRole]} and try again.`,
-    "ROLE_MISMATCH",
-  );
+  // Generic message — do not name the real role (enumeration oracle).
+  throw new HttpError(401, "Invalid credentials", "INVALID_CREDENTIALS");
 }
+
+const GENERIC_OTP_SENT = {
+  message: "If this number is registered, an OTP has been sent",
+  expiresInSeconds: (5 * 60 * 1000) / 1000,
+};
 
 export async function requestLoginOtp(
   input: OtpRequestInput,
   context: AuthContext,
 ): Promise<{ message: string; otp?: string; expiresInSeconds: number }> {
   if (input.portal === "admin") {
-    throw new HttpError(
-      403,
-      "Admin portal does not support OTP login. Use username and password.",
-      "ADMIN_OTP_DISABLED",
-    );
+    // Same shape as success — no admin-OTP oracle.
+    return { ...GENERIC_OTP_SENT };
   }
 
   const [row] = await db
-    .select({ id: users.id, role: users.role })
+    .select({ id: users.id, role: users.role, isActive: users.isActive })
     .from(users)
     .where(eq(users.mobile, input.mobile));
 
-  // Admin accounts can never authenticate via OTP (even if someone guesses the mobile).
-  if (row && isAdminRole(row.role)) {
-    throw new HttpError(
-      403,
-      "Admin accounts cannot use OTP login. Use the admin portal with username and password.",
-      "ADMIN_OTP_DISABLED",
-    );
+  // Admin / inactive / role mismatch: silent generic response (no OTP, no leak).
+  if (!row || !row.isActive || isAdminRole(row.role)) {
+    return { ...GENERIC_OTP_SENT };
+  }
+  if (input.role && row.role !== input.role) {
+    return { ...GENERIC_OTP_SENT };
   }
 
-  if (row && input.role) {
-    assertExpectedLoginRole(row.role, input.role);
-  }
-
-  const isDev = env.NODE_ENV !== "production";
-  // See the SECURITY note on EXPOSE_OTP_IN_RESPONSE in config/env.ts — temporary testing-only
-  // toggle, must be turned off once a real SMS provider is wired up.
-  const exposeOtp = isDev || env.EXPOSE_OTP_IN_RESPONSE;
+  const exposeOtp = shouldExposeOtpInResponse();
   const otp = randomInt(100000, 1000000).toString();
 
-  if (row || isDev) {
-    await insertOtpRequest({
-      mobile: input.mobile,
-      otpHash: hashToken(otp),
-      purpose: "login",
-      expiresAt: new Date(Date.now() + OTP_TTL_MS),
-    });
+  await insertOtpRequest({
+    mobile: input.mobile,
+    otpHash: hashToken(otp),
+    purpose: "login",
+    expiresAt: new Date(Date.now() + OTP_TTL_MS),
+  });
 
-    if (row) {
-      await insertAuditLog({
-        userId: row.id,
-        action: "auth.otp_requested",
-        entityType: "user",
-        entityId: row.id,
-        ipAddress: context.ipAddress,
-        userAgent: context.userAgent,
-        metadata: input.role ? { expectedRole: input.role } : undefined,
-      });
-    }
+  await insertAuditLog({
+    userId: row.id,
+    action: "auth.otp_requested",
+    entityType: "user",
+    entityId: row.id,
+    ipAddress: context.ipAddress,
+    userAgent: context.userAgent,
+    metadata: input.role ? { expectedRole: input.role } : undefined,
+  });
 
-    if (exposeOtp) {
-      logger.info({ mobile: input.mobile, otp, registered: !!row, role: input.role }, "[OTP EXPOSED] no SMS provider wired yet");
-    }
+  if (exposeOtp) {
+    logger.info({ mobile: input.mobile, registered: true, role: input.role }, "[OTP] generated (value not logged)");
   }
 
   return {
-    message: "If this number is registered, an OTP has been sent",
-    expiresInSeconds: OTP_TTL_MS / 1000,
+    ...GENERIC_OTP_SENT,
     ...(exposeOtp ? { otp } : {}),
   };
 }
@@ -445,11 +430,7 @@ export async function verifyLoginOtp(
   context: AuthContext,
 ): Promise<{ user: AuthUser; accessToken: string; refreshToken: string }> {
   if (input.portal === "admin") {
-    throw new HttpError(
-      403,
-      "Admin portal does not support OTP login. Use username and password.",
-      "ADMIN_OTP_DISABLED",
-    );
+    throw new HttpError(401, "Invalid credentials", "INVALID_CREDENTIALS");
   }
 
   const record = await findLatestActiveOtp({ mobile: input.mobile, purpose: "login" });
@@ -460,22 +441,14 @@ export async function verifyLoginOtp(
     throw new HttpError(401, "Too many incorrect attempts — request a new OTP", "OTP_LOCKED");
   }
 
-  if (record.otpHash !== hashToken(input.otp)) {
+  if (!otpHashesEqual(record.otpHash, input.otp)) {
     await incrementOtpAttempts(record.id);
     throw new HttpError(401, "Incorrect OTP", "OTP_INCORRECT");
   }
 
-  await markOtpConsumed(record.id);
-
   const [row] = await db.select().from(users).where(eq(users.mobile, input.mobile));
-  if (!row) throw new HttpError(401, "No account found for this number", "ACCOUNT_NOT_FOUND");
-  if (!row.isActive) throw new HttpError(401, "Account is inactive", "ACCOUNT_INACTIVE");
-  if (isAdminRole(row.role)) {
-    throw new HttpError(
-      403,
-      "Admin accounts cannot use OTP login. Use the admin portal with username and password.",
-      "ADMIN_OTP_DISABLED",
-    );
+  if (!row || !row.isActive || isAdminRole(row.role)) {
+    throw new HttpError(401, "Invalid credentials", "INVALID_CREDENTIALS");
   }
 
   assertPortalAccess(row.role, input.portal);
@@ -483,7 +456,7 @@ export async function verifyLoginOtp(
     assertExpectedLoginRole(row.role, input.role);
   }
 
-  const withMpin = await ensureDefaultLoginMpin(row);
+  await markOtpConsumed(record.id);
 
   // deviceId is optional here (older/unwired clients still get a normal OTP login) — trust is
   // simply not established for those, so they'll be asked for OTP again next time too.
@@ -498,15 +471,13 @@ export async function verifyLoginOtp(
       userAgent: context.userAgent,
       metadata: { deviceId: input.deviceId, label: input.deviceLabel ?? null },
     });
-    // Extension point: notify the user's other trusted devices ("new device login") once an
-    // SMS/push provider is wired up — same pattern as EXPOSE_OTP_IN_RESPONSE below.
     logger.info(
       { userId: row.id, deviceId: input.deviceId, label: input.deviceLabel },
       "[DEVICE TRUSTED] notify-other-devices not wired yet",
     );
   }
 
-  return issueSession(withMpin, context, "otp");
+  return issueSession(row, context, "otp");
 }
 
 export async function loginWithMpin(
@@ -514,22 +485,12 @@ export async function loginWithMpin(
   context: AuthContext,
 ): Promise<{ user: AuthUser; accessToken: string; refreshToken: string }> {
   if (input.portal === "admin") {
-    throw new HttpError(
-      403,
-      "Admin portal does not support MPIN login. Use username and password.",
-      "ADMIN_MPIN_DISABLED",
-    );
+    throw new HttpError(401, "Invalid credentials", "INVALID_CREDENTIALS");
   }
 
   const [row] = await db.select().from(users).where(eq(users.mobile, input.mobile));
-  if (!row) throw new HttpError(401, "No account found for this number", "ACCOUNT_NOT_FOUND");
-  if (!row.isActive) throw new HttpError(401, "Account is inactive", "ACCOUNT_INACTIVE");
-  if (isAdminRole(row.role)) {
-    throw new HttpError(
-      403,
-      "Admin accounts cannot use MPIN login. Use the admin portal with username and password.",
-      "ADMIN_MPIN_DISABLED",
-    );
+  if (!row || !row.isActive || isAdminRole(row.role)) {
+    throw new HttpError(401, "Invalid credentials", "INVALID_CREDENTIALS");
   }
 
   assertPortalAccess(row.role, input.portal);
@@ -537,40 +498,37 @@ export async function loginWithMpin(
     assertExpectedLoginRole(row.role, input.role);
   }
 
-  const withMpin = await ensureDefaultLoginMpin(row);
-
-  if (!withMpin.loginMpinHash) {
+  if (!row.loginMpinHash) {
     throw new HttpError(
       409,
-      "MPIN is not set yet. Login with OTP once, then set your MPIN from Account.",
+      "MPIN is not set yet. Login with OTP or password once, then set your MPIN from Account.",
       "MPIN_NOT_SET",
     );
   }
 
-  // Device trust gate: MPIN-only login is only allowed within the rolling trust window (see
-  // DEVICE_TRUST_WINDOW_MS). A never-seen device, a revoked one, or one that's gone stale all
-  // fall back to OTP — the client is expected to catch DEVICE_NOT_TRUSTED and switch tabs.
-  const device = await findDevice(withMpin.id, input.deviceId);
+  // Device trust gate: MPIN-only login is only allowed within the rolling trust window.
+  // Stale / missing / revoked device → client must force OTP or password (not "wrong MPIN").
+  const device = await findDevice(row.id, input.deviceId);
   const isFresh = device && !device.revokedAt && Date.now() - device.lastAuthAt.getTime() < DEVICE_TRUST_WINDOW_MS;
   if (!isFresh) {
     throw new HttpError(
       401,
-      "This device needs to verify with OTP again before using MPIN.",
+      "Session expired. Login again with OTP or password, then MPIN will work on this device.",
       "DEVICE_NOT_TRUSTED",
     );
   }
 
-  const ok = await comparePassword(input.mpin, withMpin.loginMpinHash);
+  const ok = await comparePassword(input.mpin, row.loginMpinHash);
   if (!ok) {
     const attempts = await incrementDeviceFailedAttempts(device.id);
     if (attempts >= MAX_DEVICE_MPIN_ATTEMPTS) {
       await revokeDevice(device.id);
     }
     await insertAuditLog({
-      userId: withMpin.id,
+      userId: row.id,
       action: "auth.mpin_failed",
       entityType: "user",
-      entityId: withMpin.id,
+      entityId: row.id,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
       metadata: { deviceId: input.deviceId, attempts, revoked: attempts >= MAX_DEVICE_MPIN_ATTEMPTS },
@@ -579,7 +537,7 @@ export async function loginWithMpin(
   }
 
   await touchDeviceAuth(device.id);
-  return issueSession(withMpin, context, "mpin");
+  return issueSession(row, context, "mpin");
 }
 
 export interface DeviceSummary {
@@ -634,6 +592,8 @@ export async function setLoginMpin(
     }
   }
 
+  assertStrongPin(input.mpin, "MPIN");
+
   const isChange = Boolean(row.loginMpinHash);
   const loginMpinHash = await hashPassword(input.mpin);
   await db
@@ -672,44 +632,93 @@ export async function refreshSession(
   }
 
   const tokenHash = hashToken(refreshToken);
-  const [stored] = await db
-    .select()
-    .from(refreshTokens)
-    .where(
-      and(
-        eq(refreshTokens.userId, payload.sub),
-        eq(refreshTokens.tokenHash, tokenHash),
-        isNull(refreshTokens.revokedAt),
-        gt(refreshTokens.expiresAt, new Date()),
-      ),
-    );
+  let reuseDetected = false;
 
-  if (!stored) throw new HttpError(401, "Refresh token has been revoked or expired", "INVALID_REFRESH_TOKEN");
+  try {
+    return await db.transaction(async (tx) => {
+      const [stored] = await tx
+        .select()
+        .from(refreshTokens)
+        .where(and(eq(refreshTokens.userId, payload.sub), eq(refreshTokens.tokenHash, tokenHash)))
+        .for("update");
 
-  const [user] = await db.select().from(users).where(eq(users.id, payload.sub));
-  if (!user || !user.isActive) throw new HttpError(401, "Account is inactive", "ACCOUNT_INACTIVE");
+      if (!stored) {
+        throw new HttpError(401, "Invalid or expired refresh token", "INVALID_REFRESH_TOKEN");
+      }
 
-  // Rotate: revoke the used token, issue a fresh pair.
-  const newAccessToken = signAccessToken({ id: user.id, uid: user.uid, role: user.role });
-  const { token: newRefreshToken } = signRefreshToken(user.id);
+      if (stored.revokedAt || stored.expiresAt.getTime() <= Date.now()) {
+        reuseDetected = true;
+        await tx
+          .update(refreshTokens)
+          .set({ revokedAt: new Date() })
+          .where(and(eq(refreshTokens.userId, payload.sub), isNull(refreshTokens.revokedAt)));
+        throw new HttpError(401, "Refresh token reuse detected — all sessions revoked", "TOKEN_REUSE");
+      }
 
-  await db.transaction(async (tx) => {
-    await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.id, stored.id));
-    await tx.insert(refreshTokens).values({
-      userId: user.id,
-      tokenHash: hashToken(newRefreshToken),
-      deviceInfo: stored.deviceInfo,
-      ipAddress: stored.ipAddress,
-      expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+      const [user] = await tx.select().from(users).where(eq(users.id, payload.sub));
+      if (!user || !user.isActive) {
+        throw new HttpError(401, "Account is inactive", "ACCOUNT_INACTIVE");
+      }
+
+      const newAccessToken = signAccessToken({ id: user.id, uid: user.uid, role: user.role });
+      const { token: newRefreshToken } = signRefreshToken(user.id);
+
+      await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.id, stored.id));
+      await tx.insert(refreshTokens).values({
+        userId: user.id,
+        tokenHash: hashToken(newRefreshToken),
+        deviceInfo: stored.deviceInfo,
+        ipAddress: stored.ipAddress,
+        expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+      });
+
+      return { accessToken: newAccessToken, refreshToken: newRefreshToken };
     });
-  });
-
-  return { accessToken: newAccessToken, refreshToken: newRefreshToken };
+  } catch (err) {
+    if (reuseDetected || (err instanceof HttpError && err.code === "TOKEN_REUSE")) {
+      await revokeAllDevicesForUser(payload.sub);
+    }
+    throw err;
+  }
 }
 
-export async function logoutUser(refreshToken: string): Promise<void> {
-  const tokenHash = hashToken(refreshToken);
-  await db.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.tokenHash, tokenHash));
+/** Revoke every refresh token + trusted device for the user (real logout). */
+export async function revokeAllSessionsForUser(userId: string): Promise<void> {
+  await db
+    .update(refreshTokens)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
+  await revokeAllDevicesForUser(userId);
+}
+
+export async function logoutUser(opts: {
+  userId?: string | null;
+  refreshToken?: string | null;
+}): Promise<void> {
+  let userId = opts.userId ?? null;
+
+  if (!userId && opts.refreshToken) {
+    const tokenHash = hashToken(opts.refreshToken);
+    const [stored] = await db
+      .select({ userId: refreshTokens.userId })
+      .from(refreshTokens)
+      .where(eq(refreshTokens.tokenHash, tokenHash))
+      .limit(1);
+    if (stored) {
+      userId = stored.userId;
+    } else {
+      try {
+        const payload = verifyRefreshToken(opts.refreshToken);
+        userId = payload.sub;
+      } catch {
+        /* ignore — always succeed logout */
+      }
+    }
+  }
+
+  if (userId) {
+    await revokeAllSessionsForUser(userId);
+  }
 }
 
 /** Self-signup: retailer under a distributor identified by UID. */
@@ -722,15 +731,13 @@ export async function requestSignupOtp(
   }
 
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.mobile, input.mobile));
-  if (existing) throw new HttpError(409, "Mobile number is already registered", "MOBILE_TAKEN");
+  if (existing) {
+    throw new HttpError(422, "Unable to complete signup request", "SIGNUP_REJECTED");
+  }
 
   const [sponsor] = await db.select().from(users).where(eq(users.uid, input.sponsorUid.trim().toUpperCase()));
   if (!sponsor || !sponsor.isActive || sponsor.role !== "distributor") {
-    throw new HttpError(
-      422,
-      "Invalid sponsor UID — enter your Distributor's UID (starts with DS…)",
-      "INVALID_SPONSOR",
-    );
+    throw new HttpError(422, "Unable to complete signup request", "SIGNUP_REJECTED");
   }
 
   const otp = randomInt(100000, 1000000).toString();
@@ -752,9 +759,9 @@ export async function requestSignupOtp(
     metadata: { mobile: input.mobile },
   });
 
-  const exposeOtp = env.NODE_ENV !== "production" || env.EXPOSE_OTP_IN_RESPONSE;
+  const exposeOtp = shouldExposeOtpInResponse();
   if (exposeOtp) {
-    logger.info({ mobile: input.mobile, otp, purpose: "signup" }, "[OTP EXPOSED] no SMS provider wired yet");
+    logger.info({ mobile: input.mobile, purpose: "signup" }, "[OTP] generated (value not logged)");
   }
 
   return {
@@ -778,7 +785,7 @@ export async function verifySignupOtp(
   if (record.attempts >= MAX_OTP_ATTEMPTS) {
     throw new HttpError(401, "Too many incorrect attempts — request a new OTP", "OTP_LOCKED");
   }
-  if (record.otpHash !== hashToken(input.otp)) {
+  if (!otpHashesEqual(record.otpHash, input.otp)) {
     await incrementOtpAttempts(record.id);
     throw new HttpError(401, "Incorrect OTP", "OTP_INCORRECT");
   }

@@ -473,8 +473,9 @@ function AepsPageInner() {
     setScanning(true);
     try {
       const pidData = await captureFingerprintWeb();
+      void pidData; // Biometric payload kept in memory for this capture only (not persisted).
       toast.success(`Fingerprint captured (${activeDevice.name})`);
-      sessionStorage.setItem("adhikaripay_aeps_pid", pidData);
+      // Keep PidData in memory only — never persist biometric XML to session/local storage.
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Capture failed";
       toast.error(msg, { duration: 12_000 });

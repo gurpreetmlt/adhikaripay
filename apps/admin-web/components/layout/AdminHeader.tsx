@@ -64,9 +64,10 @@ export function AdminHeader({ onOpenMobileNav }: { onOpenMobileNav?: () => void 
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
-  function handleLogout() {
+  async function handleLogout() {
     setProfileOpen(false);
-    logout();
+    const { logoutEverywhere } = await import("@/lib/logout");
+    await logoutEverywhere();
     window.location.href = "/login";
   }
 
