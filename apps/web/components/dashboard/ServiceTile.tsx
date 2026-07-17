@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import clsx from "clsx";
@@ -48,6 +49,8 @@ export function ServiceTile({
   const tile = designTileColors(index, false);
   const iconName = serviceCodeToDesignKey(code);
   const assetSrc = serviceIconPath(icon);
+  const [assetFailed, setAssetFailed] = useState(false);
+  const showAsset = Boolean(assetSrc) && !assetFailed;
   const isNew = badge === "NEW";
   const longPressHandlers = useLongPress(() => {
     if (!homeEditMode) onLongPress?.();
@@ -115,11 +118,16 @@ export function ServiceTile({
         ) : null}
         <span
           className="flex h-11 w-11 items-center justify-center rounded-xl"
-          style={{ background: assetSrc ? "transparent" : tile.bg }}
+          style={{ background: showAsset ? "transparent" : tile.bg }}
         >
-          {assetSrc ? (
+          {showAsset ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={assetSrc} alt="" className="h-9 w-9 object-contain" />
+            <img
+              src={assetSrc!}
+              alt=""
+              className="h-9 w-9 object-contain"
+              onError={() => setAssetFailed(true)}
+            />
           ) : (
             <DesignIcon name={iconName} size={26} color={tile.fg} strokeWidth={2.4} />
           )}
