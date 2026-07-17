@@ -9,8 +9,28 @@ import {
   transactions,
 } from "../../db/postgres/schema";
 import { transferBetweenWallets, fundWallet } from "./wallet.ledger";
+import { toPaise } from "./decimal";
 import { HttpError } from "../../utils/httpError";
+import { env } from "../../config/env";
+import { insertAuditLog } from "../../db/postgres/repositories/auditLog";
 import type { UserRole, WalletType } from "@adhikaripay/shared-types";
+
+/**
+ * Rejects a manual top-up above the configured single-call ceiling. Pure + cap-injected so the
+ * limit is unit-testable without a DB. Returns the amount in paise on success.
+ */
+export function assertWithinManualFundCap(amount: string, capRupees: number): number {
+  const paise = toPaise(amount);
+  if (paise <= 0) throw new HttpError(422, "Amount must be positive", "INVALID_AMOUNT");
+  if (paise > capRupees * 100) {
+    throw new HttpError(
+      422,
+      `Single manual top-up cannot exceed ₹${capRupees.toLocaleString("en-IN")}`,
+      "MANUAL_FUND_LIMIT_EXCEEDED",
+    );
+  }
+  return paise;
+}
 
 type Actor = { id: string; role: UserRole };
 
@@ -98,13 +118,23 @@ export async function transferToChild(
 }
 
 // Admin-only entry point for money entering the system from outside (bank reconciliation).
+// Capped per call and written to the immutable audit log with the acting admin's identity.
 export async function adminFundOwnWallet(
   actor: Actor,
   amount: string,
   description?: string,
 ): Promise<{ groupId: string }> {
+  assertWithinManualFundCap(amount, env.MAX_MANUAL_FUND_RUPEES);
   const wallet = await getWalletOrThrow(actor.id, "main");
-  return fundWallet({ walletId: wallet.id, amount, description });
+  const result = await fundWallet({ walletId: wallet.id, amount, description });
+  await insertAuditLog({
+    userId: actor.id,
+    action: "wallet.manual_fund",
+    entityType: "wallet",
+    entityId: wallet.id,
+    metadata: { amount, description: description ?? null, ledgerGroupId: result.groupId },
+  });
+  return result;
 }
 
 export interface LedgerEntryView {

@@ -27,6 +27,13 @@ const envSchema = z.object({
    * would let a retailer mint float without a real bank payout. Only turn this on in dev/staging.
    */
   ALLOW_STUB_PROVIDERS: z.coerce.boolean().default(false),
+  /**
+   * Hard ceiling (in rupees) on a single admin manual wallet top-up. Manual funding mints float
+   * from outside the system, so an unbounded call is the biggest single-action money risk. Raise
+   * deliberately if a genuine large reconciliation needs it; a real dual-approval workflow should
+   * replace this ceiling before scale.
+   */
+  MAX_MANUAL_FUND_RUPEES: z.coerce.number().positive().default(500000),
 });
 
 const parsed = envSchema.safeParse(process.env);
