@@ -78,25 +78,33 @@ export async function distributeCommissionForTxn(transactionId: string): Promise
     if (!beneWallet) continue;
 
     try {
-      const { groupId } = await transferBetweenWallets({
-        fromWalletId: systemWallet.id,
-        toWalletId: beneWallet.id,
-        amount: payout,
-        referenceType: "commission",
-        referenceId: txn.id,
-        description: `Commission ${txn.txnRef} (${member.role})`,
-      });
-      await db.insert(commissionLedger).values({
-        transactionId: txn.id,
-        beneficiaryUserId: member.userId,
-        role: member.role,
-        amount: payout,
-        ledgerGroupId: groupId,
+      // Transfer + ledger insert share one tx: if a concurrent distribution already paid this
+      // (transaction, beneficiary), the unique constraint makes the insert throw and the whole
+      // tx — including the money transfer — rolls back. No double payout.
+      await db.transaction(async (tx) => {
+        const { groupId } = await transferBetweenWallets(
+          {
+            fromWalletId: systemWallet.id,
+            toWalletId: beneWallet.id,
+            amount: payout,
+            referenceType: "commission",
+            referenceId: txn.id,
+            description: `Commission ${txn.txnRef} (${member.role})`,
+          },
+          tx,
+        );
+        await tx.insert(commissionLedger).values({
+          transactionId: txn.id,
+          beneficiaryUserId: member.userId,
+          role: member.role,
+          amount: payout,
+          ledgerGroupId: groupId,
+        });
       });
     } catch (err) {
-      // A failed payout must never break the customer txn — log and continue;
-      // reconciliation reports surface any gaps.
-      logger.error({ err, transactionId, beneficiary: member.userId }, "commission payout failed");
+      // Either a genuine payout failure or a duplicate (already paid this beneficiary for this
+      // txn) — both must never break the customer txn. Log and continue; reconciliation surfaces gaps.
+      logger.error({ err, transactionId, beneficiary: member.userId }, "commission payout skipped/failed");
     }
   }
 }

@@ -80,5 +80,8 @@ export const commissionLedger = pgTable(
   (table) => [
     index("commission_ledger_transaction_idx").on(table.transactionId),
     index("commission_ledger_beneficiary_idx").on(table.beneficiaryUserId),
+    // One payout per (transaction, beneficiary). A concurrent duplicate distribution hits this and
+    // rolls back its transfer (insert + transfer share one tx), so commission can't be double-paid.
+    uniqueIndex("commission_ledger_txn_beneficiary_key").on(table.transactionId, table.beneficiaryUserId),
   ],
 );
