@@ -47,6 +47,7 @@
 - [x] OTP role oracle closed; OTP keyed by mobile; old OTPs invalidated
 - [x] txnAuth ticket (PIN not echoed); RD package allowlist; KYC docs + transfer KYC
 - [x] Flat commission cap; amount max fail-closed; JWT algorithms pinned
+- [x] Double-debit: advisory lock on claim+debit / wallet idempotency; stable client attempt keys (DMT, fund, AEPS wd)
 - [ ] Android Keystore for bio refresh token (still AsyncStorage)
 - [ ] Cert pinning + httpOnly cookie BFF
 - [ ] History purge for any secrets ever pushed to remote

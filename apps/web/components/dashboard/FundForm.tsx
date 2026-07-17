@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { toast } from "react-hot-toast";
 import api from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
 import { extractApiError } from "@/lib/onboarding";
+import { createAttemptKeyHolder } from "@/lib/idempotencyKey";
 import type { DownlineUser } from "@/lib/types";
 
 interface FundFormProps {
@@ -18,9 +19,11 @@ export function FundForm({ target, onClose, onSuccess }: FundFormProps) {
   const [description, setDescription] = useState("");
   const [txnPin, setTxnPin] = useState("");
   const [loading, setLoading] = useState(false);
+  const attemptKey = useRef(createAttemptKeyHolder(`xfer-${target.id}`));
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     try {
       await api.post("/wallet/transfer", {
@@ -28,13 +31,15 @@ export function FundForm({ target, onClose, onSuccess }: FundFormProps) {
         walletType: "main",
         amount,
         txnPin,
-        idempotencyKey: `xfer-${target.id}-${crypto.randomUUID()}`,
+        idempotencyKey: attemptKey.current.get(),
         ...(description ? { description } : {}),
       });
+      attemptKey.current.clear();
       toast.success(`₹${amount} sent to ${target.name}`);
       onSuccess();
       onClose();
     } catch (err) {
+      // Keep the same key so a retry of this attempt cannot double-debit.
       toast.error(extractApiError(err, "Transfer failed"));
     } finally {
       setLoading(false);
@@ -51,7 +56,10 @@ export function FundForm({ target, onClose, onSuccess }: FundFormProps) {
             type="text"
             inputMode="decimal"
             value={amount}
-            onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
+            onChange={(e) => {
+              setAmount(e.target.value.replace(/[^\d.]/g, ""));
+              attemptKey.current.clear();
+            }}
             placeholder="1000.00"
             className="w-full rounded-lg border border-border-subtle px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
           />

@@ -1,4 +1,4 @@
-import { and, eq, isNull, desc } from "drizzle-orm";
+import { and, eq, isNull, desc, sql } from "drizzle-orm";
 import { db } from "../../db/postgres";
 import { services, transactions, users, wallets } from "../../db/postgres/schema";
 import { transferBetweenWallets } from "../wallet/wallet.ledger";
@@ -106,7 +106,7 @@ function assertAmountWithinLimits(
 export async function executeServiceTxn(input: ExecuteTxnInput): Promise<TxnOutcome> {
   const { actor, serviceCode, amount, idempotencyKey, operation, direction, walletType, metadata, invoke } = input;
 
-  // Idempotent replay: same key for this user returns the original outcome, never re-executes.
+  // Fast path: already claimed / settled for this key — never re-run money or provider.
   const [existing] = await db
     .select()
     .from(transactions)
@@ -125,26 +125,57 @@ export async function executeServiceTxn(input: ExecuteTxnInput): Promise<TxnOutc
   const systemWallet = needsMoney ? await getSystemWallet() : null;
   const userWallet = needsMoney ? await getUserWallet(actor.id, walletType) : null;
 
-  // 1. Record intent. A unique-violation race on idempotencyKey means a parallel
-  //    duplicate request — surface the original by re-reading.
+  // Claim + optional debit under one advisory lock so parallel same-key requests cannot
+  // both insert+debit. Debit uses the same DB tx so a failed balance check rolls back the row.
   let txn: TxnRow;
+  let replayOnly = false;
   try {
-    const [created] = await db
-      .insert(transactions)
-      .values({
-        txnRef,
-        idempotencyKey,
-        userId: actor.id,
-        serviceId: service.id,
-        providerId: routed.providerId,
-        amount: amount ?? "0",
-        status: "initiated",
-        walletType,
-        metadata,
-      })
-      .returning();
-    txn = created!;
+    const claimed = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${actor.id}:${idempotencyKey}`}))`);
+
+      const [again] = await tx
+        .select()
+        .from(transactions)
+        .where(and(eq(transactions.idempotencyKey, idempotencyKey), eq(transactions.userId, actor.id)));
+      if (again) return { row: again, replay: true as const };
+
+      const [created] = await tx
+        .insert(transactions)
+        .values({
+          txnRef,
+          idempotencyKey,
+          userId: actor.id,
+          serviceId: service.id,
+          providerId: routed.providerId,
+          amount: amount ?? "0",
+          status: "initiated",
+          walletType,
+          metadata,
+        })
+        .returning();
+      const row = created!;
+
+      if (needsMoney && direction === "debit") {
+        // Same tx as insert: insufficient balance rolls back the claim row (no orphan initiated txn).
+        await transferBetweenWallets(
+          {
+            fromWalletId: userWallet!.walletId,
+            toWalletId: systemWallet!.walletId,
+            amount: amount!,
+            referenceType: "service_txn",
+            referenceId: row.id,
+            description: `${service.name} ${txnRef}`,
+          },
+          tx,
+        );
+      }
+
+      return { row, replay: false as const };
+    });
+    txn = claimed.row;
+    replayOnly = claimed.replay;
   } catch (err) {
+    if (err instanceof HttpError) throw err;
     const [raced] = await db
       .select()
       .from(transactions)
@@ -153,29 +184,9 @@ export async function executeServiceTxn(input: ExecuteTxnInput): Promise<TxnOutc
     throw err;
   }
 
-  // 2. For debit services, move the money BEFORE calling the provider — the
-  //    balance check is atomic inside the transfer, so an insufficient wallet
-  //    can never reach the provider at all.
-  if (needsMoney && direction === "debit") {
-    try {
-      await transferBetweenWallets({
-        fromWalletId: userWallet!.walletId,
-        toWalletId: systemWallet!.walletId,
-        amount: amount!,
-        referenceType: "service_txn",
-        referenceId: txn.id,
-        description: `${service.name} ${txnRef}`,
-      });
-    } catch (err) {
-      await db
-        .update(transactions)
-        .set({ status: "failed", failureReason: "Wallet debit failed", updatedAt: new Date() })
-        .where(eq(transactions.id, txn.id));
-      throw err;
-    }
-  }
+  if (replayOnly) return { txn, provider: null };
 
-  // 3. Provider call.
+  // 3. Provider call (outside the money lock — may be slow / network).
   const result = await callProvider(routed, operation, txnRef, { ...metadata, amount }, (adapter) =>
     invoke({ ...routed, adapter }, txnRef),
   );

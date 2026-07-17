@@ -98,6 +98,11 @@ async function getWalletOrThrow(userId: string, walletType: WalletType) {
   return wallet;
 }
 
+/** Serialize same-user idempotency keys so check → money → record cannot race-double-spend. */
+async function lockUserIdempotencyKey(tx: Tx, userId: string, idempotencyKey: string): Promise<void> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${idempotencyKey}`}))`);
+}
+
 // A parent can only fund the wallet of a user they directly onboarded — mirrors how money
 // actually flows down the distributor network (distributor -> their own retailer, not anyone else's).
 export async function transferToChild(
@@ -110,16 +115,6 @@ export async function transferToChild(
 ): Promise<{ groupId: string }> {
   await assertActorKycVerified(actor.id);
 
-  if (idempotencyKey) {
-    const [prior] = await db
-      .select()
-      .from(walletIdempotency)
-      .where(
-        and(eq(walletIdempotency.userId, actor.id), eq(walletIdempotency.idempotencyKey, idempotencyKey)),
-      );
-    if (prior) return { groupId: prior.ledgerGroupId };
-  }
-
   const [target] = await db.select().from(users).where(eq(users.id, targetUserId));
   if (!target) throw new HttpError(404, "Target user not found", "USER_NOT_FOUND");
   if (target.parentId !== actor.id) {
@@ -129,34 +124,45 @@ export async function transferToChild(
   const fromWallet = await getWalletOrThrow(actor.id, "main");
   const toWallet = await getWalletOrThrow(targetUserId, walletType);
 
-  const result = await transferBetweenWallets({
-    fromWalletId: fromWallet.id,
-    toWalletId: toWallet.id,
-    amount,
-    referenceType: "downline_transfer",
-    referenceId: targetUserId,
-    description,
-  });
-
-  if (idempotencyKey) {
-    try {
-      await db.insert(walletIdempotency).values({
-        userId: actor.id,
-        idempotencyKey,
-        ledgerGroupId: result.groupId,
-      });
-    } catch {
-      const [raced] = await db
-        .select()
-        .from(walletIdempotency)
-        .where(
-          and(eq(walletIdempotency.userId, actor.id), eq(walletIdempotency.idempotencyKey, idempotencyKey)),
-        );
-      if (raced) return { groupId: raced.ledgerGroupId };
-    }
+  if (!idempotencyKey) {
+    return transferBetweenWallets({
+      fromWalletId: fromWallet.id,
+      toWalletId: toWallet.id,
+      amount,
+      referenceType: "downline_transfer",
+      referenceId: targetUserId,
+      description,
+    });
   }
 
-  return result;
+  return db.transaction(async (tx) => {
+    await lockUserIdempotencyKey(tx, actor.id, idempotencyKey);
+    const [prior] = await tx
+      .select()
+      .from(walletIdempotency)
+      .where(
+        and(eq(walletIdempotency.userId, actor.id), eq(walletIdempotency.idempotencyKey, idempotencyKey)),
+      );
+    if (prior) return { groupId: prior.ledgerGroupId };
+
+    const result = await transferBetweenWallets(
+      {
+        fromWalletId: fromWallet.id,
+        toWalletId: toWallet.id,
+        amount,
+        referenceType: "downline_transfer",
+        referenceId: targetUserId,
+        description,
+      },
+      tx,
+    );
+    await tx.insert(walletIdempotency).values({
+      userId: actor.id,
+      idempotencyKey,
+      ledgerGroupId: result.groupId,
+    });
+    return result;
+  });
 }
 
 // Admin-only entry point for money entering the system from outside (bank reconciliation).
@@ -168,36 +174,35 @@ export async function adminFundOwnWallet(
   idempotencyKey?: string,
 ): Promise<{ groupId: string }> {
   assertWithinManualFundCap(amount, env.MAX_MANUAL_FUND_RUPEES);
-
-  if (idempotencyKey) {
-    const [prior] = await db
-      .select()
-      .from(walletIdempotency)
-      .where(
-        and(eq(walletIdempotency.userId, actor.id), eq(walletIdempotency.idempotencyKey, idempotencyKey)),
-      );
-    if (prior) return { groupId: prior.ledgerGroupId };
-  }
-
   const wallet = await getWalletOrThrow(actor.id, "main");
-  const result = await fundWallet({ walletId: wallet.id, amount, description });
 
-  if (idempotencyKey) {
-    try {
-      await db.insert(walletIdempotency).values({
-        userId: actor.id,
-        idempotencyKey,
-        ledgerGroupId: result.groupId,
-      });
-    } catch {
-      const [raced] = await db
+  const runFund = async (tx?: Tx): Promise<{ groupId: string }> => {
+    if (tx) return fundWallet({ walletId: wallet.id, amount, description }, tx);
+    return fundWallet({ walletId: wallet.id, amount, description });
+  };
+
+  let result: { groupId: string };
+  if (!idempotencyKey) {
+    result = await runFund();
+  } else {
+    result = await db.transaction(async (tx) => {
+      await lockUserIdempotencyKey(tx, actor.id, idempotencyKey);
+      const [prior] = await tx
         .select()
         .from(walletIdempotency)
         .where(
           and(eq(walletIdempotency.userId, actor.id), eq(walletIdempotency.idempotencyKey, idempotencyKey)),
         );
-      if (raced) return { groupId: raced.ledgerGroupId };
-    }
+      if (prior) return { groupId: prior.ledgerGroupId };
+
+      const funded = await runFund(tx);
+      await tx.insert(walletIdempotency).values({
+        userId: actor.id,
+        idempotencyKey,
+        ledgerGroupId: funded.groupId,
+      });
+      return funded;
+    });
   }
 
   await insertAuditLog({

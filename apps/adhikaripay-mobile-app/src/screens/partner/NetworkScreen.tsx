@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import LinearGradient from "react-native-linear-gradient";
@@ -9,6 +9,7 @@ import { ModalSheet } from "../../components/ModalSheet";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { WalletBar } from "../../components/WalletBar";
 import { api, fetchApi } from "../../lib/api";
+import { createAttemptKeyHolder } from "../../lib/idempotencyKey";
 import { CHILD_ROLE, ROLE_LABEL } from "../../lib/roles";
 import type { DownlineUser, WalletBalance } from "../../lib/types";
 import { useAuthStore } from "../../store/auth";
@@ -206,8 +207,10 @@ function FundModal({
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const { promptPin, TxnPinPrompt } = useTxnPin();
+  const attemptKey = useRef(createAttemptKeyHolder(`xfer-${target.id}`));
 
   async function submit() {
+    if (loading) return;
     if (!amount || parseFloat(amount) <= 0) {
       showAlert("Invalid amount", "Enter a valid amount.");
       return;
@@ -225,9 +228,10 @@ function FundModal({
         walletType: "main",
         amount,
         txnAuth,
-        idempotencyKey: `xfer-${target.id}-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`,
+        idempotencyKey: attemptKey.current.get(),
         ...(note ? { description: note } : {}),
       });
+      attemptKey.current.clear();
       showAlert("Success", `₹${amount} sent to ${target.name}`);
       onSuccess();
       onClose();
@@ -245,7 +249,7 @@ function FundModal({
   return (
     <>
       <ModalSheet visible={visible} title={`Fund ${target.name}`} onClose={onClose}>
-      <Field label="Amount (₹)" value={amount} onChangeText={(t) => setAmount(t.replace(/[^\d.]/g, ""))} keyboardType="decimal-pad" />
+      <Field label="Amount (₹)" value={amount} onChangeText={(t) => { setAmount(t.replace(/[^\d.]/g, "")); attemptKey.current.clear(); }} keyboardType="decimal-pad" />
       <Field label="Note (optional)" value={note} onChangeText={setNote} />
       <Pressable onPress={submit} disabled={loading}>
         <LinearGradient colors={[...colors.gradient]} style={styles.submit}>

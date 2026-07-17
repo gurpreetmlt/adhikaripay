@@ -7,6 +7,7 @@ import type { ApiResponse } from "@adhikaripay/shared-types";
 import { api } from "../../lib/api";
 import { apiError } from "../../utils/apiError";
 import { formatINR } from "../../lib/format";
+import { createAttemptKeyHolder } from "../../lib/idempotencyKey";
 import { useTxnPin } from "../../hooks/useTxnPin";
 import { useTheme } from "../../theme/ThemeContext";
 import { colors, gradientDirection } from "../../theme/colors";
@@ -45,6 +46,7 @@ export function DmtScreen({ onBack }: DmtScreenProps) {
   const [mode, setMode] = useState<Mode>("imps");
   const [sending, setSending] = useState(false);
   const [txnRef, setTxnRef] = useState("");
+  const transferAttemptKey = React.useRef(createAttemptKeyHolder("dmt"));
 
   async function addBeneficiary() {
     if (newName.trim().length < 2 || newMobile.length !== 10 || newAccount.length < 6 || !newIfsc) {
@@ -80,11 +82,11 @@ export function DmtScreen({ onBack }: DmtScreenProps) {
   }
 
   async function confirmTransfer() {
-    if (!selected || !amount) return;
+    if (!selected || !amount || sending) return;
     try {
       const txnAuth = await promptPin();
       setSending(true);
-      const idempotencyKey = `dmt-${selected.id}-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+      const idempotencyKey = transferAttemptKey.current.get();
       const { data } = await api.post<ApiResponse<{ txn: { txnRef: string; status: string } }>>(
         "/txn/dmt/transfer",
         {
@@ -97,6 +99,7 @@ export function DmtScreen({ onBack }: DmtScreenProps) {
         },
       );
       if (!data.success) throw new Error(data.message);
+      transferAttemptKey.current.clear();
       setTxnRef(data.data.txn?.txnRef ?? idempotencyKey);
       setStep("done");
     } catch (err) {
@@ -144,6 +147,7 @@ export function DmtScreen({ onBack }: DmtScreenProps) {
                 key={b.id}
                 onPress={() => {
                   setSelected(b);
+                  transferAttemptKey.current.clear();
                   setStep("amount");
                 }}
                 style={[styles.benefRow, { backgroundColor: tokens.card, borderColor: tokens.cardBorder }]}
@@ -213,7 +217,10 @@ export function DmtScreen({ onBack }: DmtScreenProps) {
               <Text style={[styles.rupee, { color: tokens.txt }]}>₹</Text>
               <TextInput
                 value={amount}
-                onChangeText={(t) => setAmount(t.replace(/\D/g, ""))}
+                onChangeText={(t) => {
+                  setAmount(t.replace(/\D/g, ""));
+                  transferAttemptKey.current.clear();
+                }}
                 keyboardType="number-pad"
                 placeholder="0"
                 placeholderTextColor={tokens.mute}

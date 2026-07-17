@@ -91,6 +91,20 @@ describe("transferToChild authorization (P3.7 IDOR)", () => {
     ).rejects.toMatchObject({ code: "NOT_YOUR_DOWNLINE" });
     expect(await w.getBalance(w.distMainWalletId)).toBe("50.00"); // unchanged by the refused transfer
   });
+
+  it("same idempotency key concurrent transfer: money moves once", async () => {
+    await w.setBalance(w.distMainWalletId, "100.00");
+    await w.setBalance(w.retailerMainWalletId, "0");
+    const key = `xfer-p37-${w.suffix}`;
+
+    await Promise.all([
+      transferToChild({ id: w.distId, role: "distributor" }, w.retailerId, "main", "40.00", undefined, key),
+      transferToChild({ id: w.distId, role: "distributor" }, w.retailerId, "main", "40.00", undefined, key),
+    ]);
+
+    expect(await w.getBalance(w.distMainWalletId)).toBe("60.00");
+    expect(await w.getBalance(w.retailerMainWalletId)).toBe("40.00");
+  });
 });
 
 describe("commission math (P3.8)", () => {

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { toast } from "react-hot-toast";
 import api from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
+import { createAttemptKeyHolder } from "@/lib/idempotencyKey";
 
 interface FundSelfFormProps {
   onClose: () => void;
@@ -17,22 +18,24 @@ export function FundSelfForm({ onClose, onSuccess }: FundSelfFormProps) {
   const [description, setDescription] = useState("");
   const [txnPin, setTxnPin] = useState("");
   const [loading, setLoading] = useState(false);
+  const attemptKey = useRef(createAttemptKeyHolder("admin-fund"));
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (loading) return;
     if (!/^\d{4}$/.test(txnPin)) {
       toast.error("Enter your 4-digit transaction PIN");
       return;
     }
     setLoading(true);
     try {
-      const idempotencyKey = `admin-fund-${crypto.randomUUID()}`;
       await api.post("/wallet/fund", {
         amount,
         txnPin,
-        idempotencyKey,
+        idempotencyKey: attemptKey.current.get(),
         ...(description ? { description } : {}),
       });
+      attemptKey.current.clear();
       toast.success(`₹${amount} added to your wallet`);
       onSuccess();
       onClose();
@@ -55,7 +58,10 @@ export function FundSelfForm({ onClose, onSuccess }: FundSelfFormProps) {
             type="text"
             inputMode="decimal"
             value={amount}
-            onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
+            onChange={(e) => {
+              setAmount(e.target.value.replace(/[^\d.]/g, ""));
+              attemptKey.current.clear();
+            }}
             placeholder="100000.00"
             className="w-full rounded-lg border border-border-subtle px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
           />

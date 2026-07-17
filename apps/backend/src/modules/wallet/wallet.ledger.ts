@@ -98,21 +98,24 @@ interface FundParams {
   description?: string;
 }
 
+async function doFund(tx: Tx, params: FundParams): Promise<{ groupId: string }> {
+  const wallet = await lockWallet(tx, params.walletId);
+
+  const [group] = await tx
+    .insert(walletLedgerGroups)
+    .values({ referenceType: "external_funding", referenceId: params.referenceId, description: params.description })
+    .returning();
+  if (!group) throw new HttpError(500, "Failed to create ledger group");
+
+  await applyLockedEntry(tx, wallet, group.id, "credit", params.amount);
+
+  return { groupId: group.id };
+}
+
 // Money entering the system from outside (e.g. a reconciled bank transfer into the admin's
 // account). Intentionally single-sided — there is no internal counterparty wallet to debit;
 // referenceType "external_funding" marks the exception to the usual balanced-group rule.
-export async function fundWallet(params: FundParams): Promise<{ groupId: string }> {
-  return db.transaction(async (tx) => {
-    const wallet = await lockWallet(tx, params.walletId);
-
-    const [group] = await tx
-      .insert(walletLedgerGroups)
-      .values({ referenceType: "external_funding", referenceId: params.referenceId, description: params.description })
-      .returning();
-    if (!group) throw new HttpError(500, "Failed to create ledger group");
-
-    await applyLockedEntry(tx, wallet, group.id, "credit", params.amount);
-
-    return { groupId: group.id };
-  });
+export async function fundWallet(params: FundParams, existingTx?: Tx): Promise<{ groupId: string }> {
+  if (existingTx) return doFund(existingTx, params);
+  return db.transaction((tx) => doFund(tx, params));
 }

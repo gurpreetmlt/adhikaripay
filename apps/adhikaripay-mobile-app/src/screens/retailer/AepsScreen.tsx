@@ -31,6 +31,7 @@ import type { ApiResponse } from "@adhikaripay/shared-types";
 import { api } from "../../lib/api";
 import { apiError } from "../../utils/apiError";
 import { formatINR } from "../../lib/format";
+import { createAttemptKeyHolder } from "../../lib/idempotencyKey";
 import { captureFingerprint } from "../../lib/rdServiceFingerprint";
 import { useTxnPin } from "../../hooks/useTxnPin";
 import { useTheme } from "../../theme/ThemeContext";
@@ -445,6 +446,7 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
 
   const [scanning, setScanning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const withdrawAttemptKey = useRef(createAttemptKeyHolder("aeps-wd"));
   const scanAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -523,7 +525,7 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
           return;
         }
         setSubmitting(true);
-        const idempotencyKey = `aeps-wd-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+        const idempotencyKey = withdrawAttemptKey.current.get();
         const { data } = await api.post<ApiResponse<{ txn: { txnRef: string; status: string } }>>(
           "/txn/aeps/withdraw",
           {
@@ -537,6 +539,7 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
           },
         );
         if (!data.success) throw new Error(data.message);
+        withdrawAttemptKey.current.clear();
         Alert.alert(
           "Withdrawal Successful",
           `${formatINR(amount)} — Ref: ${data.data.txn?.txnRef ?? idempotencyKey}`,
