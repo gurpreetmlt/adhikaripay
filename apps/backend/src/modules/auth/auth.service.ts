@@ -8,7 +8,7 @@ import { encryptPII } from "../../utils/aes";
 import { generateUid, hashToken } from "../../utils/uid";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../utils/jwt";
 import { HttpError } from "../../utils/httpError";
-import { env, shouldExposeOtpInResponse } from "../../config/env";
+import { env, shouldExposeOtpInResponse, getTestOtpOverride } from "../../config/env";
 import { logger } from "../../utils/logger";
 import { assertStrongPin } from "../../utils/weakPin";
 import { insertAuditLog } from "../../db/postgres/repositories/auditLog";
@@ -396,7 +396,8 @@ export async function requestLoginOtp(
   }
 
   const exposeOtp = shouldExposeOtpInResponse();
-  const otp = randomInt(100000, 1000000).toString();
+  // Whitelisted test numbers get a fixed OTP (no SMS provider yet); everyone else random.
+  const otp = getTestOtpOverride(input.mobile) ?? randomInt(100000, 1000000).toString();
 
   await insertOtpRequest({
     mobile: input.mobile,
@@ -748,7 +749,7 @@ export async function requestSignupOtp(
     throw new HttpError(422, "Unable to complete signup request", "SIGNUP_REJECTED");
   }
 
-  const otp = randomInt(100000, 1000000).toString();
+  const otp = getTestOtpOverride(input.mobile) ?? randomInt(100000, 1000000).toString();
   await insertOtpRequest({
     mobile: input.mobile,
     otpHash: hashToken(otp),

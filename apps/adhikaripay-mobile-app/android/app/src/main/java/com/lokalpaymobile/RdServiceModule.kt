@@ -24,6 +24,11 @@ class RdServiceModule(private val reactContext: ReactApplicationContext) :
   private var capturePromise: Promise? = null
 
   companion object {
+    private const val ACTION_CAPTURE = "in.gov.uidai.rdservice.fp.CAPTURE"
+    private const val EXTRA_PID_OPTIONS = "PID_OPTIONS"
+    private const val EXTRA_PID_DATA = "PID_DATA"
+    private const val REQUEST_CAPTURE = 9911
+
     private val ALLOWED_RD_PREFIXES =
         listOf(
             "com.mantra",
@@ -193,12 +198,5 @@ class RdServiceModule(private val reactContext: ReactApplicationContext) :
 
   override fun onNewIntent(intent: Intent) {
     // no-op
-  }
-
-  companion object {
-    private const val ACTION_CAPTURE = "in.gov.uidai.rdservice.fp.CAPTURE"
-    private const val EXTRA_PID_OPTIONS = "PID_OPTIONS"
-    private const val EXTRA_PID_DATA = "PID_DATA"
-    private const val REQUEST_CAPTURE = 9911
   }
 }
