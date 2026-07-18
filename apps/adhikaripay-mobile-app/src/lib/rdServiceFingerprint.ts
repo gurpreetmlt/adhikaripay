@@ -39,6 +39,15 @@ export async function isRdServiceAvailable(rdPackage = DEFAULT_RD_PACKAGE): Prom
   }
 }
 
+export async function listInstalledRdPackages(): Promise<string[]> {
+  if (Platform.OS !== "android" || !RdService) return [];
+  try {
+    return await RdService.listRdPackages();
+  } catch {
+    return [];
+  }
+}
+
 export async function captureFingerprint(rdPackage = DEFAULT_RD_PACKAGE): Promise<string> {
   if (Platform.OS !== "android") {
     throw new Error("Biometric capture is only supported on Android");

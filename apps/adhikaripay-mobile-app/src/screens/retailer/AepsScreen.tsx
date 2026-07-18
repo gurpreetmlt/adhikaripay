@@ -33,7 +33,7 @@ import { api } from "../../lib/api";
 import { apiError } from "../../utils/apiError";
 import { formatINR } from "../../lib/format";
 import { createAttemptKeyHolder } from "../../lib/idempotencyKey";
-import { captureFingerprint } from "../../lib/rdServiceFingerprint";
+import { captureFingerprint, listInstalledRdPackages } from "../../lib/rdServiceFingerprint";
 import { useTxnPin } from "../../hooks/useTxnPin";
 import { useTheme } from "../../theme/ThemeContext";
 import { colors, gradientDirection } from "../../theme/colors";
@@ -111,6 +111,24 @@ const BIOMETRIC_DEVICES: BiometricDevice[] = [
   { id: "mantra_marc11", name: "Marc 11", rdPackage: "com.mantra.mfs110.rdservice", color: "#1976D2", letter: "M" },
   { id: "precision_pb1000", name: "PB1000 - L1", rdPackage: "com.precision.pb510.rdservice", color: "#7B1FA2", letter: "P" },
 ];
+
+/** Prefer Morpho, then Mantra, then any other installed allowlisted RD package. */
+async function detectConnectedDevice(): Promise<BiometricDevice | null> {
+  const installed = await listInstalledRdPackages();
+  if (installed.length === 0) return null;
+  const lower = installed.map((p) => p.toLowerCase());
+  const prefer = ["com.idemia.l1rdservice", "com.mantra.mfs110.rdservice"];
+  for (const pkg of prefer) {
+    if (lower.includes(pkg)) {
+      return BIOMETRIC_DEVICES.find((d) => d.rdPackage === pkg) ?? null;
+    }
+  }
+  for (const pkg of installed) {
+    const match = BIOMETRIC_DEVICES.find((d) => d.rdPackage.toLowerCase() === pkg.toLowerCase());
+    if (match) return match;
+  }
+  return null;
+}
 
 type AuthMode = "fingerprint" | "iris";
 
@@ -445,6 +463,8 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
   const [authMode, setAuthMode] = useState<AuthMode>("fingerprint");
   const [agentAuthReady, setAgentAuthReady] = useState<boolean | null>(null);
   const [agentAuthKycReady, setAgentAuthKycReady] = useState(true);
+  const [agentAadhaar, setAgentAadhaar] = useState("");
+  const [agentAadhaarVisible, setAgentAadhaarVisible] = useState(false);
   const [agentAuthConsent, setAgentAuthConsent] = useState(false);
   const [agentAuthScanning, setAgentAuthScanning] = useState(false);
   const [favBanks, setFavBanks] = useState<string[]>(["bob", "pnb", "sbi", "hdfc", "airtel", "icici"]);
@@ -468,6 +488,9 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
 
   useEffect(() => {
     let mounted = true;
+    void detectConnectedDevice().then((device) => {
+      if (mounted && device) setActiveDevice(device);
+    });
     void api
       .get<ApiResponse<{ verifiedToday: boolean; kycReady: boolean }>>("/auth/agent-auth/status")
       .then(({ data }) => {
@@ -484,6 +507,13 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
       mounted = false;
     };
   }, [onBack]);
+
+  useEffect(() => {
+    if (!deviceModalOpen) return;
+    void detectConnectedDevice().then((device) => {
+      if (device) setActiveDevice(device);
+    });
+  }, [deviceModalOpen]);
 
   const toggleFavBank = useCallback((id: string) => {
     setFavBanks((prev) =>
@@ -523,16 +553,22 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
     !submitting;
 
   async function verifyDailyAgentAuth() {
-    if (!agentAuthConsent || agentAuthScanning || !agentAuthKycReady) return;
+    if (!agentAuthConsent || agentAuthScanning || !agentAuthKycReady || agentAadhaar.length !== 12) return;
     setAgentAuthScanning(true);
     try {
-      const biometricPayload = await captureFingerprint(activeDevice.rdPackage);
+      // Prefer whatever RD Service is currently installed / OTG-ready.
+      const detected = await detectConnectedDevice();
+      const device = detected ?? activeDevice;
+      if (detected) setActiveDevice(detected);
+
+      const biometricPayload = await captureFingerprint(device.rdPackage);
       const { data } = await api.post<ApiResponse<{ verifiedAt: string }>>("/auth/agent-auth", {
+        aadhaarNumber: agentAadhaar,
         biometricPayload,
       });
       if (!data.success) throw new Error(data.message);
+      // Capture success → unlock AePS for the day (UIDAI provider verify later).
       setAgentAuthReady(true);
-      Alert.alert("Verification successful", "AePS access is unlocked for today.");
     } catch (err) {
       Alert.alert("Daily verification failed", apiError(err, "Fingerprint verification failed."));
     } finally {
@@ -647,12 +683,27 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
               Your registered KYC Aadhaar will be matched through the selected UIDAI L1 RD service.
             </Text>
 
-            <Text style={[s.fieldLabel, s.fieldLabelSpaced, { color: tokens.sub }]}>REGISTERED AADHAAR</Text>
+            <Text style={[s.fieldLabel, s.fieldLabelSpaced, { color: tokens.sub }]}>RETAILER AADHAAR NUMBER</Text>
             <View style={[s.inputRow, { borderColor: tokens.inputBorder, backgroundColor: tokens.inputBg }]}>
-              <Text style={[s.dailyAadhaar, { color: tokens.txt }]}>
-                {agentAuthKycReady ? "XXXX XXXX (from KYC)" : "KYC Aadhaar not found"}
-              </Text>
-              <Eye size={18} color={tokens.mute} />
+              <TextInput
+                value={formatAadhaar(agentAadhaar)}
+                onChangeText={(value) => setAgentAadhaar(value.replace(/\D/g, "").slice(0, 12))}
+                placeholder={agentAuthKycReady ? "Enter retailer's 12-digit Aadhaar" : "KYC Aadhaar not found"}
+                placeholderTextColor={tokens.mute}
+                keyboardType="number-pad"
+                inputMode="numeric"
+                maxLength={14}
+                editable={agentAuthKycReady && !agentAuthScanning}
+                secureTextEntry={!agentAadhaarVisible}
+                style={[s.dailyAadhaar, { color: tokens.txt }]}
+              />
+              <Pressable onPress={() => setAgentAadhaarVisible((visible) => !visible)} hitSlop={10}>
+                {agentAadhaarVisible ? (
+                  <EyeOff size={18} color={tokens.mute} />
+                ) : (
+                  <Eye size={18} color={tokens.mute} />
+                )}
+              </Pressable>
             </View>
 
             <Pressable onPress={() => setAgentAuthConsent((v) => !v)} style={s.consentRow}>
@@ -680,10 +731,6 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
               </View>
             </View>
 
-            <View style={s.dailyFeeNote}>
-              <Text style={s.dailyFeeText}>₹  Note: Provider/bank may charge ₹0.94 for daily AePS 2FA.</Text>
-            </View>
-
             <View style={s.dailyDeviceRow}>
               <View style={[s.bioIconCircle, { backgroundColor: activeDevice.color }]}>
                 <Text style={s.bioIconLetter}>{activeDevice.letter}</Text>
@@ -698,10 +745,19 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
 
             <Pressable
               onPress={() => void verifyDailyAgentAuth()}
-              disabled={!agentAuthConsent || !agentAuthKycReady || agentAuthScanning}
+              disabled={
+                !agentAuthConsent ||
+                !agentAuthKycReady ||
+                agentAadhaar.length !== 12 ||
+                agentAuthScanning
+              }
               style={[
                 s.scanBtn,
-                (!agentAuthConsent || !agentAuthKycReady || agentAuthScanning) && s.scanBtnDisabled,
+                (!agentAuthConsent ||
+                  !agentAuthKycReady ||
+                  agentAadhaar.length !== 12 ||
+                  agentAuthScanning) &&
+                  s.scanBtnDisabled,
               ]}
             >
               <LinearGradient
@@ -1088,15 +1144,6 @@ const s = StyleSheet.create({
   dailyModeSelected: { flex: 1, alignItems: "center", gap: 6 },
   dailyModeDisabled: { flex: 1, alignItems: "center", gap: 6, opacity: 0.65 },
   dailySoon: { fontSize: 9, fontWeight: "700" },
-  dailyFeeNote: {
-    backgroundColor: "#FFF0BF",
-    borderColor: "#F4D77D",
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 13,
-    marginTop: 18,
-  },
-  dailyFeeText: { color: "#6B4B00", fontSize: 12, fontWeight: "700", lineHeight: 18 },
   dailyDeviceRow: { flexDirection: "row", alignItems: "center", gap: 12, marginVertical: 18 },
   header: {
     paddingTop: 50,

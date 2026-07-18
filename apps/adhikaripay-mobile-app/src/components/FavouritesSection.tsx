@@ -13,7 +13,7 @@ import { ServiceTile } from "./ServiceTile";
 import { DesignIcon } from "../lib/designIcons";
 import { flattenCatalogServices } from "../lib/catalog";
 import type { CatalogCategoryView } from "../lib/types";
-import { MAX_FAVORITES, selectFavoriteCodes, useFavoritesStore } from "../store/favorites";
+import { selectFavoriteCodes, useFavoritesStore } from "../store/favorites";
 import { colors } from "../theme/colors";
 import { useTheme } from "../theme/ThemeContext";
 
@@ -57,6 +57,9 @@ export function FavouritesSection({ userId, categories, homeEditMode, onEnterEdi
     setOpen((v) => !v);
   }
 
+  // Hide until at least one favourite exists — no blank card.
+  if (services.length === 0) return null;
+
   return (
     <View
       style={[
@@ -91,36 +94,27 @@ export function FavouritesSection({ userId, categories, homeEditMode, onEnterEdi
 
       {open ? (
         <View style={styles.body}>
-          {services.length === 0 ? (
-            <Text style={[styles.hint, { color: tokens.sub }]}>
-              Kisi bhi service icon par dabaye rakhein — edit mode me ★ se add karein (max{" "}
-              {MAX_FAVORITES})
-            </Text>
-          ) : (
-            <>
-              {homeEditMode ? (
-                <Text style={styles.editHint}>− dabayein favourite se hataane ke liye</Text>
-              ) : null}
-              <View style={styles.grid}>
-                {services.map((s, i) => (
-                  <ServiceTile
-                    key={s.id}
-                    code={s.code}
-                    name={s.name}
-                    badge={s.badge}
-                    icon={s.icon}
-                    index={i}
-                    isFavorite
-                    homeEditMode={homeEditMode}
-                    wiggle={homeEditMode}
-                    onLongPress={onEnterEditMode}
-                    onRemove={() => handleRemove(s.code)}
-                    onOpen={onOpenService ? () => onOpenService(s.code) : undefined}
-                  />
-                ))}
-              </View>
-            </>
-          )}
+          {homeEditMode ? (
+            <Text style={styles.editHint}>− dabayein favourite se hataane ke liye</Text>
+          ) : null}
+          <View style={styles.grid}>
+            {services.map((s, i) => (
+              <ServiceTile
+                key={s.id}
+                code={s.code}
+                name={s.name}
+                badge={s.badge}
+                icon={s.icon}
+                index={i}
+                isFavorite
+                homeEditMode={homeEditMode}
+                wiggle={homeEditMode}
+                onLongPress={onEnterEditMode}
+                onRemove={() => handleRemove(s.code)}
+                onOpen={onOpenService ? () => onOpenService(s.code) : undefined}
+              />
+            ))}
+          </View>
         </View>
       ) : null}
     </View>
@@ -161,14 +155,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   body: { paddingHorizontal: 12, paddingBottom: 18, paddingTop: 6 },
-  hint: {
-    fontSize: 12,
-    color: colors.textMuted,
-    textAlign: "center",
-    lineHeight: 17,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-  },
   editHint: {
     fontSize: 11,
     fontWeight: "600",

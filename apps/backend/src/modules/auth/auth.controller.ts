@@ -184,6 +184,7 @@ export async function verifyTransactionPin(req: Request, res: Response): Promise
 }
 
 const agentAuthSchema = z.object({
+  aadhaarNumber: z.string().regex(/^\d{12}$/, "Aadhaar number must be 12 digits"),
   biometricPayload: z.string().min(1),
 });
 
@@ -192,6 +193,7 @@ export async function agentAuth(req: Request, res: Response): Promise<void> {
   const input = agentAuthSchema.parse(req.body);
   const result = await verifyAndRecordAgentAuth(
     { id: req.auth.sub },
+    input.aadhaarNumber,
     input.biometricPayload,
     { ipAddress: req.ip ?? null, userAgent: req.headers["user-agent"] ?? null },
   );

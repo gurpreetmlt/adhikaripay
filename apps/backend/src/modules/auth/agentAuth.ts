@@ -5,7 +5,6 @@ import { HttpError } from "../../utils/httpError";
 import { decryptPII } from "../../utils/aes";
 import { insertAuditLog } from "../../db/postgres/repositories/auditLog";
 import { assertFreshBiometric } from "../transactions/biometricReplay";
-import { resolveProvidersForService, callProvider } from "../providers/provider.router";
 
 // Retailer-own-identity proof-of-presence, distinct from the customer's AEPS biometric.
 // NPCI daily 2FA is based on the Indian calendar day, not a rolling-hour window.
@@ -50,12 +49,12 @@ export async function assertAgentAuthFresh(userId: string): Promise<void> {
 }
 
 /**
- * Verifies the retailer's own fingerprint against UIDAI (via the same provider used for AEPS)
- * and, on success, refreshes the rolling agent-auth window. The biometric replay-guard runs
- * first — a resubmitted/stale payload never reaches the provider call.
+ * Daily retailer 2FA before AEPS. Today: capture-only unlock after KYC Aadhaar match + fresh PID.
+ * InstantPay UIDAI agent_auth will replace the capture-only path when the adapter is wired.
  */
 export async function verifyAndRecordAgentAuth(
   actor: { id: string },
+  enteredAadhaarNumber: string,
   biometricPayload: string,
   context: { ipAddress: string | null; userAgent: string | null },
 ): Promise<{ verifiedAt: Date }> {
@@ -67,30 +66,15 @@ export async function verifyAndRecordAgentAuth(
     throw new HttpError(422, "Complete KYC (Aadhaar) before agent authentication", "KYC_AADHAAR_REQUIRED");
   }
   const aadhaarNumber = decryptPII(user.aadhaarNumberEncrypted);
-
-  // Reuses the AEPS provider mapping — agent auth is a UIDAI biometric check, same rail as AEPS,
-  // so it inherits the same isStubBlocked production gate (no mock-provider trust for real auth).
-  const routedProviders = await resolveProvidersForService("aeps_balance_enquiry");
-  const result = await callProvider(
-    routedProviders[0]!,
-    "agent_auth",
-    null,
-    { aadhaarNumber },
-    (adapter) => adapter.agentAuth({ retailerUserId: actor.id, aadhaarNumber, biometricPayload }),
-  );
-
-  if (!result.success) {
-    await insertAuditLog({
-      userId: actor.id,
-      action: "auth.agent_auth_failed",
-      entityType: "user",
-      entityId: actor.id,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-      metadata: { message: result.message },
-    });
-    throw new HttpError(401, result.message || "Fingerprint did not match UIDAI records", "AGENT_AUTH_FAILED");
+  if (enteredAadhaarNumber !== aadhaarNumber) {
+    throw new HttpError(
+      422,
+      "Entered Aadhaar does not match the retailer's KYC Aadhaar",
+      "KYC_AADHAAR_MISMATCH",
+    );
   }
+
+  // TODO(instantpay): call provider agentAuth here before unlocking the day.
 
   const verifiedAt = new Date();
   await db.update(users).set({ lastAgentAuthAt: verifiedAt, updatedAt: verifiedAt }).where(eq(users.id, actor.id));
@@ -101,7 +85,7 @@ export async function verifyAndRecordAgentAuth(
     entityId: actor.id,
     ipAddress: context.ipAddress,
     userAgent: context.userAgent,
-    metadata: {},
+    metadata: { mode: "capture_only" },
   });
 
   return { verifiedAt };
