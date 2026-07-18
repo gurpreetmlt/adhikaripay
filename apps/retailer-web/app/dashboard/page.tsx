@@ -15,7 +15,7 @@ import { PromoBanner } from "@/components/dashboard/PromoBanner";
 export default function DashboardPage() {
   const router = useRouter();
   const hydrated = useAuthHydrated();
-  const accessToken = useAuthStore((s) => s.accessToken);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   const [categories, setCategories] = useState<CatalogCategoryView[]>([]);
   const [wallets, setWallets] = useState<WalletBalance[]>([]);
@@ -41,14 +41,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!hydrated) return;
-    if (!accessToken) {
+    if (!isAuthenticated) {
       router.replace("/login");
       return;
     }
     void loadData();
-  }, [hydrated, accessToken, router, loadData]);
+  }, [hydrated, isAuthenticated, router, loadData]);
 
-  if (!hydrated || !accessToken) return null;
+  if (!hydrated || !isAuthenticated) return null;
 
   return (
     <div className="flex min-h-screen">

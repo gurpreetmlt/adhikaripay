@@ -20,6 +20,9 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { B } from "@/lib/brand";
+import api from "@/lib/api";
+import { useAuthStore } from "@/lib/store";
+import type { ApiResponse } from "@adhikaripay/shared-types";
 import {
   captureFingerprintWeb,
   formatRdDeviceLabel,
@@ -83,7 +86,7 @@ interface BiometricDevice {
 const BIOMETRIC_DEVICES: BiometricDevice[] = [
   { id: "mantra_mfs110", name: "Mantra MFS110 L1", rdPackage: "com.mantra.mfs110.rdservice", color: "#1565C0", letter: "M" },
   { id: "startek_fm220", name: "Startek L1", rdPackage: "com.acpl.registersdk", color: "#4A148C", letter: "S" },
-  { id: "morpho_mso1300", name: "Morpho MSO L1", rdPackage: "com.scl.rdservice", color: "#E53935", letter: "M" },
+  { id: "morpho_mso1300", name: "Morpho MSO L1", rdPackage: "com.idemia.l1rdservice", color: "#E53935", letter: "M" },
   { id: "visiontek_v600", name: "VisionTek V600 L1", rdPackage: "com.linkwell.rdservice", color: "#00695C", letter: "V" },
   { id: "evolute_escan", name: "Evolute eScan L1", rdPackage: "com.evolute.rdservice", color: "#F57C00", letter: "E" },
   { id: "mantra_marc11", name: "Marc 11", rdPackage: "com.mantra.mfs110.rdservice", color: "#1976D2", letter: "M" },
@@ -355,6 +358,7 @@ export default function AepsPage() {
 function AepsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const user = useAuthStore((s) => s.user);
 
   const initialTab = useMemo(() => {
     const q = searchParams.get("tab");
@@ -378,11 +382,39 @@ function AepsPageInner() {
   const [rdStatus, setRdStatus] = useState<"looking" | "ready" | "missing">("looking");
   const [rdEndpoint, setRdEndpoint] = useState<RdEndpoint | null>(null);
   const [favBanks, setFavBanks] = useState<string[]>(["bob_vijaya", "pnb_obc", "psb", "sbi", "hdfc", "airtel", "icici", "pgb"]);
+  const [agentAuthReady, setAgentAuthReady] = useState<boolean | null>(null);
+  const [agentAuthKycReady, setAgentAuthKycReady] = useState(true);
+  const [agentAadhaar, setAgentAadhaar] = useState("");
+  const [agentAadhaarVisible, setAgentAadhaarVisible] = useState(false);
+  const [agentAuthConsent, setAgentAuthConsent] = useState(false);
+  const [agentAuthScanning, setAgentAuthScanning] = useState(false);
 
   useEffect(() => {
     const q = searchParams.get("tab");
     if (q && (AEPS_TABS as readonly string[]).includes(q)) setTab(q as AepsTab);
   }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .get<ApiResponse<{ verifiedToday: boolean; kycReady: boolean }>>("/auth/agent-auth/status")
+      .then(({ data }) => {
+        if (cancelled || !data.success) return;
+        setAgentAuthReady(data.data.verifiedToday);
+        setAgentAuthKycReady(data.data.kycReady);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const msg =
+          (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+          "Could not check AePS access";
+        toast.error(msg);
+        router.push("/dashboard");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   function applyDiscoveredDevice(ep: RdEndpoint) {
     setRdEndpoint(ep);
@@ -392,7 +424,7 @@ function AepsPageInner() {
     const match =
       BIOMETRIC_DEVICES.find((d) => name.includes("mfs110") && d.id === "mantra_mfs110") ||
       BIOMETRIC_DEVICES.find((d) => name.includes("marc") && d.id === "mantra_marc11") ||
-      BIOMETRIC_DEVICES.find((d) => name.includes("morpho") && d.id.includes("morpho")) ||
+      BIOMETRIC_DEVICES.find((d) => (name.includes("morpho") || name.includes("idemia")) && d.id.includes("morpho")) ||
       BIOMETRIC_DEVICES.find((d) => name.includes("startek") && d.id.includes("startek")) ||
       BIOMETRIC_DEVICES.find((d) => name.includes("evolute") && d.id.includes("evolute")) ||
       BIOMETRIC_DEVICES.find((d) => name.includes("vision") && d.id.includes("visiontek")) ||
@@ -400,7 +432,7 @@ function AepsPageInner() {
     if (match) setActiveDevice(match);
   }
 
-  /** Discover Mantra while user fills bank / Aadhaar — so Scan skips "looking for RD". */
+  /** Discover RD while user fills bank / Aadhaar — so Scan skips "looking for RD". */
   useEffect(() => {
     if (authMode !== "fingerprint") return;
     let cancelled = false;
@@ -436,6 +468,50 @@ function AepsPageInner() {
     else {
       setRdEndpoint(null);
       setRdStatus("missing");
+    }
+  }
+
+  async function verifyDailyAgentAuth() {
+    if (agentAuthScanning) return;
+    if (!agentAuthKycReady) {
+      toast.error("Complete KYC Aadhaar before AePS access");
+      return;
+    }
+    if (agentAadhaar.replace(/\D/g, "").length !== 12) {
+      toast.error("Enter retailer's 12-digit Aadhaar");
+      return;
+    }
+    if (!agentAuthConsent) {
+      toast.error("Accept Aadhaar consent to continue");
+      return;
+    }
+    if (rdStatus === "looking") {
+      toast.error("Scanner still connecting — wait a moment");
+      return;
+    }
+    if (rdStatus === "missing") {
+      toast.error("RD Service not found. Open Mantra/Morpho RDService on this PC, then Retry.");
+      return;
+    }
+
+    setAgentAuthScanning(true);
+    try {
+      const biometricPayload = await captureFingerprintWeb();
+      const { data } = await api.post<ApiResponse<{ verifiedAt: string }>>("/auth/agent-auth", {
+        aadhaarNumber: agentAadhaar.replace(/\D/g, ""),
+        biometricPayload,
+      });
+      if (!data.success) throw new Error(data.message);
+      setAgentAuthReady(true);
+      toast.success("AePS unlocked for today");
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (err instanceof Error ? err.message : "Fingerprint verification failed");
+      toast.error(msg, { duration: 10_000 });
+      void retryRdWarm();
+    } finally {
+      setAgentAuthScanning(false);
     }
   }
 
@@ -501,6 +577,161 @@ function AepsPageInner() {
     const digits = v.replace(/\D/g, "");
     if (digits.length <= 4) return digits;
     return "XXXX XXXX " + digits.slice(-4);
+  }
+
+  if (agentAuthReady === null) {
+    return (
+      <AppShell>
+        <div className="mx-auto flex max-w-xl flex-col items-center gap-3 p-10">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+          <p className="text-sm font-medium text-gray-500">Checking today&apos;s AePS verification…</p>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (!agentAuthReady) {
+    const retailerLabel = user?.name?.trim() || "Retailer";
+    return (
+      <AppShell>
+        <div className="mx-auto max-w-xl p-6">
+          <div className="mb-5 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard")}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border hover:bg-gray-50"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <h1 className="text-xl font-bold" style={{ color: B.blue }}>
+                Mandatory 2FA for AePS Access
+              </h1>
+              <p className="text-xs" style={{ color: B.muted }}>
+                Verify once daily before your first AePS or Aadhaar Pay transaction.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-5 rounded-2xl border bg-white p-6 shadow-sm">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Daily retailer verification</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Enter your KYC Aadhaar, then scan fingerprint on the connected RD device.
+              </p>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold tracking-wide text-gray-500">
+                AADHAAR NUMBER OF {retailerLabel.toUpperCase()}
+              </label>
+              <div className="mt-2 flex items-center gap-2 rounded-xl border px-3 py-2.5">
+                <input
+                  value={
+                    agentAadhaarVisible
+                      ? formatAadhaar(agentAadhaar)
+                      : maskAadhaar(agentAadhaar)
+                  }
+                  onChange={(e) => setAgentAadhaar(e.target.value.replace(/\D/g, "").slice(0, 12))}
+                  onFocus={() => setAgentAadhaarVisible(true)}
+                  placeholder={agentAuthKycReady ? "Enter 12-digit Aadhaar" : "KYC Aadhaar not found"}
+                  disabled={!agentAuthKycReady || agentAuthScanning}
+                  inputMode="numeric"
+                  className="flex-1 bg-transparent text-sm font-semibold outline-none disabled:text-gray-400"
+                />
+                <button type="button" onClick={() => setAgentAadhaarVisible((v) => !v)} className="text-gray-400">
+                  {agentAadhaarVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            <label className="flex cursor-pointer items-start gap-3 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={agentAuthConsent}
+                onChange={(e) => setAgentAuthConsent(e.target.checked)}
+                className="mt-1"
+              />
+              <span>I accept Aadhaar Consent for today&apos;s AePS access.</span>
+            </label>
+
+            <div className="rounded-xl border p-4">
+              <p className="mb-3 text-xs font-bold tracking-wide text-gray-500">AUTHENTICATION MODE</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-blue-500 bg-blue-50 p-4">
+                  <Fingerprint size={32} className="text-blue-600" />
+                  <span className="text-sm font-bold text-blue-700">Fingerprint</span>
+                  <CircleDot size={14} className="text-green-600" />
+                </div>
+                <div className="flex flex-col items-center gap-2 rounded-xl border p-4 opacity-60">
+                  <ScanEye size={32} className="text-gray-400" />
+                  <span className="text-sm font-bold text-gray-500">Eye Scan</span>
+                  <span className="text-[10px] font-bold text-gray-400">Coming soon</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 rounded-xl border p-3">
+              <div
+                className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white"
+                style={{ backgroundColor: activeDevice.color }}
+              >
+                {activeDevice.letter}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-gray-900">
+                  {rdEndpoint ? formatRdDeviceLabel(rdEndpoint) : activeDevice.name}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {rdStatus === "ready"
+                    ? "Device ready"
+                    : rdStatus === "looking"
+                      ? "Looking for RD Service…"
+                      : "RD Service not found"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void retryRdWarm()}
+                className="text-xs font-bold text-blue-600 hover:underline"
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeviceSidebarOpen(true)}
+                className="text-xs font-bold text-blue-600 hover:underline"
+              >
+                Change Device
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void verifyDailyAgentAuth()}
+              disabled={
+                agentAuthScanning ||
+                !agentAuthKycReady ||
+                !agentAuthConsent ||
+                agentAadhaar.replace(/\D/g, "").length !== 12
+              }
+              className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-bold text-white disabled:opacity-50"
+              style={{ background: `linear-gradient(135deg, ${B.green}, ${B.blue})` }}
+            >
+              <Fingerprint size={18} />
+              {agentAuthScanning ? "Place finger on scanner…" : "Scan Finger"}
+            </button>
+          </div>
+
+          <DeviceSidebar
+            open={deviceSidebarOpen}
+            onClose={() => setDeviceSidebarOpen(false)}
+            activeDeviceId={activeDevice.id}
+            onSelect={setActiveDevice}
+          />
+        </div>
+      </AppShell>
+    );
   }
 
   return (

@@ -24,13 +24,13 @@ interface LedgerEntry {
 export default function PassbookPage() {
   const router = useRouter();
   const hydrated = useAuthHydrated();
-  const accessToken = useAuthStore((s) => s.accessToken);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!hydrated) return;
-    if (!accessToken) {
+    if (!isAuthenticated) {
       router.replace("/login");
       return;
     }
@@ -38,9 +38,9 @@ export default function PassbookPage() {
       .then(setEntries)
       .catch(() => toast.error("Failed to load passbook"))
       .finally(() => setLoading(false));
-  }, [hydrated, accessToken, router]);
+  }, [hydrated, isAuthenticated, router]);
 
-  if (!hydrated || !accessToken) return null;
+  if (!hydrated || !isAuthenticated) return null;
 
   return (
     <div className="flex min-h-screen">

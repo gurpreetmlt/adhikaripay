@@ -8,12 +8,12 @@ import { useAuthHydrated } from "@/lib/useAuthHydrated";
 export default function RootPage() {
   const router = useRouter();
   const hydrated = useAuthHydrated();
-  const accessToken = useAuthStore((s) => s.accessToken);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   useEffect(() => {
     if (!hydrated) return;
-    router.replace(accessToken ? "/dashboard" : "/login");
-  }, [hydrated, accessToken, router]);
+    router.replace(isAuthenticated ? "/dashboard" : "/login");
+  }, [hydrated, isAuthenticated, router]);
 
   return null;
 }

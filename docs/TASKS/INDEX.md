@@ -33,6 +33,7 @@
 | 09 | AEPS | L ⚠️ split | [09-retailer-aeps.md](09-retailer-aeps.md) |
 | 10 | DMT | L ⚠️ split | [10-retailer-dmt.md](10-retailer-dmt.md) |
 | 14 | BBPS & recharge | M | [14-retailer-bbps-recharge.md](14-retailer-bbps-recharge.md) |
+| 21 | InstantPay adapter | L ⚠️ split | [21-instantpay-adapter.md](21-instantpay-adapter.md) |
 
 ## Mobile (Android)
 | # | Task | Size | File |

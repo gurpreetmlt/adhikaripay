@@ -2,41 +2,21 @@ import axios from "axios";
 import type { ApiResponse } from "@adhikaripay/shared-types";
 import { useAuthStore } from "./store";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
-
+// Same-origin BFF proxy — never the real backend directly. The httpOnly session cookie is
+// attached by the browser automatically; no Authorization header or token handling needed here.
 const api = axios.create({
-  baseURL: API_BASE,
+  baseURL: "/api/proxy",
   headers: { "Content-Type": "application/json" },
   timeout: 15000,
 });
 
-api.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().accessToken;
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
 api.interceptors.response.use(
   (res) => res,
-  async (error) => {
-    const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
-      original._retry = true;
-      const refreshToken = useAuthStore.getState().refreshToken;
-      if (refreshToken) {
-        try {
-          const { data } = await axios.post(`${API_BASE}/auth/refresh`, { refreshToken });
-          if (data.success) {
-            useAuthStore.getState().setTokens(data.data.accessToken, data.data.refreshToken);
-            original.headers.Authorization = `Bearer ${data.data.accessToken}`;
-            return api(original);
-          }
-        } catch {
-          useAuthStore.getState().logout();
-        }
-      } else {
-        useAuthStore.getState().logout();
-      }
+  (error) => {
+    // The proxy already retried once with a refreshed token server-side; a 401 here means the
+    // session is genuinely dead (refresh token invalid/expired too).
+    if (error.response?.status === 401) {
+      useAuthStore.getState().logout();
     }
     return Promise.reject(error);
   },

@@ -11,15 +11,6 @@ interface AuthState {
   logout: () => void;
 }
 
-/** sessionStorage — clears when the tab closes; prefer httpOnly cookies (BFF) for production. */
-if (typeof window !== "undefined") {
-  try {
-    window.localStorage.removeItem("adhikaripay-admin-auth");
-  } catch {
-    /* ignore */
-  }
-}
-
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -31,7 +22,7 @@ export const useAuthStore = create<AuthState>()(
       logout: () => set({ accessToken: null, refreshToken: null, user: null }),
     }),
     {
-      name: "adhikaripay-admin-auth",
+      name: "adhikaripay-admin-auth-state",
       storage: createJSONStorage(() => sessionStorage),
     },
   ),

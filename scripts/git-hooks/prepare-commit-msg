@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Strip AI tool Co-authored-by / Made-with trailers from commit messages.
+# Cursor/Claude/Anthropic attribution must never land in this repo's history.
+# Installed via: git config core.hooksPath scripts/git-hooks
+
+MSG_FILE="$1"
+[ -n "$MSG_FILE" ] && [ -f "$MSG_FILE" ] || exit 0
+
+# Portable in-place edit (macOS + Linux)
+tmp="$(mktemp)"
+grep -v -E \
+  -e '^[[:space:]]*Co-authored-by:[[:space:]].*(Cursor|cursoragent@cursor\.com|Claude|Anthropic|noreply@anthropic\.com)' \
+  -e '^[[:space:]]*Co-Authored-By:[[:space:]].*(Cursor|cursoragent@cursor\.com|Claude|Anthropic|noreply@anthropic\.com)' \
+  -e '^[[:space:]]*Made-with:[[:space:]]*Cursor' \
+  -e '^[[:space:]]*Made with Cursor' \
+  "$MSG_FILE" > "$tmp" || true
+# Trim trailing blank lines left after deletions
+perl -i -pe 'chomp if eof' "$tmp" 2>/dev/null || true
+cat "$tmp" > "$MSG_FILE"
+rm -f "$tmp"
+exit 0

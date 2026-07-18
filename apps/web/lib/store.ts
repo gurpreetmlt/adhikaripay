@@ -12,15 +12,6 @@ interface AuthState {
   logout: () => void;
 }
 
-/** sessionStorage — clears when the tab closes; prefer httpOnly cookies (BFF) for production. */
-if (typeof window !== "undefined") {
-  try {
-    window.localStorage.removeItem("adhikaripay-web-auth");
-  } catch {
-    /* ignore */
-  }
-}
-
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -32,9 +23,9 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user }),
       logout: () => {
         try {
-          // Clear WebAuthn-bound refresh token on logout
           if (typeof window !== "undefined") {
             window.localStorage.removeItem("adhikaripay-web-biometric");
+            window.sessionStorage.removeItem("adhikaripay-web-biometric");
           }
         } catch {
           /* ignore */
@@ -43,7 +34,7 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: "adhikaripay-web-auth",
+      name: "adhikaripay-web-auth-state",
       storage: createJSONStorage(() => sessionStorage),
     },
   ),

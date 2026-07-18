@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
+import axios from "axios";
 import clsx from "clsx";
 import type { ApiResponse, AuthUser } from "@adhikaripay/shared-types";
 import api from "@/lib/api";
@@ -11,8 +12,6 @@ import { getDeviceId, getDeviceLabel } from "@/lib/deviceId";
 
 interface LoginResponseData {
   user: AuthUser;
-  accessToken: string;
-  refreshToken: string;
 }
 
 const RESEND_COOLDOWN_SECONDS = 30;
@@ -46,7 +45,7 @@ export default function LoginPage() {
       toast.error("This portal is for Retailers only");
       return;
     }
-    setAuth(data.user, { accessToken: data.accessToken, refreshToken: data.refreshToken });
+    setAuth(data.user);
     toast.success(`Welcome back, ${data.user.name}`);
     router.replace("/dashboard");
   }
@@ -55,7 +54,9 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const { data } = await api.post<ApiResponse<LoginResponseData>>("/auth/login", { mobile, password });
+      // Own Next.js route, not the proxy — it sets httpOnly session cookies and strips tokens
+      // from the JSON before it reaches this code.
+      const { data } = await axios.post<ApiResponse<LoginResponseData>>("/api/auth/login", { mobile, password });
       if (!data.success) throw new Error(data.message);
       completeLogin(data.data);
     } catch (err) {
@@ -97,7 +98,7 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const { data } = await api.post<ApiResponse<LoginResponseData>>("/auth/otp/verify", {
+      const { data } = await axios.post<ApiResponse<LoginResponseData>>("/api/auth/otp-verify", {
         mobile,
         otp,
         deviceId: getDeviceId(),

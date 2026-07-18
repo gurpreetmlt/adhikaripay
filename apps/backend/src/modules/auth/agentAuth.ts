@@ -58,8 +58,7 @@ export async function verifyAndRecordAgentAuth(
   biometricPayload: string,
   context: { ipAddress: string | null; userAgent: string | null },
 ): Promise<{ verifiedAt: Date }> {
-  await assertFreshBiometric(biometricPayload);
-
+  // Validate identity first — do not burn a PID on wrong Aadhaar / inactive account.
   const [user] = await db.select().from(users).where(eq(users.id, actor.id));
   if (!user || !user.isActive) throw new HttpError(403, "Account is not active", "ACCOUNT_INACTIVE");
   if (!user.aadhaarNumberEncrypted) {
@@ -73,6 +72,8 @@ export async function verifyAndRecordAgentAuth(
       "KYC_AADHAAR_MISMATCH",
     );
   }
+
+  await assertFreshBiometric(biometricPayload);
 
   // TODO(instantpay): call provider agentAuth here before unlocking the day.
 

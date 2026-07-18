@@ -12,3 +12,4 @@ alwaysApply: true
 - Creds: `LOGIN.md` only
 - Heavy cmds: Mac Terminal (see global token-efficiency rule)
 - Done: `docs/CHECKLIST.md` → new chat
+- **Git attribution:** never `Co-authored-by: Cursor|Claude|Anthropic` / `Made-with: Cursor` (see `docs/AGENT_PLAN.md`)

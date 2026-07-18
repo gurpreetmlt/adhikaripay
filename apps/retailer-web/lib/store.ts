@@ -3,23 +3,21 @@ import { persist } from "zustand/middleware";
 import type { AuthUser } from "@adhikaripay/shared-types";
 
 interface AuthState {
-  accessToken: string | null;
-  refreshToken: string | null;
+  /** Session flag only — the real tokens live in httpOnly cookies set by the BFF routes under
+   * /api/auth/*, never in this (localStorage-persisted) client store. */
+  isAuthenticated: boolean;
   user: AuthUser | null;
-  setAuth: (user: AuthUser, tokens: { accessToken: string; refreshToken: string }) => void;
-  setTokens: (accessToken: string, refreshToken: string) => void;
+  setAuth: (user: AuthUser) => void;
   logout: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      accessToken: null,
-      refreshToken: null,
+      isAuthenticated: false,
       user: null,
-      setAuth: (user, tokens) => set({ user, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken }),
-      setTokens: (accessToken, refreshToken) => set({ accessToken, refreshToken }),
-      logout: () => set({ accessToken: null, refreshToken: null, user: null }),
+      setAuth: (user) => set({ user, isAuthenticated: true }),
+      logout: () => set({ isAuthenticated: false, user: null }),
     }),
     { name: "adhikaripay-retailer-auth" },
   ),

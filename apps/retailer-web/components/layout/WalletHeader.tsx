@@ -25,7 +25,11 @@ export function WalletHeader({ wallets, onRefresh, refreshing }: WalletHeaderPro
 
   const mainWallet = wallets.find((w) => w.walletType === "main");
 
-  function handleLogout() {
+  async function handleLogout() {
+    // Must hit the BFF route — the session cookies are httpOnly, so client JS (the store) can't
+    // clear them itself. Without this, the UI would show "logged out" while the cookie still
+    // authenticates every /api/proxy request.
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     logout();
     router.replace("/login");
   }

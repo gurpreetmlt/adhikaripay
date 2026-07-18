@@ -21,8 +21,8 @@ export default function PrivacyPolicyPage() {
       {/* Main Privacy content wrapper */}
       <main className="flex-1 mx-auto max-w-4xl px-4 py-12 md:py-16 relative z-10">
         {/* Back Link */}
-        <Link 
-          href="/" 
+        <Link
+          href="/"
           className="inline-flex items-center gap-2 font-sora font-bold text-sm text-brand-blue-light dark:text-brand-green-light hover:underline mb-8 focus:outline-hidden focus:ring-2 focus:ring-brand-blue-light rounded-md p-1"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -137,8 +137,8 @@ export default function PrivacyPolicyPage() {
 
         {/* Back button at the bottom */}
         <div className="mt-12 text-center">
-          <Link 
-            href="/" 
+          <Link
+            href="/"
             className="inline-flex items-center gap-2 font-sora font-bold text-sm bg-linear-to-r from-brand-blue-dark to-brand-blue-light hover:from-brand-blue-light hover:to-brand-blue-dark text-white px-6 py-3 rounded-xl shadow-lg transition-all hover:scale-105"
           >
             <ArrowLeft className="w-4 h-4" />

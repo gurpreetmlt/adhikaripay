@@ -67,8 +67,8 @@ export default function SettingsPage() {
   });
 
   async function handleEnableBiometric() {
-    if (!user || !refreshToken) {
-      toast.error("Session missing — please log in again");
+    if (!user || !refreshToken || refreshToken === "cookie") {
+      toast.error("Biometric setup unavailable in secure web session mode");
       return;
     }
     if (!isWebAuthnAvailable()) {

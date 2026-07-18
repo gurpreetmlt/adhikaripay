@@ -32,6 +32,13 @@ const envSchema = z.object({
    */
   REQUIRE_TXN_PIN: z.coerce.boolean().default(false),
   /**
+   * Testing-only: allow the SAME biometric PID to be submitted more than once (skips the
+   * replay-guard uniqueness check). Needed while testing with real fingers before an SMS/UIDAI
+   * provider is wired, since a live PID XML can only be captured once per scan. Turn OFF before
+   * launch — reusing a PID is exactly the replay attack this guard exists to stop.
+   */
+  ALLOW_BIOMETRIC_REPLAY: z.coerce.boolean().default(false),
+  /**
    * Allow stub/mock provider adapters to serve traffic in production. Default false: with real
    * providers not yet integrated, a mock returns "success" for any AEPS/DMT/BBPS call, which
    * would let a retailer mint float without a real bank payout. Only turn this on in dev/staging.

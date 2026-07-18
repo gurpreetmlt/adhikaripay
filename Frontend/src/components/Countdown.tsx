@@ -15,7 +15,7 @@ export default function Countdown() {
 
   useEffect(() => {
     setMounted(true);
-    
+
     // Launch date is exactly 45 days from July 14, 2026
     const targetDate = new Date('2026-08-28T09:00:00+05:30').getTime();
 
@@ -51,7 +51,7 @@ export default function Countdown() {
       <p className="font-sora font-bold text-xs uppercase tracking-widest text-brand-blue-light dark:text-brand-green-light text-center mb-4">
         Grand Launch Countdown
       </p>
-      
+
       <div className="grid grid-cols-4 gap-3 md:gap-4 px-2">
         {/* Days */}
         <div className="glass-card rounded-2xl p-3 md:p-4 text-center shadow-lg relative overflow-hidden group hover:scale-[1.03] transition-transform duration-300">

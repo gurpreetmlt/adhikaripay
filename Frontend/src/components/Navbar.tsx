@@ -18,7 +18,7 @@ export default function Navbar({ onOpenWaitlist }: NavbarProps) {
     <header className="sticky top-0 z-50 w-full border-b border-neutral-200/80 dark:border-white/10 bg-white/70 dark:bg-slate-950/70 backdrop-blur-md transition-colors duration-300">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-20 items-center justify-between gap-4">
-          
+
           <Link href="/" className="flex items-center gap-3.5 group focus:outline-hidden focus:ring-2 focus:ring-brand-blue-light rounded-xl p-1 transition-all">
             <Logo size={42} className="transition-transform duration-500 group-hover:scale-105 group-hover:rotate-[8deg]" />
             <div className="flex flex-col">
@@ -32,26 +32,26 @@ export default function Navbar({ onOpenWaitlist }: NavbarProps) {
           </Link>
 
           <nav className="hidden lg:flex items-center gap-8">
-            <Link 
-              href="/#services" 
+            <Link
+              href="/#services"
               className="font-poppins font-semibold text-sm text-neutral-600 dark:text-neutral-300 hover:text-brand-blue-dark dark:hover:text-brand-blue-light transition-colors focus:outline-hidden focus:ring-2 focus:ring-brand-blue-light rounded-md px-2 py-1"
             >
               Services
             </Link>
-            <Link 
-              href="/#benefits" 
+            <Link
+              href="/#benefits"
               className="font-poppins font-semibold text-sm text-neutral-600 dark:text-neutral-300 hover:text-brand-blue-dark dark:hover:text-brand-blue-light transition-colors focus:outline-hidden focus:ring-2 focus:ring-brand-blue-light rounded-md px-2 py-1"
             >
               Agent Benefits
             </Link>
-            <Link 
-              href="/#calculator" 
+            <Link
+              href="/#calculator"
               className="font-poppins font-semibold text-sm text-neutral-600 dark:text-neutral-300 hover:text-brand-blue-dark dark:hover:text-brand-blue-light transition-colors focus:outline-hidden focus:ring-2 focus:ring-brand-blue-light rounded-md px-2 py-1"
             >
               Income Estimator
             </Link>
-            <Link 
-              href="/privacy" 
+            <Link
+              href="/privacy"
               className="font-poppins font-semibold text-sm text-neutral-600 dark:text-neutral-300 hover:text-brand-blue-dark dark:hover:text-brand-blue-light transition-colors focus:outline-hidden focus:ring-2 focus:ring-brand-blue-light rounded-md px-2 py-1"
             >
               Privacy Policy
@@ -105,29 +105,29 @@ export default function Navbar({ onOpenWaitlist }: NavbarProps) {
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-neutral-200 dark:border-white/10 bg-white dark:bg-slate-950 px-4 py-6 space-y-4 shadow-xl transition-all duration-300">
           <nav className="flex flex-col gap-4">
-            <Link 
-              href="/#services" 
+            <Link
+              href="/#services"
               onClick={() => setMobileMenuOpen(false)}
               className="font-poppins font-medium text-base text-neutral-700 dark:text-neutral-200 hover:text-brand-blue-dark dark:hover:text-brand-blue-light transition-colors"
             >
               Services
             </Link>
-            <Link 
-              href="/#benefits" 
+            <Link
+              href="/#benefits"
               onClick={() => setMobileMenuOpen(false)}
               className="font-poppins font-medium text-base text-neutral-700 dark:text-neutral-200 hover:text-brand-blue-dark dark:hover:text-brand-blue-light transition-colors"
             >
               Agent Benefits
             </Link>
-            <Link 
-              href="/#calculator" 
+            <Link
+              href="/#calculator"
               onClick={() => setMobileMenuOpen(false)}
               className="font-poppins font-medium text-base text-neutral-700 dark:text-neutral-200 hover:text-brand-blue-dark dark:hover:text-brand-blue-light transition-colors"
             >
               Income Estimator
             </Link>
-            <Link 
-              href="/privacy" 
+            <Link
+              href="/privacy"
               onClick={() => setMobileMenuOpen(false)}
               className="font-poppins font-medium text-base text-neutral-700 dark:text-neutral-200 hover:text-brand-blue-dark dark:hover:text-brand-blue-light transition-colors"
             >

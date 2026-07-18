@@ -1,5 +1,14 @@
 const STORAGE_KEY = "adhikaripay-web-biometric";
 
+function getBrowserSessionStorage(): Storage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 export type BiometricStore = {
   credentialId: string;
   refreshToken: string;
@@ -26,7 +35,9 @@ export function isWebAuthnAvailable(): boolean {
 
 export function getBiometricStore(): BiometricStore | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const storage = getBrowserSessionStorage();
+    if (!storage) return null;
+    const raw = storage.getItem(STORAGE_KEY);
     return raw ? (JSON.parse(raw) as BiometricStore) : null;
   } catch {
     return null;
@@ -34,11 +45,13 @@ export function getBiometricStore(): BiometricStore | null {
 }
 
 export function clearBiometricStore(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  const storage = getBrowserSessionStorage();
+  storage?.removeItem(STORAGE_KEY);
 }
 
 export function saveBiometricStore(data: BiometricStore): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  const storage = getBrowserSessionStorage();
+  storage?.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
 /** Register platform authenticator (Touch ID / Windows Hello) and bind refresh token. */

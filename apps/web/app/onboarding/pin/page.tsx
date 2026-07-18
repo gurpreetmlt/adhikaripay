@@ -48,7 +48,7 @@ export default function SetPinPage() {
       if (!data.success) throw new Error(data.message);
       setUser(data.data.user);
       toast.success("PIN set successfully");
-      if (isWebAuthnAvailable() && refreshToken && user) setOfferBio(true);
+      if (isWebAuthnAvailable() && refreshToken && refreshToken !== "cookie" && user) setOfferBio(true);
       else router.replace("/dashboard");
     } catch (err) {
       toast.error(extractApiError(err, "Failed to set PIN"));
@@ -58,7 +58,11 @@ export default function SetPinPage() {
   }
 
   async function enableBio() {
-    if (!user || !refreshToken) return;
+    if (!user || !refreshToken || refreshToken === "cookie") {
+      toast.error("Biometric setup unavailable in secure web session mode");
+      router.replace("/dashboard");
+      return;
+    }
     try {
       await enableBiometricLogin({
         userId: user.id,

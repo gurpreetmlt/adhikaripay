@@ -11,7 +11,7 @@ export default function ThemeToggle() {
     // Read cached preference or default to dark
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
     const initialTheme = savedTheme || 'dark';
-    
+
     setTheme(initialTheme);
     if (initialTheme === 'dark') {
       document.documentElement.classList.add('dark');

@@ -2,19 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { 
-  Fingerprint, 
-  Send, 
-  Receipt, 
-  Zap, 
-  Users, 
-  MapPin, 
-  Activity, 
-  Check, 
-  ChevronRight, 
-  Wallet, 
-  TrendingUp, 
-  Phone, 
+import {
+  Fingerprint,
+  Send,
+  Receipt,
+  Zap,
+  Users,
+  MapPin,
+  Activity,
+  Check,
+  ChevronRight,
+  Wallet,
+  TrendingUp,
+  Phone,
   Mail,
   Building,
   ShieldCheck
@@ -46,7 +46,7 @@ export default function Home() {
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    
+
     // Disable animation if reduced motion is preferred
     if (shouldReduceMotion) {
       setTypedText(phrases[0]);
@@ -95,12 +95,12 @@ export default function Home() {
     const monthlyAeps = aepsCount * 7 * 30;
     const monthlyDmt = dmtCount * 15 * 30;
     const monthlyBbps = bbpsCount * 2 * 30;
-    
+
     setCalculatedEarnings(monthlyAeps + monthlyDmt + monthlyBbps);
   }, [aepsCount, dmtCount, bbpsCount]);
 
   // Framer Motion animation configurations
-  const fadeInUp = shouldReduceMotion 
+  const fadeInUp = shouldReduceMotion
     ? { initial: { opacity: 1 }, animate: { opacity: 1 } }
     : {
         initial: { opacity: 0, y: 30 },
@@ -111,7 +111,7 @@ export default function Home() {
 
   return (
     <div className="relative min-h-screen flex flex-col z-10 selection:bg-brand-blue-light/30 selection:text-white">
-      
+
       {/* Aurora, subtle grid and Rupee coins drifting backgrounds */}
       <BackgroundEffects />
 
@@ -124,10 +124,10 @@ export default function Home() {
         {/* ================= HERO SECTION ================= */}
         <section id="hero" className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-12 pb-20 md:py-24">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
-            
+
             {/* Left Hero Marketing Details */}
             <div className="lg:col-span-7 flex flex-col text-center lg:text-left items-center lg:items-start">
-              
+
               {/* Coming Soon Pill Badge */}
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-brand-blue-light/20 dark:border-white/10 bg-white/60 dark:bg-white/5 backdrop-blur-md mb-6 shadow-sm">
                 <span className="relative flex h-2 w-2">
@@ -208,11 +208,11 @@ export default function Home() {
             {/* Right Column: High-Fidelity App Interactive Dashboard Mockup */}
             <div className="lg:col-span-5 flex justify-center w-full relative">
               <div className="absolute inset-0 bg-linear-to-tr from-brand-blue-light/10 to-brand-green-light/10 blur-3xl rounded-full" />
-              
+
               {/* Main Card container */}
               <div className="glass-card rounded-3xl p-5 md:p-6 w-full max-w-sm shadow-2xl relative border border-neutral-200/60 dark:border-white/15 overflow-hidden">
                 <div className="absolute top-0 inset-x-0 h-1.5 bg-linear-to-r from-brand-blue-dark via-brand-blue-light to-brand-green-light" />
-                
+
                 {/* Dashboard Header */}
                 <div className="flex items-center justify-between pb-4 border-b border-neutral-200/80 dark:border-white/10 mb-5">
                   <div className="flex items-center gap-2">
@@ -371,7 +371,7 @@ export default function Home() {
         <section className="border-y border-neutral-200/50 dark:border-white/10 bg-white/40 dark:bg-slate-950/40 backdrop-blur-xs py-12 relative z-10 transition-colors duration-300">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-4 text-center">
-              
+
               {/* Stat 1 */}
               <div>
                 <p className="font-sora font-extrabold text-3xl sm:text-4xl text-brand-blue-dark dark:text-brand-blue-light">10 Lakh+</p>
@@ -413,7 +413,7 @@ export default function Home() {
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
-            
+
             {/* Service 1: AEPS */}
             <motion.div
               {...fadeInUp}
@@ -426,7 +426,7 @@ export default function Home() {
               <p className="font-poppins text-xs md:text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed mb-4 flex-1">
                 Aadhaar Number aur customer ke biometric scan (biometric scanner) ke zariye kisi bhi bank account se cash withdraw karein aur balance check karein.
               </p>
-              <button 
+              <button
                 onClick={() => setModalOpen(true)}
                 className="text-brand-blue-light dark:text-brand-green-light font-sora font-bold text-xs hover:underline flex items-center gap-1 group-hover:translate-x-1 transition-transform self-start mt-auto"
               >
@@ -446,7 +446,7 @@ export default function Home() {
               <p className="font-poppins text-xs md:text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed mb-4 flex-1">
                 India ke kisi bhi bank account mein instant cash send karein. Bina bank line lage customer ka remittances 24/7 direct unke bank accounts mein transfer.
               </p>
-              <button 
+              <button
                 onClick={() => setModalOpen(true)}
                 className="text-brand-blue-light dark:text-brand-green-light font-sora font-bold text-xs hover:underline flex items-center gap-1 group-hover:translate-x-1 transition-transform self-start mt-auto"
               >
@@ -466,7 +466,7 @@ export default function Home() {
               <p className="font-poppins text-xs md:text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed mb-4 flex-1">
                 Bharat Bill Payment System ke jariye bijli (electricity), paani, gas, DTH, credit card bill aur mobile recharge karein, aur payiye direct merchant cashbacks.
               </p>
-              <button 
+              <button
                 onClick={() => setModalOpen(true)}
                 className="text-brand-blue-light dark:text-brand-green-light font-sora font-bold text-xs hover:underline flex items-center gap-1 group-hover:translate-x-1 transition-transform self-start mt-auto"
               >
@@ -486,7 +486,7 @@ export default function Home() {
               <p className="font-poppins text-xs md:text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed mb-4 flex-1">
                 Kiye hue transactions ka balance aapke bank account mein turant transfer karein. 24/7 online instant IMPS/NEFT, taki bank holiday mein bhi kaam na ruke.
               </p>
-              <button 
+              <button
                 onClick={() => setModalOpen(true)}
                 className="text-brand-blue-light dark:text-brand-green-light font-sora font-bold text-xs hover:underline flex items-center gap-1 group-hover:translate-x-1 transition-transform self-start mt-auto"
               >
@@ -501,7 +501,7 @@ export default function Home() {
         {/* ================= AGENT BENEFITS & TIMELINE ================= */}
         <section id="benefits" className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 bg-white/10 dark:bg-slate-900/10 backdrop-blur-xs relative z-10 rounded-3xl border border-neutral-200/20 dark:border-white/5 my-12">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-            
+
             {/* Left side text */}
             <div className="lg:col-span-5">
               <span className="font-sora font-extrabold text-xs uppercase tracking-widest text-brand-blue-light dark:text-brand-green-light">Retailer Benefits</span>
@@ -511,7 +511,7 @@ export default function Home() {
               <p className="font-poppins text-neutral-600 dark:text-neutral-400 text-sm sm:text-base leading-relaxed mb-6">
                 Humare digital network se judkar aap apni shop ki income ko double kar sakte hain. Adhikari Pay se judna behad aasan aur surakshit hai.
               </p>
-              
+
               {/* Check features */}
               <div className="space-y-3.5">
                 {[
@@ -534,7 +534,7 @@ export default function Home() {
             {/* Right side onboarding steps timeline */}
             <div className="lg:col-span-7">
               <div className="space-y-8 relative before:absolute before:left-6 before:top-4 before:bottom-4 before:w-0.5 before:bg-linear-to-b before:from-brand-blue-dark before:to-brand-green-light">
-                
+
                 {/* Step 1 */}
                 <div className="relative pl-14">
                   <div className="absolute left-0 w-12 h-12 rounded-xl bg-brand-blue-dark text-white font-sora font-extrabold text-lg flex items-center justify-center shadow-md">
@@ -585,7 +585,7 @@ export default function Home() {
         <section id="calculator" className="mx-auto max-w-5xl px-4 py-20 relative z-10">
           <div className="glass-card rounded-3xl p-6 md:p-10 shadow-2xl relative border border-neutral-200/50 dark:border-white/10">
             <div className="absolute top-0 left-0 w-full h-1.5 bg-linear-to-r from-brand-blue-dark to-brand-green-dark" />
-            
+
             <div className="text-center max-w-2xl mx-auto mb-10">
               <span className="font-sora font-bold text-xs uppercase tracking-widest text-brand-blue-light dark:text-brand-green-light">Earnings Calculator</span>
               <h2 className="font-sora font-extrabold text-2xl sm:text-3xl text-neutral-900 dark:text-white mt-2 transition-colors">
@@ -599,7 +599,7 @@ export default function Home() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
               {/* Sliders */}
               <div className="space-y-6">
-                
+
                 {/* Slider 1: AEPS */}
                 <div>
                   <div className="flex justify-between items-center mb-2">
@@ -691,7 +691,7 @@ export default function Home() {
                 <p className="font-poppins text-[10px] text-neutral-400 dark:text-neutral-500 mt-1.5 leading-relaxed">
                   *Income calculation average commissions par aadharit hai. Har service par rates thode alag ho sakte hain.
                 </p>
-                
+
                 <button
                   onClick={() => setModalOpen(true)}
                   type="button"
@@ -711,7 +711,7 @@ export default function Home() {
       <footer className="border-t border-neutral-200 dark:border-white/10 bg-white/40 dark:bg-slate-950/40 backdrop-blur-xs py-12 relative z-10 transition-colors duration-300">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-            
+
             {/* Branding Column */}
             <div className="space-y-4 text-center md:text-left flex flex-col items-center md:items-start">
               <div className="flex items-center gap-3">

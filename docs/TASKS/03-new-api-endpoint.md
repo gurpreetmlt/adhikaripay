@@ -9,7 +9,7 @@
 
 ## Patterns
 - Auth: `requireAuth` middleware
-- Role: `requireRole('admin', ...)` 
+- Role: `requireRole('admin', ...)`
 - Money: `verifyTxnPinOrThrow` in controller
 - Response: `sendSuccess(res, data, message)`
 

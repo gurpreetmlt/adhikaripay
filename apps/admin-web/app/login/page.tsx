@@ -103,8 +103,7 @@ export default function AdminLoginPage() {
             Platform control only · Not for Super Dist / Dist / Retailer
           </p>
           <p className="mt-1 text-xs" style={{ color: "var(--admin-muted)" }}>
-            User <span className="font-mono">admin</span> · Pass{" "}
-            <span className="font-mono">Dg99@cr89</span> · OTP off
+            Use provisioned admin credentials. No default password is displayed in UI.
           </p>
         </div>
 

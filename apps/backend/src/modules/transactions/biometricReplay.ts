@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { db } from "../../db/postgres";
 import { biometricReplayGuard } from "../../db/postgres/schema";
 import { HttpError } from "../../utils/httpError";
+import { env } from "../../config/env";
 
 // UIDAI PID XML embeds a capture timestamp, e.g. <Pid ts="2026-07-17T10:15:00" ...>. A biometric
 // scan older than this is stale even if it's never been submitted before — the customer's finger
@@ -25,6 +26,9 @@ function extractTimestamp(payload: string): Date | null {
  * age check activates for free the moment real PID XML starts flowing through this path.
  */
 export async function assertFreshBiometric(payload: string): Promise<void> {
+  // Testing escape hatch: reuse the same finger scan without the replay/age checks.
+  if (env.ALLOW_BIOMETRIC_REPLAY) return;
+
   const ts = extractTimestamp(payload);
   if (ts) {
     const ageMs = Date.now() - ts.getTime();

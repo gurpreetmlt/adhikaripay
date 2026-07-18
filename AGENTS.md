@@ -70,6 +70,7 @@ packages/
 6. **LOGIN.md** — credentials ke liye alag search mat karo
 7. **Task done** → `docs/CHECKLIST.md` update karo, nayi chat next task ke liye
 8. **MCP default off** — browser / Figma / Datadog / etc. sirf jab task ya user explicitly maange; exploratory MCP mat. Details: [`docs/AGENT_PLAN.md`](docs/AGENT_PLAN.md#mcp-rule-same-token-discipline-as-code-tools)
+9. **No AI git attribution** — kabhi mat likho `Co-authored-by: Cursor|Claude|Anthropic`, `cursoragent@cursor.com`, `Made-with: Cursor`. Details: [`docs/AGENT_PLAN.md`](docs/AGENT_PLAN.md)
 
 ## Terminal (Mac only — agent shell mat)
 

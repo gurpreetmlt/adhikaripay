@@ -1,0 +1,42 @@
+---
+description: After every code change, reply must end with push → deploy env → APK rebuild steps
+alwaysApply: true
+---
+
+# Deploy Flow (har code change ke baad)
+
+Jab bhi agent koi code change kare, reply ke END mein ye 3 steps IS ORDER mein do (jo apply ho):
+
+## 1. Code push (hamesha)
+
+```bash
+cd "/Users/gurpreetchauhan/Desktop/Adhikari Pay"
+git add -A
+git commit -m "<short message>"
+git push
+```
+
+- Commit message: human-style, no AI attribution (see adhikaripay-core rule).
+- User Mac Terminal mein khud chalayega — agent shell mein mat chalao (jab tak user na bole).
+
+## 2. Deploy + env (agar backend/web change hua)
+
+- Coolify env vars mein kya add/change karna hai — exact `KEY=value` list do.
+- Phir bolo: Coolify pe **backend** (ya web) redeploy karo.
+- Deploy ke baad agar seed/migrate chahiye to uski command bhi do.
+
+## 3. APK rebuild + install (sirf agar mobile app change hua)
+
+Build aur install — DONO commands hamesha saath do:
+
+```bash
+# Build release APK
+cd "/Users/gurpreetchauhan/Desktop/Adhikari Pay/apps/adhikaripay-mobile-app/android"
+./gradlew assembleRelease
+
+# Install on phone (USB on)
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+
+- APK path: `app/build/outputs/apk/release/app-release.apk`
+- Backend-only change ho to clearly bolo: "APK rebuild ki zaroorat nahi".
