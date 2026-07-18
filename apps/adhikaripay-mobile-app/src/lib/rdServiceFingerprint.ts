@@ -18,8 +18,10 @@ const RdService = NativeModules.RdService as RdServiceNative | undefined;
 
 let lastProbeLog: string[] = [];
 
+// L1 RD services (Morpho/IDEMIA, Mantra MFS110) need fType="2" and reject extra blocks
+// like <Demo> — strict parsers fail silently and capture never starts (no sensor light).
 function buildPidOptionsXml(timeoutMs: number): string {
-  return `<PidOptions ver="1.0"><Opts fCount="1" fType="0" iCount="0" iType="0" pCount="0" pType="0" format="0" pidVer="2.0" timeout="${timeoutMs}" posh="UNKNOWN" env="P" wadh=""/><Demo><Pi ms="E" mv="255" name=""/><Pa ms="E" mv="255"/></Demo><CustOpts/></PidOptions>`;
+  return `<PidOptions ver="1.0"><Opts fCount="1" fType="2" iCount="0" iType="0" pCount="0" pType="0" format="0" pidVer="2.0" timeout="${timeoutMs}" posh="UNKNOWN" env="P"/></PidOptions>`;
 }
 
 export function getRdServiceProbeLog(): string {
