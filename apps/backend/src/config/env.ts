@@ -62,12 +62,19 @@ export function shouldExposeOtpInResponse(): boolean {
   return env.NODE_ENV !== "production" && env.EXPOSE_OTP_IN_RESPONSE;
 }
 
-/** Fixed OTP for a whitelisted test number (TEST_OTP_OVERRIDES), or null. */
+/**
+ * Fixed OTP for a whitelisted test number (TEST_OTP_OVERRIDES), or null.
+ * A "*:otp" entry applies to ALL numbers (pre-launch only — remove once SMS provider is live).
+ * Exact number entries win over the wildcard.
+ */
 export function getTestOtpOverride(mobile: string): string | null {
   if (!env.TEST_OTP_OVERRIDES) return null;
+  let wildcard: string | null = null;
   for (const pair of env.TEST_OTP_OVERRIDES.split(",")) {
     const [num, otp] = pair.trim().split(":");
-    if (num === mobile && otp && /^\d{6}$/.test(otp)) return otp;
+    if (!otp || !/^\d{6}$/.test(otp)) continue;
+    if (num === mobile) return otp;
+    if (num === "*") wildcard = otp;
   }
-  return null;
+  return wildcard;
 }
