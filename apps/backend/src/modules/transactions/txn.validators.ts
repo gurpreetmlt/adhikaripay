@@ -69,11 +69,34 @@ const aepsBase = {
   bankIin: z.string().min(3).max(11),
   mobile: z.string().regex(/^\d{10}$/),
   biometricPayload: z.string().min(1),
+  latitude: z.string().min(1).max(32).optional(),
+  longitude: z.string().min(1).max(32).optional(),
 };
 
 export const aepsEnquirySchema = z.object({ ...aepsBase });
 
+// No biometric at this step — OTP goes to the customer's mobile; the eventual
+// withdrawal carries the OTP inside the PID capture plus this referenceKey.
+export const aepsTxnOtpSchema = z.object({
+  aadhaarNumber: z.string().regex(/^\d{12}$/),
+  bankIin: z.string().min(3).max(11),
+  mobile: z.string().regex(/^\d{10}$/),
+  amount,
+  latitude: z.string().min(1).max(32).optional(),
+  longitude: z.string().min(1).max(32).optional(),
+});
+
 export const aepsWithdrawSchema = z
+  .object({
+    ...txnAuthFields,
+    ...aepsBase,
+    amount,
+    /** From /aeps/withdraw/otp — required by InstantPay for amounts above ₹5,000. */
+    otpReferenceKey: z.string().min(1).max(200).optional(),
+  })
+  .superRefine(requireTxnProof);
+
+export const aepsDepositSchema = z
   .object({
     ...txnAuthFields,
     ...aepsBase,

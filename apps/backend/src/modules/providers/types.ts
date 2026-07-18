@@ -24,9 +24,47 @@ export interface AepsParams {
   aadhaarNumber: string;
   bankIin: string;
   mobile: string;
-  /** Base64 PID block from the RD-service biometric device. Mocked until devices arrive. */
+  /** PidData XML from the RD-service biometric device (or JSON biometric blob in tests). */
   biometricPayload: string;
   amount?: string;
+  latitude?: string;
+  longitude?: string;
+  /** InstantPay merchant outlet id; resolved from user profile when omitted. */
+  outletId?: string;
+  endpointIp?: string;
+  externalRef?: string;
+  /** Transaction-OTP referenceKey — mandatory for withdrawals above ₹5,000 (InstantPay). */
+  otpReferenceKey?: string;
+}
+
+/** AEPS bank directory entry (from provider bank-list API). */
+export interface AepsBank {
+  bankId: number | string;
+  name: string;
+  iin: string;
+  aepsEnabled: boolean;
+  aadhaarpayEnabled: boolean;
+  aepsFailureRate: string;
+  aadhaarpayFailureRate: string;
+}
+
+export interface AepsBankListParams {
+  retailerUserId: string;
+  outletId?: string;
+  endpointIp?: string;
+}
+
+/** Request an SMS OTP for a high-value AEPS withdrawal (no biometric needed at this step). */
+export interface AepsTxnOtpParams {
+  retailerUserId: string;
+  aadhaarNumber: string;
+  bankIin: string;
+  mobile: string;
+  amount: string;
+  latitude?: string;
+  longitude?: string;
+  outletId?: string;
+  endpointIp?: string;
 }
 
 export interface DmtBeneficiaryParams {
@@ -76,6 +114,11 @@ export interface AgentAuthParams {
   retailerUserId: string;
   aadhaarNumber: string;
   biometricPayload: string;
+  latitude?: string;
+  longitude?: string;
+  outletId?: string;
+  endpointIp?: string;
+  externalRef?: string;
 }
 
 // ── Adapter contract ────────────────────────────────────────────────────────
@@ -91,6 +134,14 @@ export interface ProviderAdapter {
 
   aepsBalanceEnquiry(params: AepsParams): Promise<ProviderResult<{ balance: string }>>;
   aepsWithdraw(params: AepsParams): Promise<ProviderResult>;
+  /** Customer deposits cash into their own bank account (merchant collects the cash). */
+  aepsDeposit(params: AepsParams): Promise<ProviderResult>;
+  /** AEPS-enabled bank directory with real NPCI IINs + failure rates. */
+  aepsBankList(params: AepsBankListParams): Promise<ProviderResult<{ banks: AepsBank[] }>>;
+  /** OTP for ₹5,000+ withdrawals; returns referenceKey to pass in aepsWithdraw. */
+  aepsTransactionOtp(
+    params: AepsTxnOtpParams,
+  ): Promise<ProviderResult<{ referenceKey: string; validity: string }>>;
   aepsMiniStatement(
     params: AepsParams,
   ): Promise<ProviderResult<{ statement: { date: string; narration: string; amount: string; type: "credit" | "debit" }[] }>>;
@@ -115,6 +166,9 @@ export interface ProviderAdapter {
 export type ProviderOperation =
   | "aeps_balance_enquiry"
   | "aeps_withdraw"
+  | "aeps_deposit"
+  | "aeps_bank_list"
+  | "aeps_txn_otp"
   | "aeps_mini_statement"
   | "aadhaar_pay"
   | "dmt_add_beneficiary"

@@ -48,37 +48,45 @@ interface Bank {
   shortName: string;
   color: string;
   letter: string;
-  /**
-   * NPCI-assigned Bank IIN for AEPS — PLACEHOLDER only (derived from `id`, not a real IIN).
-   * Replace with the real NPCI Bank IIN table before switching the provider off mock mode.
-   */
+  /** NPCI-assigned Bank IIN for AEPS. Overridden at runtime by GET /txn/aeps/banks (live). */
   iin: string;
 }
 
 const BANKS: Bank[] = [
-  { id: "bob", name: "Bank of Baroda", shortName: "BOB", color: "#E64A19", letter: "B", iin: "BOB000" },
-  { id: "pnb", name: "Punjab National Bank", shortName: "PNB", color: "#D32F2F", letter: "P", iin: "PNB000" },
-  { id: "psb", name: "Punjab & Sind Bank", shortName: "PSB", color: "#7B1FA2", letter: "P", iin: "PSB000" },
-  { id: "sbi", name: "State Bank of India", shortName: "SBI", color: "#1565C0", letter: "S", iin: "SBI000" },
-  { id: "hdfc", name: "HDFC Bank", shortName: "HDFC", color: "#00338D", letter: "H", iin: "HDFC00" },
-  { id: "airtel", name: "Airtel Payment Bank", shortName: "Airtel", color: "#E53935", letter: "A", iin: "AIRTEL" },
-  { id: "icici", name: "ICICI Bank", shortName: "ICICI", color: "#F57C00", letter: "I", iin: "ICICI0" },
-  { id: "pgb", name: "Punjab Gramin Bank", shortName: "PGB", color: "#E91E63", letter: "P", iin: "PGB000" },
-  { id: "uco", name: "UCO Bank", shortName: "UCO", color: "#7B1FA2", letter: "U", iin: "UCO000" },
-  { id: "boi", name: "Bank of India", shortName: "BOI", color: "#E65100", letter: "B", iin: "BOI000" },
-  { id: "canara", name: "Canara Bank", shortName: "Canara", color: "#1976D2", letter: "C", iin: "CANARA" },
-  { id: "indian", name: "Indian Bank", shortName: "Indian", color: "#0D47A1", letter: "I", iin: "INDIAN" },
-  { id: "union", name: "Union Bank of India", shortName: "Union", color: "#F57C00", letter: "U", iin: "UNION0" },
-  { id: "kotak", name: "Kotak Mahindra Bank", shortName: "Kotak", color: "#E53935", letter: "K", iin: "KOTAK0" },
-  { id: "axis", name: "Axis Bank", shortName: "Axis", color: "#6A1B9A", letter: "A", iin: "AXIS00" },
-  { id: "iob", name: "Indian Overseas Bank", shortName: "IOB", color: "#C62828", letter: "I", iin: "IOB000" },
-  { id: "central", name: "Central Bank of India", shortName: "Central", color: "#B71C1C", letter: "C", iin: "CENTRA" },
-  { id: "bom", name: "Bank of Maharashtra", shortName: "BOM", color: "#4A148C", letter: "B", iin: "BOM000" },
-  { id: "idbi", name: "IDBI Bank", shortName: "IDBI", color: "#00695C", letter: "I", iin: "IDBI00" },
+  { id: "bob", name: "Bank of Baroda", shortName: "BOB", color: "#E64A19", letter: "B", iin: "606985" },
+  { id: "pnb", name: "Punjab National Bank", shortName: "PNB", color: "#D32F2F", letter: "P", iin: "607027" },
+  { id: "psb", name: "Punjab & Sind Bank", shortName: "PSB", color: "#7B1FA2", letter: "P", iin: "607087" },
+  { id: "sbi", name: "State Bank of India", shortName: "SBI", color: "#1565C0", letter: "S", iin: "607094" },
+  { id: "hdfc", name: "HDFC Bank", shortName: "HDFC", color: "#00338D", letter: "H", iin: "607152" },
+  { id: "airtel", name: "Airtel Payment Bank", shortName: "Airtel", color: "#E53935", letter: "A", iin: "990320" },
+  { id: "icici", name: "ICICI Bank", shortName: "ICICI", color: "#F57C00", letter: "I", iin: "508534" },
+  { id: "pgb", name: "Punjab Gramin Bank", shortName: "PGB", color: "#E91E63", letter: "P", iin: "607138" },
+  { id: "uco", name: "UCO Bank", shortName: "UCO", color: "#7B1FA2", letter: "U", iin: "607066" },
+  { id: "boi", name: "Bank of India", shortName: "BOI", color: "#E65100", letter: "B", iin: "508505" },
+  { id: "canara", name: "Canara Bank", shortName: "Canara", color: "#1976D2", letter: "C", iin: "607396" },
+  { id: "indian", name: "Indian Bank", shortName: "Indian", color: "#0D47A1", letter: "I", iin: "607105" },
+  { id: "union", name: "Union Bank of India", shortName: "Union", color: "#F57C00", letter: "U", iin: "607161" },
+  { id: "kotak", name: "Kotak Mahindra Bank", shortName: "Kotak", color: "#E53935", letter: "K", iin: "990309" },
+  { id: "axis", name: "Axis Bank", shortName: "Axis", color: "#6A1B9A", letter: "A", iin: "607153" },
+  { id: "iob", name: "Indian Overseas Bank", shortName: "IOB", color: "#C62828", letter: "I", iin: "607126" },
+  { id: "central", name: "Central Bank of India", shortName: "Central", color: "#B71C1C", letter: "C", iin: "607264" },
+  { id: "bom", name: "Bank of Maharashtra", shortName: "BOM", color: "#4A148C", letter: "B", iin: "607387" },
+  { id: "idbi", name: "IDBI Bank", shortName: "IDBI", color: "#00695C", letter: "I", iin: "607095" },
   { id: "yes", name: "Yes Bank", shortName: "Yes", color: "#1565C0", letter: "Y", iin: "YES000" },
-  { id: "fino", name: "Fino Payments Bank", shortName: "Fino", color: "#FF6F00", letter: "F", iin: "FINO00" },
+  { id: "fino", name: "Fino Payments Bank", shortName: "Fino", color: "#FF6F00", letter: "F", iin: "608001" },
   { id: "paytm", name: "Paytm Payments Bank", shortName: "Paytm", color: "#00BCD4", letter: "P", iin: "PAYTM0" },
 ];
+
+interface AepsBankRow {
+  name: string;
+  iin: string;
+  aepsEnabled?: boolean;
+}
+
+/** Normalize a bank name for fuzzy matching across our list vs provider list. */
+function bankKey(name: string): string {
+  return name.toLowerCase().replace(/payments?/g, "").replace(/[^a-z]/g, "");
+}
 
 const AEPS_TABS = ["Withdraw", "Mini Statement", "Deposit", "Balance Enquiry"] as const;
 type AepsTab = (typeof AEPS_TABS)[number];
@@ -271,12 +279,14 @@ function BankModal({
   onSelect,
   favouriteIds,
   onToggleFav,
+  banks,
 }: {
   visible: boolean;
   onClose: () => void;
   onSelect: (bank: Bank) => void;
   favouriteIds: string[];
   onToggleFav: (id: string) => void;
+  banks: Bank[];
 }) {
   const { tokens } = useTheme();
   const [search, setSearch] = useState("");
@@ -297,16 +307,16 @@ function BankModal({
   }, [visible, slideAnim]);
 
   const favBanks = useMemo(
-    () => BANKS.filter((b) => favouriteIds.includes(b.id)),
-    [favouriteIds],
+    () => banks.filter((b) => favouriteIds.includes(b.id)),
+    [favouriteIds, banks],
   );
 
   const filtered = useMemo(
     () =>
       search.trim()
-        ? BANKS.filter((b) => b.name.toLowerCase().includes(search.toLowerCase()))
-        : BANKS,
-    [search],
+        ? banks.filter((b) => b.name.toLowerCase().includes(search.toLowerCase()))
+        : banks,
+    [search, banks],
   );
 
   function handleClose() {
@@ -451,6 +461,8 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
 
   const [tab, setTab] = useState<AepsTab>(resolvedInitial);
   const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
+  // Live IIN overrides from GET /txn/aeps/banks (keyed by normalized bank name).
+  const [liveIinByName, setLiveIinByName] = useState<Record<string, string>>({});
   const [bankModalOpen, setBankModalOpen] = useState(false);
   const [aadhaar, setAadhaar] = useState("");
   const [mobile, setMobile] = useState("");
@@ -471,6 +483,10 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
 
   const [scanning, setScanning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // ₹5,000+ withdrawals: InstantPay needs an SMS Transaction OTP. referenceKey goes in the
+  // withdraw body; the OTP the customer receives rides inside the PID capture (RD otp attr).
+  const [txnOtp, setTxnOtp] = useState("");
+  const [otpRef, setOtpRef] = useState<{ referenceKey: string; amount: string } | null>(null);
   const withdrawAttemptKey = useRef(createAttemptKeyHolder("aeps-wd"));
   const scanAnim = useRef(new Animated.Value(0)).current;
 
@@ -523,10 +539,37 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
 
   const showAmount = tab === "Withdraw" || tab === "Deposit";
 
+  // Fetch the provider bank directory once; override our static IINs with live ones by name.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await api.get<ApiResponse<{ data?: { banks?: AepsBankRow[] } }>>("/txn/aeps/banks");
+        const rows = data.data?.data?.banks ?? [];
+        if (cancelled || rows.length === 0) return;
+        const map: Record<string, string> = {};
+        for (const r of rows) {
+          if (r.iin) map[bankKey(r.name)] = r.iin;
+        }
+        setLiveIinByName(map);
+      } catch {
+        // Non-fatal — fall back to static IINs (dummy mode already matches).
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const resolvedBanks = useMemo(
+    () => BANKS.map((b) => ({ ...b, iin: liveIinByName[bankKey(b.name)] ?? b.iin })),
+    [liveIinByName],
+  );
+
   const visibleBanks = useMemo(() => {
-    const favs = BANKS.filter((b) => favBanks.includes(b.id));
-    return favs.length > 0 ? favs.slice(0, 5) : BANKS.slice(0, 5);
-  }, [favBanks]);
+    const favs = resolvedBanks.filter((b) => favBanks.includes(b.id));
+    return favs.length > 0 ? favs.slice(0, 5) : resolvedBanks.slice(0, 5);
+  }, [favBanks, resolvedBanks]);
 
   function formatAadhaar(v: string) {
     const digits = v.replace(/\D/g, "").slice(0, 12);
@@ -576,13 +619,61 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
     }
   }
 
+  const needsTxnOtp = tab === "Withdraw" && Number(amount || 0) > 5000;
+  const otpRequested = otpRef !== null && otpRef.amount === amount;
+
+  function updateAmount(v: string) {
+    setAmount(v.replace(/\D/g, ""));
+    // Amount changed → old OTP/referenceKey is no longer valid for this txn.
+    setOtpRef(null);
+    setTxnOtp("");
+  }
+
+  async function requestWithdrawOtp() {
+    if (!selectedBank || submitting) return;
+    setSubmitting(true);
+    try {
+      const { data } = await api.post<ApiResponse<{ data?: { referenceKey?: string } }>>(
+        "/txn/aeps/withdraw/otp",
+        {
+          aadhaarNumber: aadhaar,
+          bankIin: selectedBank.iin,
+          mobile,
+          amount,
+        },
+      );
+      const referenceKey = data.data?.data?.referenceKey;
+      if (!data.success || !referenceKey) throw new Error(data.message || "OTP request failed");
+      setOtpRef({ referenceKey, amount });
+      setTxnOtp("");
+      Alert.alert("OTP Sent", "Customer ke mobile par OTP bheja gaya hai. OTP enter karke scan karein.");
+    } catch (err) {
+      Alert.alert("OTP request failed", apiError(err, "Please try again"));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleScan() {
     if (!canScan || !selectedBank) return;
+
+    // High-value withdrawal: OTP must be requested first and typed before the finger scan,
+    // because the RD service embeds it inside the PID block.
+    if (needsTxnOtp) {
+      if (!otpRequested) {
+        await requestWithdrawOtp();
+        return;
+      }
+      if (txnOtp.replace(/\D/g, "").length < 4) {
+        Alert.alert("OTP required", "Customer ko mila OTP enter karein (₹5,000+ withdrawal).");
+        return;
+      }
+    }
 
     setScanning(true);
     let pidData: string;
     try {
-      pidData = await captureFingerprint(activeDevice.rdPackage);
+      pidData = await captureFingerprint(activeDevice.rdPackage, needsTxnOtp ? txnOtp : undefined);
     } catch (err) {
       setScanning(false);
       const detail = err instanceof Error ? err.message : "Unknown error";
@@ -595,7 +686,7 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
     setScanning(false);
 
     try {
-      if (tab === "Withdraw") {
+      if (tab === "Withdraw" || tab === "Deposit") {
         let txnAuth: string;
         try {
           txnAuth = await promptPin();
@@ -603,9 +694,10 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
           return;
         }
         setSubmitting(true);
+        const isDeposit = tab === "Deposit";
         const idempotencyKey = withdrawAttemptKey.current.get();
         const { data } = await api.post<ApiResponse<{ txn: { txnRef: string; status: string } }>>(
-          "/txn/aeps/withdraw",
+          isDeposit ? "/txn/aeps/deposit" : "/txn/aeps/withdraw",
           {
             idempotencyKey,
             txnAuth,
@@ -614,33 +706,59 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
             mobile,
             biometricPayload: pidData,
             amount,
+            ...(needsTxnOtp && otpRef ? { otpReferenceKey: otpRef.referenceKey } : {}),
           },
         );
         if (!data.success) throw new Error(data.message);
         withdrawAttemptKey.current.clear();
         Alert.alert(
-          "Withdrawal Successful",
+          isDeposit ? "Deposit Successful" : "Withdrawal Successful",
           `${formatINR(amount)} — Ref: ${data.data.txn?.txnRef ?? idempotencyKey}`,
         );
         setAmount("");
+        setOtpRef(null);
+        setTxnOtp("");
       } else if (tab === "Balance Enquiry" || tab === "Mini Statement") {
         setSubmitting(true);
-        const path = tab === "Balance Enquiry" ? "/txn/aeps/balance-enquiry" : "/txn/aeps/mini-statement";
-        const { data } = await api.post<ApiResponse<{ data?: { balance?: string } }>>(path, {
+        const isMini = tab === "Mini Statement";
+        const path = isMini ? "/txn/aeps/mini-statement" : "/txn/aeps/balance-enquiry";
+        const { data } = await api.post<
+          ApiResponse<{
+            data?: {
+              balance?: string;
+              statement?: { date: string; narration: string; amount: string; type: "credit" | "debit" }[];
+            };
+          }>
+        >(path, {
           aadhaarNumber: aadhaar,
           bankIin: selectedBank.iin,
           mobile,
           biometricPayload: pidData,
         });
         if (!data.success) throw new Error(data.message);
-        const balance = data.data?.data?.balance;
-        Alert.alert(tab, balance ? `Available balance: ${formatINR(balance)}` : "Request completed successfully.");
+        if (isMini) {
+          const rows = data.data?.data?.statement ?? [];
+          const body = rows.length
+            ? rows
+                .map(
+                  (r) =>
+                    `${r.date}  ${r.type === "credit" ? "+" : "-"}${formatINR(r.amount)}\n${r.narration}`,
+                )
+                .join("\n\n")
+            : "No recent transactions found.";
+          Alert.alert("Mini Statement", body);
+        } else {
+          const balance = data.data?.data?.balance;
+          Alert.alert(tab, balance ? `Available balance: ${formatINR(balance)}` : "Request completed successfully.");
+        }
       } else {
         Alert.alert("Coming soon", `${tab} is not available yet.`);
       }
     } catch (err) {
       if (err) {
-        Alert.alert(tab === "Withdraw" ? "Withdrawal failed" : "Request failed", apiError(err, "Please try again"));
+        const title =
+          tab === "Withdraw" ? "Withdrawal failed" : tab === "Deposit" ? "Deposit failed" : "Request failed";
+        Alert.alert(title, apiError(err, "Please try again"));
       }
     } finally {
       setSubmitting(false);
@@ -941,7 +1059,7 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
                 <Text style={{ color: colors.blueFlat, fontWeight: "800", fontSize: 16, marginRight: 4 }}>₹</Text>
                 <TextInput
                   value={amount}
-                  onChangeText={(v) => setAmount(v.replace(/\D/g, ""))}
+                  onChangeText={updateAmount}
                   placeholder="Enter amount"
                   placeholderTextColor={tokens.mute}
                   keyboardType="number-pad"
@@ -954,7 +1072,7 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
                   return (
                     <Pressable
                       key={a}
-                      onPress={() => setAmount(String(a))}
+                      onPress={() => updateAmount(String(a))}
                       style={[
                         s.quickChip,
                         {
@@ -970,6 +1088,35 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
                   );
                 })}
               </View>
+
+              {/* Transaction OTP — mandatory above ₹5,000 (sent to customer's mobile) */}
+              {needsTxnOtp && (
+                <>
+                  <Text style={[s.fieldLabel, s.fieldLabelSpaced, { color: tokens.sub }]}>
+                    TRANSACTION OTP (₹5,000+ WITHDRAWAL)
+                  </Text>
+                  {otpRequested ? (
+                    <View style={[s.inputRow, { borderColor: tokens.inputBorder, backgroundColor: tokens.inputBg }]}>
+                      <TextInput
+                        value={txnOtp}
+                        onChangeText={(v) => setTxnOtp(v.replace(/\D/g, "").slice(0, 8))}
+                        placeholder="OTP received by customer"
+                        placeholderTextColor={tokens.mute}
+                        keyboardType="number-pad"
+                        maxLength={8}
+                        style={[s.input, { color: tokens.txt }]}
+                      />
+                      <Pressable onPress={requestWithdrawOtp} disabled={submitting}>
+                        <Text style={{ color: colors.blueLight, fontWeight: "700", fontSize: 12 }}>Resend</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Text style={{ color: tokens.mute, fontSize: 12, marginTop: 2 }}>
+                      Scan button dabane par pehle customer ke mobile par OTP jayega.
+                    </Text>
+                  )}
+                </>
+              )}
             </>
           )}
 
@@ -1118,6 +1265,7 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
         onSelect={setSelectedBank}
         favouriteIds={favBanks}
         onToggleFav={toggleFavBank}
+        banks={resolvedBanks}
       />
 
       <DeviceModal

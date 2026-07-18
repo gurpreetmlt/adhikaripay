@@ -1,4 +1,5 @@
 import { EkoAdapter } from "./adapters/eko.adapter";
+import { InstantPayAdapter } from "./adapters/instantpay.adapter";
 import { PaySprintAdapter } from "./adapters/paysprint.adapter";
 import type { ProviderAdapter } from "./types";
 
@@ -8,6 +9,7 @@ import type { ProviderAdapter } from "./types";
 const adapters: Record<string, ProviderAdapter> = {
   eko: new EkoAdapter(),
   paysprint: new PaySprintAdapter(),
+  instantpay: new InstantPayAdapter(),
 };
 
 export function getAdapterByCode(code: string): ProviderAdapter | null {

@@ -33,9 +33,12 @@
 - [x] Auth, wallet, catalog, txn stubs
 - [x] Txn PIN on wallet transfer
 - [x] Wallet `pendingBalance` on `/wallet/me` (from pending/initiated txns)
+- [x] AEPS dummy↔live switch (`AEPS_PROVIDER_MODE`) + InstantPay adapter skeleton
+- [x] AEPS compliance gates (geofence, bio-mismatch/EDD, dormancy, cash receipt)
 - [ ] Fund request approve flow
 - [ ] KYC CRUD routes
 - [ ] Commission payout report
+- [ ] InstantPay DMT/BBPS rails + merchant outlet onboarding
 
 ## Security (2026-07-17)
 - [x] Default MPIN / OTP-in-prod / hardcoded admin seed removed
@@ -57,7 +60,7 @@
 - [ ] History purge for any secrets ever pushed to remote
 
 ## Last updated
-2026-07-17 — Round-2 hacker fixes: session kill, OTP oracles, txnAuth, RD allowlist, KYC gates
+2026-07-18 — AEPS dummy/sandbox/live provider mode + InstantPay adapter + compliance gates
 2026-07-17 — Security hardening: Critical+High remediations (auth, wallet, mobile, web storage, release signing, Dependabot)
 2026-07-14 — Wallet pending balance: `GET /api/wallet/me` adds `pendingBalance` per wallet (sum of pending/initiated txns); agent web Wallet + mobile Wallet show Pending
 2026-07-14 — Branding: product = Adhikari Pay; npm scopes `@adhikaripay/*`; folder renamed to `apps/mobile`

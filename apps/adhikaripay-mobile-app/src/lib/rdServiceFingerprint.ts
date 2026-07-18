@@ -20,8 +20,10 @@ let lastProbeLog: string[] = [];
 
 // L1 RD services (Morpho/IDEMIA, Mantra MFS110) need fType="2" and reject extra blocks
 // like <Demo> — strict parsers fail silently and capture never starts (no sensor light).
-function buildPidOptionsXml(timeoutMs: number): string {
-  return `<PidOptions ver="1.0"><Opts fCount="1" fType="2" iCount="0" iType="0" pCount="0" pType="0" format="0" pidVer="2.0" timeout="${timeoutMs}" posh="UNKNOWN" env="P"/></PidOptions>`;
+// otp: Transaction OTP for ₹5,000+ AEPS withdrawals — RD embeds it in the PID block.
+function buildPidOptionsXml(timeoutMs: number, otp?: string): string {
+  const otpAttr = otp ? ` otp="${otp}"` : "";
+  return `<PidOptions ver="1.0"><Opts fCount="1" fType="2" iCount="0" iType="0" pCount="0" pType="0" format="0" pidVer="2.0" timeout="${timeoutMs}"${otpAttr} posh="UNKNOWN" env="P"/></PidOptions>`;
 }
 
 export function getRdServiceProbeLog(): string {
@@ -50,7 +52,7 @@ export async function listInstalledRdPackages(): Promise<string[]> {
   }
 }
 
-export async function captureFingerprint(rdPackage = DEFAULT_RD_PACKAGE): Promise<string> {
+export async function captureFingerprint(rdPackage = DEFAULT_RD_PACKAGE, otp?: string): Promise<string> {
   if (Platform.OS !== "android") {
     throw new Error("Biometric capture is only supported on Android");
   }
@@ -80,7 +82,7 @@ export async function captureFingerprint(rdPackage = DEFAULT_RD_PACKAGE): Promis
     );
   }
 
-  const pidOptions = buildPidOptionsXml(CAPTURE_TIMEOUT_MS);
+  const pidOptions = buildPidOptionsXml(CAPTURE_TIMEOUT_MS, otp);
   lastProbeLog.push(`Capture intent preferred=${rdPackage}`);
 
   try {

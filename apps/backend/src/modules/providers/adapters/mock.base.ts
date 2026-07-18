@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type {
+  AepsBank,
+  AepsBankListParams,
   AepsParams,
+  AepsTxnOtpParams,
   AgentAuthParams,
   BbpsFetchBillParams,
   BbpsPayBillParams,
@@ -68,6 +71,20 @@ export abstract class MockAdapterBase implements ProviderAdapter {
     return this.respond("AEPS cash withdrawal", params.amount, {});
   }
 
+  aepsDeposit(params: AepsParams): Promise<ProviderResult<Record<string, never>>> {
+    return this.respond("AEPS cash deposit", params.amount, {});
+  }
+
+  aepsTransactionOtp(
+    params: AepsTxnOtpParams,
+  ): Promise<ProviderResult<{ referenceKey: string; validity: string }>> {
+    // Mock OTP dispatch — dummy flow accepts any 6-digit OTP typed at capture time.
+    return this.respond("AEPS transaction OTP", undefined, {
+      referenceKey: `MOCKOTP-${randomUUID().slice(0, 16)}`,
+      validity: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    });
+  }
+
   aepsMiniStatement(
     params: AepsParams,
   ): Promise<ProviderResult<{ statement: { date: string; narration: string; amount: string; type: "credit" | "debit" }[] }>> {
@@ -82,6 +99,25 @@ export abstract class MockAdapterBase implements ProviderAdapter {
 
   aadhaarPay(params: AepsParams): Promise<ProviderResult<Record<string, never>>> {
     return this.respond("Aadhaar Pay", params.amount, {});
+  }
+
+  aepsBankList(_params: AepsBankListParams): Promise<ProviderResult<{ banks: AepsBank[] }>> {
+    // Real NPCI IINs so dummy-mode selection matches live behaviour; extend as needed.
+    const banks: AepsBank[] = [
+      { bankId: 109005, name: "STATE BANK OF INDIA", iin: "607094", aepsEnabled: true, aadhaarpayEnabled: true, aepsFailureRate: "33", aadhaarpayFailureRate: "45" },
+      { bankId: 74984, name: "Punjab National Bank", iin: "607027", aepsEnabled: true, aadhaarpayEnabled: true, aepsFailureRate: "16", aadhaarpayFailureRate: "71" },
+      { bankId: 39287, name: "BANK OF BARODA", iin: "606985", aepsEnabled: true, aadhaarpayEnabled: true, aepsFailureRate: "32", aadhaarpayFailureRate: "78" },
+      { bankId: 11263, name: "HDFC Bank", iin: "607152", aepsEnabled: true, aadhaarpayEnabled: true, aepsFailureRate: "27", aadhaarpayFailureRate: "100" },
+      { bankId: 15910, name: "ICICI Bank", iin: "508534", aepsEnabled: true, aadhaarpayEnabled: true, aepsFailureRate: "58", aadhaarpayFailureRate: "100" },
+      { bankId: 1, name: "AIRTEL PAYMENTS BANK", iin: "990320", aepsEnabled: true, aadhaarpayEnabled: true, aepsFailureRate: "18", aadhaarpayFailureRate: "50" },
+      { bankId: 96035, name: "UCO BANK", iin: "607066", aepsEnabled: true, aadhaarpayEnabled: true, aepsFailureRate: "22", aadhaarpayFailureRate: "100" },
+      { bankId: 47267, name: "BANK OF INDIA", iin: "508505", aepsEnabled: true, aadhaarpayEnabled: true, aepsFailureRate: "33", aadhaarpayFailureRate: "50" },
+      { bankId: 53201, name: "CANARA BANK", iin: "607396", aepsEnabled: true, aadhaarpayEnabled: true, aepsFailureRate: "24", aadhaarpayFailureRate: "0" },
+      { bankId: 20500, name: "INDIAN BANK", iin: "607105", aepsEnabled: true, aadhaarpayEnabled: true, aepsFailureRate: "30", aadhaarpayFailureRate: "67" },
+      { bankId: 91606, name: "UNION BANK OF INDIA", iin: "607161", aepsEnabled: true, aadhaarpayEnabled: true, aepsFailureRate: "32", aadhaarpayFailureRate: "0" },
+      { bankId: 106167, name: "PUNJAB AND SIND BANK", iin: "607087", aepsEnabled: true, aadhaarpayEnabled: true, aepsFailureRate: "26", aadhaarpayFailureRate: "100" },
+    ];
+    return this.respond("AEPS bank list", undefined, { banks });
   }
 
   dmtAddBeneficiary(params: DmtBeneficiaryParams): Promise<ProviderResult<{ beneficiaryId: string }>> {

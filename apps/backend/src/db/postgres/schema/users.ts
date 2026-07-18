@@ -39,6 +39,17 @@ export const users = pgTable(
     panNumberEncrypted: text("pan_number_encrypted"),
     aadhaarNumberEncrypted: text("aadhaar_number_encrypted"),
     kycStatus: kycStatusEnum("kyc_status").notNull().default("pending"),
+    /** InstantPay merchant outlet id from onboarding — required for sandbox/live AEPS. */
+    instantpayOutletId: varchar("instantpay_outlet_id", { length: 64 }),
+    /** Registered business geo (degrees). Used for AEPS geofence checks. */
+    outletLatitude: varchar("outlet_latitude", { length: 32 }),
+    outletLongitude: varchar("outlet_longitude", { length: 32 }),
+    /** Last successful AEPS / Aadhaar Pay txn — dormancy = inactivity > AEPS_DORMANCY_DAYS. */
+    lastAepsTxnAt: timestamp("last_aeps_txn_at", { withTimezone: true }),
+    /** Extended Due Diligence required after repeated biometric mismatches. */
+    aepsEddRequired: boolean("aeps_edd_required").notNull().default(false),
+    /** Soft-block reason for AEPS (e.g. bio_mismatch). Null = not blocked. */
+    aepsBlockReason: varchar("aeps_block_reason", { length: 120 }),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

@@ -3,9 +3,10 @@ import { db } from "../../db/postgres";
 import { providers, providerServices, services } from "../../db/postgres/schema";
 import { insertProviderLog } from "../../db/postgres/repositories/providerLog";
 import { getAdapterByCode } from "./provider.registry";
+import { aepsAdapterCode, isAepsRoutedService } from "./aepsMode";
 import { HttpError } from "../../utils/httpError";
 import { logger } from "../../utils/logger";
-import { env } from "../../config/env";
+import { env, isInstantPayAepsMode } from "../../config/env";
 import type { ProviderAdapter, ProviderOperation, ProviderResult } from "./types";
 
 /**
@@ -27,10 +28,79 @@ export interface RoutedProvider {
   providerServiceCode: string;
 }
 
+/**
+ * AEPS services honour AEPS_PROVIDER_MODE:
+ * - dummy → eko stub (real RD PID + KYC still enforced above the adapter)
+ * - instantpay_* → InstantPay adapter only (never silently falls back to dummy)
+ */
+async function resolveAepsProvider(serviceCode: string): Promise<RoutedProvider[]> {
+  const code = aepsAdapterCode();
+  const adapter = getAdapterByCode(code);
+  if (!adapter) {
+    throw new HttpError(503, `AEPS adapter "${code}" is not registered`, "NO_PROVIDER_AVAILABLE");
+  }
+  if (isStubBlocked(adapter, env.NODE_ENV, env.ALLOW_STUB_PROVIDERS)) {
+    throw new HttpError(
+      503,
+      "Dummy AEPS provider blocked in production — set AEPS_PROVIDER_MODE=instantpay_live (or ALLOW_STUB_PROVIDERS for staging)",
+      "STUB_PROVIDER_BLOCKED",
+    );
+  }
+  if (isInstantPayAepsMode() && adapter.isStub) {
+    throw new HttpError(503, "InstantPay mode resolved a stub adapter — refusing", "AEPS_MODE_MISMATCH");
+  }
+
+  let [row] = await db
+    .select({ id: providers.id, isActive: providers.isActive })
+    .from(providers)
+    .where(eq(providers.code, code));
+
+  if (!row) {
+    // Ensure a providers row exists so txn.providerId FK stays valid.
+    const [created] = await db
+      .insert(providers)
+      .values({ code, name: code === "instantpay" ? "InstantPay" : "Eko (dummy AEPS)" })
+      .returning({ id: providers.id, isActive: providers.isActive });
+    row = created!;
+  }
+  if (!row.isActive) {
+    throw new HttpError(503, "AEPS provider is disabled", "NO_PROVIDER_AVAILABLE");
+  }
+
+  // agent_auth (daily 2FA) and aeps_bank_list (directory read) have no service row / move no
+  // money, so skip the service catalog gate for them.
+  const skipServiceGate = serviceCode === "agent_auth" || serviceCode === "aeps_bank_list";
+  if (!skipServiceGate) {
+    const [svc] = await db
+      .select({ id: services.id, isActive: services.isActive })
+      .from(services)
+      .where(eq(services.code, serviceCode));
+    if (!svc) throw new HttpError(404, "Service not found", "SERVICE_NOT_FOUND");
+    if (!svc.isActive) throw new HttpError(503, "This service is currently disabled", "SERVICE_DISABLED");
+  }
+
+  logger.info(
+    { serviceCode, mode: env.AEPS_PROVIDER_MODE, providerCode: code },
+    "AEPS provider resolved by mode",
+  );
+
+  return [
+    {
+      adapter,
+      providerId: row.id,
+      providerServiceCode: `${code}:${serviceCode}`,
+    },
+  ];
+}
+
 // Resolves which providers can fulfil a service, in fail-over order
 // (primary first, then priority). Reads provider_services fresh each call so
 // an admin toggling a provider takes effect immediately.
 export async function resolveProvidersForService(serviceCode: string): Promise<RoutedProvider[]> {
+  if (isAepsRoutedService(serviceCode)) {
+    return resolveAepsProvider(serviceCode);
+  }
+
   const rows = await db
     .select({
       providerId: providers.id,

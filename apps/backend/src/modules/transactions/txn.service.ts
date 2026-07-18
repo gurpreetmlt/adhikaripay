@@ -432,6 +432,8 @@ export async function reconcileStaleTransactions(limit = 40): Promise<{ checked:
 
 export function inferDirectionFromServiceCode(code: string): MoneyDirection {
   if (code === "aeps_balance_enquiry" || code === "aeps_mini_statement") return "none";
+  // Deposit is the odd AEPS one out: retailer wallet funds the customer's bank credit (debit).
+  if (code === "aeps_cash_deposit") return "debit";
   if (code.startsWith("aeps_") || code === "aadhaar_pay") return "credit";
   return "debit";
 }

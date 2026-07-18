@@ -8,4 +8,5 @@ export * from "./transactions";
 export * from "./commission";
 export * from "./apiClients";
 export * from "./logs";
+export * from "./aepsCompliance";
 export * from "./relations";

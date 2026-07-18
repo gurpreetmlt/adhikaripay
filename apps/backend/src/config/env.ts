@@ -58,6 +58,29 @@ const envSchema = z.object({
    * Set 0 to disable the worker. Default 5 minutes.
    */
   TXN_RECONCILE_INTERVAL_MS: z.coerce.number().int().min(0).default(5 * 60 * 1000),
+  /**
+   * AEPS rail mode. Same UI/API; only the provider behind the adapter changes.
+   * - dummy: MockAdapter (eko) — real RD PID + KYC still required; no InstantPay HTTP
+   * - instantpay_sandbox / instantpay_live: real InstantPay adapter (fail-closed if creds missing)
+   */
+  AEPS_PROVIDER_MODE: z.enum(["dummy", "instantpay_sandbox", "instantpay_live"]).default("dummy"),
+  INSTANTPAY_CLIENT_ID: z.string().optional(),
+  INSTANTPAY_CLIENT_SECRET: z.string().optional(),
+  /** Auth code header — InstantPay docs use fixed "1". */
+  INSTANTPAY_AUTH_CODE: z.string().default("1"),
+  /**
+   * AES-256 key (32 utf8 chars OR base64 of 32 bytes) used to encrypt Aadhaar for InstantPay
+   * biometricData.encryptedAadhaar (aes-256-cbc). Required in sandbox/live modes.
+   */
+  INSTANTPAY_AES_KEY: z.string().optional(),
+  /** Optional override; default is InstantPay production host for both sandbox and live accounts. */
+  INSTANTPAY_BASE_URL: z.string().url().optional(),
+  /** Max km from registered outlet for AEPS txns (InstantPay best practice: 2–3 km). */
+  AEPS_GEOFENCE_KM: z.coerce.number().positive().default(3),
+  /** Days without AEPS activity before merchant is treated as dormant. */
+  AEPS_DORMANCY_DAYS: z.coerce.number().int().positive().default(180),
+  /** Consecutive biometric mismatches on one Aadhaar before merchant block / EDD. */
+  AEPS_BIO_MISMATCH_LIMIT: z.coerce.number().int().positive().default(2),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -68,6 +91,25 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+/** Fail-closed: sandbox/live must have InstantPay credentials — never silent-fallback to dummy. */
+export function assertAepsProviderConfig(): void {
+  if (env.AEPS_PROVIDER_MODE === "dummy") return;
+  const missing: string[] = [];
+  if (!env.INSTANTPAY_CLIENT_ID) missing.push("INSTANTPAY_CLIENT_ID");
+  if (!env.INSTANTPAY_CLIENT_SECRET) missing.push("INSTANTPAY_CLIENT_SECRET");
+  if (!env.INSTANTPAY_AES_KEY) missing.push("INSTANTPAY_AES_KEY");
+  if (missing.length) {
+    throw new Error(
+      `AEPS_PROVIDER_MODE=${env.AEPS_PROVIDER_MODE} requires ${missing.join(", ")}. ` +
+        "Set credentials or switch AEPS_PROVIDER_MODE=dummy. Silent fallback to dummy is not allowed.",
+    );
+  }
+}
+
+export function isInstantPayAepsMode(): boolean {
+  return env.AEPS_PROVIDER_MODE === "instantpay_sandbox" || env.AEPS_PROVIDER_MODE === "instantpay_live";
+}
 
 /** Never expose OTP over the wire in production, even if the env flag is mis-set. */
 export function shouldExposeOtpInResponse(): boolean {

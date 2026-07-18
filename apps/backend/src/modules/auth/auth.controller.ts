@@ -186,6 +186,8 @@ export async function verifyTransactionPin(req: Request, res: Response): Promise
 const agentAuthSchema = z.object({
   aadhaarNumber: z.string().regex(/^\d{12}$/, "Aadhaar number must be 12 digits"),
   biometricPayload: z.string().min(1),
+  latitude: z.string().min(1).max(32).optional(),
+  longitude: z.string().min(1).max(32).optional(),
 });
 
 export async function agentAuth(req: Request, res: Response): Promise<void> {
@@ -193,8 +195,13 @@ export async function agentAuth(req: Request, res: Response): Promise<void> {
   const input = agentAuthSchema.parse(req.body);
   const result = await verifyAndRecordAgentAuth(
     { id: req.auth.sub },
-    input.aadhaarNumber,
-    input.biometricPayload,
+    {
+      aadhaarNumber: input.aadhaarNumber,
+      biometricPayload: input.biometricPayload,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      endpointIp: req.ip ?? null,
+    },
     { ipAddress: req.ip ?? null, userAgent: req.headers["user-agent"] ?? null },
   );
   sendSuccess(res, result, "Fingerprint verified — session unlocked");
@@ -202,5 +209,6 @@ export async function agentAuth(req: Request, res: Response): Promise<void> {
 
 export async function agentAuthStatus(req: Request, res: Response): Promise<void> {
   if (!req.auth) throw new HttpError(401, "Authentication required", "UNAUTHENTICATED");
-  sendSuccess(res, await getAgentAuthStatus(req.auth.sub));
+  // InstantPay mode: hit outletLoginStatus so UI knows LOGGEDIN vs LOGINREQUIRED before scanning.
+  sendSuccess(res, await getAgentAuthStatus(req.auth.sub, { checkProvider: true, endpointIp: req.ip ?? null }));
 }

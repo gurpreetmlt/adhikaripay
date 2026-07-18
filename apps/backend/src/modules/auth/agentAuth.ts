@@ -1,10 +1,14 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../db/postgres";
 import { users } from "../../db/postgres/schema";
+import { env, isInstantPayAepsMode } from "../../config/env";
 import { HttpError } from "../../utils/httpError";
 import { decryptPII } from "../../utils/aes";
 import { insertAuditLog } from "../../db/postgres/repositories/auditLog";
+import { logger } from "../../utils/logger";
 import { assertFreshBiometric } from "../transactions/biometricReplay";
+import { resolveProvidersForService, callProvider } from "../providers/provider.router";
+import { instantPayOutletLoginStatus } from "../providers/instantpay/client";
 
 // Retailer-own-identity proof-of-presence, distinct from the customer's AEPS biometric.
 // NPCI daily 2FA is based on the Indian calendar day, not a rolling-hour window.
@@ -17,24 +21,76 @@ function indiaDayKey(date: Date): string {
   }).format(date);
 }
 
-export async function getAgentAuthStatus(userId: string): Promise<{
+export interface AgentAuthStatus {
   verifiedToday: boolean;
   lastVerifiedAt: Date | null;
   kycReady: boolean;
-}> {
+  providerMode: string;
+  /** InstantPay outletLoginStatus extras (null in dummy mode / provider unreachable). */
+  outlet?: {
+    registered: boolean;
+    actcode: string | null;
+    aadhaarLastFour: string | null;
+    isFaceAuthAvailable: boolean;
+  } | null;
+}
+
+export async function getAgentAuthStatus(
+  userId: string,
+  opts: { checkProvider?: boolean; endpointIp?: string | null } = {},
+): Promise<AgentAuthStatus> {
   const [user] = await db
     .select({
       lastAgentAuthAt: users.lastAgentAuthAt,
       aadhaarNumberEncrypted: users.aadhaarNumberEncrypted,
+      instantpayOutletId: users.instantpayOutletId,
     })
     .from(users)
     .where(eq(users.id, userId));
   const last = user?.lastAgentAuthAt ?? null;
-  return {
-    verifiedToday: Boolean(last && indiaDayKey(last) === indiaDayKey(new Date())),
+  const localVerifiedToday = Boolean(last && indiaDayKey(last) === indiaDayKey(new Date()));
+
+  const base: AgentAuthStatus = {
+    verifiedToday: localVerifiedToday,
     lastVerifiedAt: last,
     kycReady: Boolean(user?.aadhaarNumberEncrypted),
+    providerMode: env.AEPS_PROVIDER_MODE,
+    outlet: null,
   };
+
+  // InstantPay mode: provider is the source of truth for today's 2FA. LOGGEDIN can arrive
+  // from another channel; LOGINREQUIRED can appear even when our local record says verified
+  // (midnight expiry, provider-side reset). Only the explicit status endpoint pays the HTTP
+  // round-trip — per-txn gating stays on the fast local check.
+  if (opts.checkProvider && isInstantPayAepsMode()) {
+    if (!user?.instantpayOutletId) {
+      return { ...base, verifiedToday: false, outlet: { registered: false, actcode: null, aadhaarLastFour: null, isFaceAuthAvailable: false } };
+    }
+    try {
+      const st = await instantPayOutletLoginStatus(user.instantpayOutletId, opts.endpointIp || "127.0.0.1");
+      if (st.loggedIn && !localVerifiedToday) {
+        // Sync local record so per-txn assertAgentAuthFresh passes without another scan.
+        const now = new Date();
+        await db.update(users).set({ lastAgentAuthAt: now, updatedAt: now }).where(eq(users.id, userId));
+        base.lastVerifiedAt = now;
+      }
+      return {
+        ...base,
+        verifiedToday: st.loggedIn,
+        outlet: {
+          registered: st.actcode !== "OUI",
+          actcode: st.actcode,
+          aadhaarLastFour: st.aadhaarLastFour,
+          isFaceAuthAvailable: st.isFaceAuthAvailable,
+        },
+      };
+    } catch (err) {
+      logger.error({ err, userId }, "outletLoginStatus check failed — falling back to local record");
+      return base;
+    }
+  }
+
+  return base;
 }
 
 export async function assertAgentAuthFresh(userId: string): Promise<void> {
@@ -48,24 +104,32 @@ export async function assertAgentAuthFresh(userId: string): Promise<void> {
   }
 }
 
+export interface AgentAuthInput {
+  aadhaarNumber: string;
+  biometricPayload: string;
+  latitude?: string;
+  longitude?: string;
+  endpointIp?: string | null;
+}
+
 /**
- * Daily retailer 2FA before AEPS. Today: capture-only unlock after KYC Aadhaar match + fresh PID.
- * InstantPay UIDAI agent_auth will replace the capture-only path when the adapter is wired.
+ * Daily retailer 2FA before AEPS.
+ * - Always: KYC Aadhaar match + fresh PID (replay guard)
+ * - dummy: mock provider agentAuth succeeds → unlock day
+ * - instantpay_*: unlock only after InstantPay outletLogin success
  */
 export async function verifyAndRecordAgentAuth(
   actor: { id: string },
-  enteredAadhaarNumber: string,
-  biometricPayload: string,
+  input: AgentAuthInput,
   context: { ipAddress: string | null; userAgent: string | null },
-): Promise<{ verifiedAt: Date }> {
-  // Validate identity first — do not burn a PID on wrong Aadhaar / inactive account.
+): Promise<{ verifiedAt: Date; providerMode: string; providerStatus: string }> {
   const [user] = await db.select().from(users).where(eq(users.id, actor.id));
   if (!user || !user.isActive) throw new HttpError(403, "Account is not active", "ACCOUNT_INACTIVE");
   if (!user.aadhaarNumberEncrypted) {
     throw new HttpError(422, "Complete KYC (Aadhaar) before agent authentication", "KYC_AADHAAR_REQUIRED");
   }
   const aadhaarNumber = decryptPII(user.aadhaarNumberEncrypted);
-  if (enteredAadhaarNumber !== aadhaarNumber) {
+  if (input.aadhaarNumber !== aadhaarNumber) {
     throw new HttpError(
       422,
       "Entered Aadhaar does not match the retailer's KYC Aadhaar",
@@ -73,9 +137,38 @@ export async function verifyAndRecordAgentAuth(
     );
   }
 
-  await assertFreshBiometric(biometricPayload);
+  await assertFreshBiometric(input.biometricPayload);
 
-  // TODO(instantpay): call provider agentAuth here before unlocking the day.
+  const routedProviders = await resolveProvidersForService("agent_auth");
+  const result = await callProvider(
+    routedProviders[0]!,
+    "agent_auth",
+    null,
+    {
+      aadhaarNumber: input.aadhaarNumber,
+      biometricPayload: input.biometricPayload,
+      latitude: input.latitude,
+      longitude: input.longitude,
+    },
+    (adapter) =>
+      adapter.agentAuth({
+        retailerUserId: actor.id,
+        aadhaarNumber: input.aadhaarNumber,
+        biometricPayload: input.biometricPayload,
+        latitude: input.latitude ?? user.outletLatitude ?? undefined,
+        longitude: input.longitude ?? user.outletLongitude ?? undefined,
+        outletId: user.instantpayOutletId ?? undefined,
+        endpointIp: input.endpointIp ?? context.ipAddress ?? undefined,
+      }),
+  );
+
+  if (!result.success || result.status !== "success") {
+    throw new HttpError(
+      401,
+      result.message || "Daily fingerprint verification failed at provider",
+      "AGENT_AUTH_PROVIDER_FAILED",
+    );
+  }
 
   const verifiedAt = new Date();
   await db.update(users).set({ lastAgentAuthAt: verifiedAt, updatedAt: verifiedAt }).where(eq(users.id, actor.id));
@@ -86,8 +179,16 @@ export async function verifyAndRecordAgentAuth(
     entityId: actor.id,
     ipAddress: context.ipAddress,
     userAgent: context.userAgent,
-    metadata: { mode: "capture_only" },
+    metadata: {
+      mode: env.AEPS_PROVIDER_MODE,
+      provider: routedProviders[0]!.adapter.code,
+      providerTxnId: result.providerTxnId,
+    },
   });
 
-  return { verifiedAt };
+  return {
+    verifiedAt,
+    providerMode: env.AEPS_PROVIDER_MODE,
+    providerStatus: result.status,
+  };
 }

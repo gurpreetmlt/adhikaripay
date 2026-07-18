@@ -8,9 +8,12 @@ import {
   bbpsPayBill,
   dmtAddBeneficiary,
   dmtTransfer,
+  aepsBankList,
   aepsBalanceEnquiry,
   aepsMiniStatement,
   aepsWithdraw,
+  aepsWithdrawOtp,
+  aepsDeposit,
   aadhaarPay,
   history,
   receipt,
@@ -23,7 +26,9 @@ import {
   dmtBeneficiarySchema,
   dmtTransferSchema,
   aepsEnquirySchema,
+  aepsTxnOtpSchema,
   aepsWithdrawSchema,
+  aepsDepositSchema,
   aadhaarPaySchema,
 } from "./txn.validators";
 import { walletTxnLimiter } from "../../middleware/rateLimiter";
@@ -43,9 +48,12 @@ txnRouter.post("/bbps/pay", retailerOnly, walletTxnLimiter, validateBody(bbpsPay
 txnRouter.post("/dmt/beneficiary", retailerOnly, validateBody(dmtBeneficiarySchema), dmtAddBeneficiary);
 txnRouter.post("/dmt/transfer", retailerOnly, walletTxnLimiter, validateBody(dmtTransferSchema), dmtTransfer);
 
+txnRouter.get("/aeps/banks", retailerOnly, aepsBankList);
 txnRouter.post("/aeps/balance-enquiry", retailerOnly, validateBody(aepsEnquirySchema), aepsBalanceEnquiry);
 txnRouter.post("/aeps/mini-statement", retailerOnly, validateBody(aepsEnquirySchema), aepsMiniStatement);
+txnRouter.post("/aeps/withdraw/otp", retailerOnly, walletTxnLimiter, validateBody(aepsTxnOtpSchema), aepsWithdrawOtp);
 txnRouter.post("/aeps/withdraw", retailerOnly, walletTxnLimiter, validateBody(aepsWithdrawSchema), aepsWithdraw);
+txnRouter.post("/aeps/deposit", retailerOnly, walletTxnLimiter, validateBody(aepsDepositSchema), aepsDeposit);
 txnRouter.post("/aeps/aadhaar-pay", retailerOnly, walletTxnLimiter, validateBody(aadhaarPaySchema), aadhaarPay);
 
 txnRouter.get("/", history);

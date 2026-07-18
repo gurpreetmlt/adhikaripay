@@ -1,5 +1,5 @@
 import { createApp } from "./app";
-import { env } from "./config/env";
+import { assertAepsProviderConfig, env } from "./config/env";
 import { pgPool } from "./db/postgres";
 import { deleteExpiredOtpRequests } from "./db/postgres/repositories/otpRequest";
 import { reconcileStaleTransactions } from "./modules/transactions/txn.service";
@@ -8,6 +8,9 @@ import { logger } from "./utils/logger";
 const OTP_SWEEP_INTERVAL_MS = 30 * 60 * 1000;
 
 async function main() {
+  assertAepsProviderConfig();
+  logger.info({ aepsMode: env.AEPS_PROVIDER_MODE }, "AEPS provider mode");
+
   await pgPool.query("SELECT 1");
   logger.info("PostgreSQL connected");
 
