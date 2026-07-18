@@ -38,8 +38,7 @@ const CATALOG: SeedCategory[] = [
     services: [
       { code: "CASH_WITHDRAW", name: "Cash Withdraw", icon: "Cash-Withdraw.svg" },
       { code: "MINI_STATEMENT", name: "Mini Statement", icon: "Mini-Statement.svg" },
-      // Icon pending — tile stays so we know art is still needed
-      { code: "CASH_DEPOSIT", name: "Cash Deposit" },
+      { code: "CASH_DEPOSIT", name: "Cash Deposit", icon: "Cash-Deposit.svg" },
       { code: "BALANCE_ENQUIRY", name: "Balance Enquiry", icon: "Balance-Enquiry.svg" },
       { code: "UPI_CASH_POINT", name: "UPI Cash Point", badge: "NEW", icon: "UPI-Cash-Point.svg" },
       { code: "MONEY_TRANSFER", name: "Money Transfer", icon: "Money-Transfer.svg" },
@@ -55,8 +54,8 @@ const CATALOG: SeedCategory[] = [
       { code: "MOBILE_POSTPAID", name: "Mobile Postpaid", badge: "Flat ₹2", icon: "Other-Bills.svg" },
       { code: "DTH", name: "DTH", badge: "Upto 1.50%", icon: "DTH.svg" },
       { code: "CABLE_TV", name: "Cable TV", badge: "Flat ₹2", icon: "Cable-Tv.svg" },
-      { code: "LANDLINE_POSTPAID", name: "Landline Postpaid", badge: "Flat ₹2", icon: "Other-Bills.svg" },
-      { code: "BROADBAND_POSTPAID", name: "Broadband Postpaid", badge: "Flat ₹2", icon: "Other-Bills.svg" },
+      { code: "LANDLINE_POSTPAID", name: "Landline Postpaid", badge: "Flat ₹2", icon: "Landline.svg" },
+      { code: "BROADBAND_POSTPAID", name: "Broadband Postpaid", badge: "Flat ₹2", icon: "Broadband.svg" },
       { code: "ELECTRICITY", name: "Electricity", badge: "Flat ₹1", icon: "Electricity.svg" },
       { code: "WATER", name: "Water", badge: "Flat ₹1", icon: "Water-Bill.svg" },
       { code: "GAS_PIPELINE", name: "Gas Pipeline", badge: "Flat ₹1", icon: "Gas-Pipeline.svg" },
@@ -71,17 +70,16 @@ const CATALOG: SeedCategory[] = [
       { code: "INSURANCE_PREMIUM", name: "Insurance Premium", badge: "Upto ₹5", icon: "Insurance.svg" },
       // Single LIC tile (LIC Suvidha deactivated below)
       { code: "LIC", name: "LIC", icon: "LIC.svg" },
-      // Icon pending — tiles kept as reminders
-      { code: "NPS", name: "NPS", badge: "NEW" },
-      { code: "EDUCATION_FEES", name: "Education Fees", badge: "Upto ₹4.75" },
+      { code: "NPS", name: "NPS", badge: "NEW", icon: "NPS.svg" },
+      { code: "EDUCATION_FEES", name: "Education Fees", badge: "Upto ₹4.75", icon: "Education-Fees.svg" },
       { code: "MUNICIPAL_TAXES", name: "Municipal Taxes", badge: "Upto ₹2.5", icon: "Municipal-Taxes.svg" },
-      { code: "MUNICIPAL_SERVICES", name: "Municipal Services", badge: "Upto ₹2.5" },
-      { code: "HOUSING_SOCIETY", name: "Housing Society", badge: "Upto ₹5" },
+      { code: "MUNICIPAL_SERVICES", name: "Municipal Services", badge: "Upto ₹2.5", icon: "Municipal-Services.svg" },
+      { code: "HOUSING_SOCIETY", name: "Housing Society", badge: "Upto ₹5", icon: "Housing-Society.svg" },
       { code: "CLUBS_AND_ASSOCIATIONS", name: "Clubs & Associations", badge: "Upto ₹5", icon: "Clubs-Associations.svg" },
       { code: "RENTAL", name: "Rental", badge: "Upto ₹5", icon: "Rental.svg" },
       { code: "ECHALLAN", name: "eChallan", badge: "Flat ₹0.5", icon: "eChallan.svg" },
       { code: "DONATION", name: "Donation", badge: "Flat ₹1", icon: "Donation.svg" },
-      { code: "SUBSCRIPTION", name: "Subscription", badge: "Flat 0.25%" },
+      { code: "SUBSCRIPTION", name: "Subscription", badge: "Flat 0.25%", icon: "Subscription.svg" },
     ],
   },
   {
@@ -122,18 +120,8 @@ const CATALOG: SeedCategory[] = [
 /** Duplicate / retired — hide from catalog, keep DB row. */
 const DEACTIVATE_SERVICE_CODES = ["LIC_SUVIDHA"] as const;
 
-/**
- * Red-marked: keep tile, clear custom icon (reminder that art is still needed).
- * Forced after upsert so old DB filenames cannot stick around.
- */
-const CLEAR_ICON_CODES = [
-  "CASH_DEPOSIT",
-  "NPS",
-  "EDUCATION_FEES",
-  "MUNICIPAL_SERVICES",
-  "HOUSING_SOCIETY",
-  "SUBSCRIPTION",
-] as const;
+/** Force-clear icon after upsert when art is intentionally removed (none currently). */
+const CLEAR_ICON_CODES: string[] = [];
 
 async function upsertCategory(
   category: SeedCategory,
@@ -231,19 +219,25 @@ async function main() {
     await db.update(services).set({ isActive: false }).where(eq(services.code, code));
   }
 
-  await db
-    .update(services)
-    .set({ icon: null })
-    .where(inArray(services.code, [...CLEAR_ICON_CODES]));
+  if (CLEAR_ICON_CODES.length > 0) {
+    await db
+      .update(services)
+      .set({ icon: null })
+      .where(inArray(services.code, CLEAR_ICON_CODES));
+  }
 
-  const check = await db
-    .select({ code: services.code, icon: services.icon, isActive: services.isActive })
-    .from(services)
-    .where(inArray(services.code, [...CLEAR_ICON_CODES, ...DEACTIVATE_SERVICE_CODES]));
+  const verifyCodes = [...CLEAR_ICON_CODES, ...DEACTIVATE_SERVICE_CODES];
+  const check =
+    verifyCodes.length > 0
+      ? await db
+          .select({ code: services.code, icon: services.icon, isActive: services.isActive })
+          .from(services)
+          .where(inArray(services.code, verifyCodes))
+      : [];
 
   console.log(
     `Seeded ${CATALOG.length} categories and ${CATALOG.reduce((n, c) => n + c.services.length, 0)} services.` +
-      ` Deactivated: ${DEACTIVATE_SERVICE_CODES.join(", ")}. Cleared icons: ${CLEAR_ICON_CODES.join(", ")}.`,
+      ` Deactivated: ${DEACTIVATE_SERVICE_CODES.join(", ") || "(none)"}. Cleared icons: ${CLEAR_ICON_CODES.join(", ") || "(none)"}.`,
   );
   console.log("Verify:", JSON.stringify(check, null, 2));
   await pgPool.end();

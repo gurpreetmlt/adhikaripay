@@ -60,7 +60,8 @@
 2026-07-17 — Round-2 hacker fixes: session kill, OTP oracles, txnAuth, RD allowlist, KYC gates
 2026-07-17 — Security hardening: Critical+High remediations (auth, wallet, mobile, web storage, release signing, Dependabot)
 2026-07-14 — Wallet pending balance: `GET /api/wallet/me` adds `pendingBalance` per wallet (sum of pending/initiated txns); agent web Wallet + mobile Wallet show Pending
-2026-07-14 — Branding: product = Adhikari Pay; npm scopes `@adhikaripay/*`; folder renamed to `apps/mobile` (Android applicationId `com.lokalpaymobile` kept for Play Store continuity)
+2026-07-14 — Branding: product = Adhikari Pay; npm scopes `@adhikaripay/*`; folder renamed to `apps/mobile`
+2026-07-18 — Pending service icons applied: Cash Deposit, NPS, Education Fees, Municipal Services, Housing Society, Subscription, Landline, Broadband (from Latest-Icons → web public → mobile sync)
 2026-07-14 — Empty Retailer txns: migrate 0005 blocked by non-idempotent 0004; seed now funds Wallet 1/2 + logs userId
 2026-07-14 — `seed:txns` dummy retailer txns (Wallet 1/2) for agent Transactions page
 2026-07-14 — Retailer Wallet 1/2 balances in agent header; txn `wallet_type` column shows which wallet was cut
