@@ -27,6 +27,11 @@ const envSchema = z.object({
    */
   TEST_OTP_OVERRIDES: z.string().default(""),
   /**
+   * Pre-launch switch. Keep false only while transaction PIN onboarding is intentionally disabled.
+   * Set true before any real-money provider is enabled.
+   */
+  REQUIRE_TXN_PIN: z.coerce.boolean().default(false),
+  /**
    * Allow stub/mock provider adapters to serve traffic in production. Default false: with real
    * providers not yet integrated, a mock returns "success" for any AEPS/DMT/BBPS call, which
    * would let a retailer mint float without a real bank payout. Only turn this on in dev/staging.

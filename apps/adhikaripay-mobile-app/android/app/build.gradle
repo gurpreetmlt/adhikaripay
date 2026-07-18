@@ -37,14 +37,15 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    // Legacy: applicationId cannot change without uninstall/reinstall on all devices
-    namespace "com.lokalpaymobile"
+    namespace "com.adhikaripay.mobile"
     defaultConfig {
-        applicationId "com.lokalpaymobile"
+        applicationId "com.adhikaripay.mobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        // Pre-launch testing: allow screenshots. Set true before production release.
+        buildConfigField "boolean", "ENABLE_SECURE_SCREEN", "false"
     }
     signingConfigs {
         debug {

@@ -1,4 +1,4 @@
-package com.lokalpaymobile
+package com.adhikaripay.mobile
 
 import android.os.Bundle
 import android.view.WindowManager
@@ -17,11 +17,13 @@ class MainActivity : ReactActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    // Block screenshots / recent-apps thumbnails for Aadhaar, OTP, PIN surfaces.
-    window.setFlags(
-      WindowManager.LayoutParams.FLAG_SECURE,
-      WindowManager.LayoutParams.FLAG_SECURE,
-    )
+    if (BuildConfig.ENABLE_SECURE_SCREEN) {
+      // Block screenshots / recent-apps thumbnails for Aadhaar, OTP and PIN surfaces.
+      window.setFlags(
+        WindowManager.LayoutParams.FLAG_SECURE,
+        WindowManager.LayoutParams.FLAG_SECURE,
+      )
+    }
   }
 
   /**

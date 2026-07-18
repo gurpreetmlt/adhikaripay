@@ -74,6 +74,7 @@ export function ServiceTile({
   const longPress = useLongPress(triggerLongPress, 450);
 
   function openService() {
+    longPress.clear();
     if (homeEditMode || longPress.consumeLongPress()) return;
     if (onOpen) {
       onOpen();

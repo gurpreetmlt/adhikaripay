@@ -26,7 +26,7 @@ import {
   revokeUserDevice,
 } from "./auth.service";
 import { setTxnPin, verifyTxnPinAndIssueAuth } from "./txnPin";
-import { verifyAndRecordAgentAuth } from "./agentAuth";
+import { getAgentAuthStatus, verifyAndRecordAgentAuth } from "./agentAuth";
 import { db } from "../../db/postgres";
 import { users } from "../../db/postgres/schema";
 import { comparePassword } from "../../utils/password";
@@ -196,4 +196,9 @@ export async function agentAuth(req: Request, res: Response): Promise<void> {
     { ipAddress: req.ip ?? null, userAgent: req.headers["user-agent"] ?? null },
   );
   sendSuccess(res, result, "Fingerprint verified — session unlocked");
+}
+
+export async function agentAuthStatus(req: Request, res: Response): Promise<void> {
+  if (!req.auth) throw new HttpError(401, "Authentication required", "UNAUTHENTICATED");
+  sendSuccess(res, await getAgentAuthStatus(req.auth.sub));
 }

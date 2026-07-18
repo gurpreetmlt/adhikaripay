@@ -58,6 +58,9 @@ export function WelcomeBackScreen({ mobile, role, devOtp: initialDevOtp, preferM
   const [bioReady, setBioReady] = useState(false);
   const autoSubmitRef = useRef("");
   const pendingLoginRef = useRef<LoginResponse | null>(null);
+  // Trusted-device shortcut (preferMpin) skips the OTP send — request one lazily
+  // the first time the user opens the OTP tab, or verify will say "not requested".
+  const otpRequestedRef = useRef(!preferMpin);
 
   const mpinLen = 4;
   const otpLen = 6;
@@ -197,6 +200,7 @@ export function WelcomeBackScreen({ mobile, role, devOtp: initialDevOtp, preferM
 
   async function resendOtp() {
     if (resendLoading) return;
+    otpRequestedRef.current = true;
     setResendLoading(true);
     try {
       const { data } = await api.post<ApiResponse<{ message: string; otp?: string }>>(
@@ -356,6 +360,9 @@ export function WelcomeBackScreen({ mobile, role, devOtp: initialDevOtp, preferM
                 onPress={() => {
                   setTab(key);
                   autoSubmitRef.current = "";
+                  if (key === "otp" && !otpRequestedRef.current) {
+                    void resendOtp();
+                  }
                 }}
                 style={[styles.tab, active && styles.tabActive]}
               >

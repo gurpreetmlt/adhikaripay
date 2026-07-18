@@ -6,6 +6,7 @@ import { HttpError } from "../../utils/httpError";
 import { insertAuditLog } from "../../db/postgres/repositories/auditLog";
 import { assertStrongPin } from "../../utils/weakPin";
 import { signTxnAuth, verifyTxnAuth } from "../../utils/jwt";
+import { env } from "../../config/env";
 
 const PIN_PATTERN = /^\d{4}$/;
 const MAX_FAILED_ATTEMPTS = 5;
@@ -122,6 +123,7 @@ export async function assertTxnAuthorization(
   userId: string,
   input: { txnPin?: string; txnAuth?: string },
 ): Promise<void> {
+  if (!env.REQUIRE_TXN_PIN) return;
   if (input.txnAuth) {
     try {
       const auth = verifyTxnAuth(input.txnAuth);

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db, pgPool } from "../src/db/postgres";
 import { users } from "../src/db/postgres/schema";
-import { assertAgentAuthFresh, AGENT_AUTH_WINDOW_MS } from "../src/modules/auth/agentAuth";
+import { assertAgentAuthFresh, getAgentAuthStatus } from "../src/modules/auth/agentAuth";
 
 // Agent-auth = retailer proving THEIR OWN presence at the counter, separate from the customer's
 // AEPS biometric. Money endpoints (AEPS + DMT) must refuse to run without a fresh one.
@@ -33,15 +33,14 @@ describe("assertAgentAuthFresh", () => {
     await expect(assertAgentAuthFresh(userId)).resolves.toBeUndefined();
   });
 
-  it("passes just inside the rolling window", async () => {
-    const almostExpired = new Date(Date.now() - (AGENT_AUTH_WINDOW_MS - 60_000));
-    await db.update(users).set({ lastAgentAuthAt: almostExpired }).where(eq(users.id, userId));
-    await expect(assertAgentAuthFresh(userId)).resolves.toBeUndefined();
+  it("reports verified for the current India calendar day", async () => {
+    await db.update(users).set({ lastAgentAuthAt: new Date() }).where(eq(users.id, userId));
+    await expect(getAgentAuthStatus(userId)).resolves.toMatchObject({ verifiedToday: true });
   });
 
-  it("blocks once the rolling window has lapsed", async () => {
-    const expired = new Date(Date.now() - (AGENT_AUTH_WINDOW_MS + 60_000));
-    await db.update(users).set({ lastAgentAuthAt: expired }).where(eq(users.id, userId));
+  it("blocks a verification from the previous India calendar day", async () => {
+    const previousDay = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    await db.update(users).set({ lastAgentAuthAt: previousDay }).where(eq(users.id, userId));
     await expect(assertAgentAuthFresh(userId)).rejects.toMatchObject({ code: "AGENT_AUTH_REQUIRED" });
   });
 });

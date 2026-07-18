@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  ActivityIndicator,
   Animated,
   Dimensions,
   Easing,
@@ -104,7 +105,7 @@ interface BiometricDevice {
 const BIOMETRIC_DEVICES: BiometricDevice[] = [
   { id: "mantra_mfs110", name: "Mantra MFS110 L1", rdPackage: "com.mantra.mfs110.rdservice", color: "#1565C0", letter: "M" },
   { id: "startek_fm220", name: "Startek L1", rdPackage: "com.acpl.registersdk", color: "#4A148C", letter: "S" },
-  { id: "morpho_mso1300", name: "Morpho MSO L1", rdPackage: "com.scl.rdservice", color: "#E53935", letter: "M" },
+  { id: "morpho_mso1300", name: "Morpho MSO L1", rdPackage: "com.idemia.l1rdservice", color: "#E53935", letter: "M" },
   { id: "visiontek_v600", name: "VisionTek V600 L1", rdPackage: "com.linkwell.rdservice", color: "#00695C", letter: "V" },
   { id: "evolute_escan", name: "Evolute eScan L1", rdPackage: "com.evolute.rdservice", color: "#F57C00", letter: "E" },
   { id: "mantra_marc11", name: "Marc 11", rdPackage: "com.mantra.mfs110.rdservice", color: "#1976D2", letter: "M" },
@@ -442,6 +443,10 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
   const [activeDevice, setActiveDevice] = useState<BiometricDevice>(BIOMETRIC_DEVICES[0]);
   const [deviceModalOpen, setDeviceModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("fingerprint");
+  const [agentAuthReady, setAgentAuthReady] = useState<boolean | null>(null);
+  const [agentAuthKycReady, setAgentAuthKycReady] = useState(true);
+  const [agentAuthConsent, setAgentAuthConsent] = useState(false);
+  const [agentAuthScanning, setAgentAuthScanning] = useState(false);
   const [favBanks, setFavBanks] = useState<string[]>(["bob", "pnb", "sbi", "hdfc", "airtel", "icici"]);
 
   const [scanning, setScanning] = useState(false);
@@ -460,6 +465,25 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
     loop.start();
     return () => loop.stop();
   }, [scanning, scanAnim]);
+
+  useEffect(() => {
+    let mounted = true;
+    void api
+      .get<ApiResponse<{ verifiedToday: boolean; kycReady: boolean }>>("/auth/agent-auth/status")
+      .then(({ data }) => {
+        if (!mounted || !data.success) return;
+        setAgentAuthReady(data.data.verifiedToday);
+        setAgentAuthKycReady(data.data.kycReady);
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        Alert.alert("Unable to check AePS access", apiError(err, "Please try again."));
+        onBack();
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [onBack]);
 
   const toggleFavBank = useCallback((id: string) => {
     setFavBanks((prev) =>
@@ -497,6 +521,24 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
     (!showAmount || !!amount) &&
     !scanning &&
     !submitting;
+
+  async function verifyDailyAgentAuth() {
+    if (!agentAuthConsent || agentAuthScanning || !agentAuthKycReady) return;
+    setAgentAuthScanning(true);
+    try {
+      const biometricPayload = await captureFingerprint(activeDevice.rdPackage);
+      const { data } = await api.post<ApiResponse<{ verifiedAt: string }>>("/auth/agent-auth", {
+        biometricPayload,
+      });
+      if (!data.success) throw new Error(data.message);
+      setAgentAuthReady(true);
+      Alert.alert("Verification successful", "AePS access is unlocked for today.");
+    } catch (err) {
+      Alert.alert("Daily verification failed", apiError(err, "Fingerprint verification failed."));
+    } finally {
+      setAgentAuthScanning(false);
+    }
+  }
 
   async function handleScan() {
     if (!canScan || !selectedBank) return;
@@ -570,6 +612,122 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
   }
 
   const scanTranslate = scanAnim.interpolate({ inputRange: [0, 1], outputRange: [-38, 38] });
+
+  if (agentAuthReady === null) {
+    return (
+      <SafeAreaView style={[s.safe, s.authLoading, { backgroundColor: tokens.bg }]} edges={["top", "bottom"]}>
+        <ActivityIndicator size="large" color={colors.blueFlat} />
+        <Text style={[s.authLoadingText, { color: tokens.sub }]}>Checking today's AePS verification…</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (!agentAuthReady) {
+    return (
+      <SafeAreaView style={[s.safe, { backgroundColor: tokens.bg }]} edges={["top", "bottom"]}>
+        <LinearGradient
+          colors={[colors.blueLight, colors.blue]}
+          start={gradientDirection.diagonal.start}
+          end={gradientDirection.diagonal.end}
+          style={s.header}
+        >
+          <Pressable onPress={onBack} style={s.backBtn}>
+            <ArrowLeft size={18} color="#fff" strokeWidth={2.4} />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <Text style={s.headerTitle}>Mandatory 2FA for AePS Access</Text>
+            <Text style={s.headerSub}>Verify once daily before your first AePS or Aadhaar Pay transaction.</Text>
+          </View>
+        </LinearGradient>
+
+        <ScrollView contentContainerStyle={s.dailyAuthContent} showsVerticalScrollIndicator={false}>
+          <View style={[s.card, { backgroundColor: tokens.card, borderColor: tokens.cardBorder }]}>
+            <Text style={[s.dailyAuthTitle, { color: tokens.txt }]}>Daily retailer verification</Text>
+            <Text style={[s.dailyAuthCopy, { color: tokens.sub }]}>
+              Your registered KYC Aadhaar will be matched through the selected UIDAI L1 RD service.
+            </Text>
+
+            <Text style={[s.fieldLabel, s.fieldLabelSpaced, { color: tokens.sub }]}>REGISTERED AADHAAR</Text>
+            <View style={[s.inputRow, { borderColor: tokens.inputBorder, backgroundColor: tokens.inputBg }]}>
+              <Text style={[s.dailyAadhaar, { color: tokens.txt }]}>
+                {agentAuthKycReady ? "XXXX XXXX (from KYC)" : "KYC Aadhaar not found"}
+              </Text>
+              <Eye size={18} color={tokens.mute} />
+            </View>
+
+            <Pressable onPress={() => setAgentAuthConsent((v) => !v)} style={s.consentRow}>
+              <View style={[s.checkbox, agentAuthConsent && s.checkboxChecked]}>
+                {agentAuthConsent ? <Text style={s.checkmark}>✓</Text> : null}
+              </View>
+              <Text style={[s.consentText, { color: tokens.txt2 }]}>
+                I consent to Aadhaar biometric authentication for today's AePS access.
+              </Text>
+            </Pressable>
+
+            <View style={[s.dailyModeCard, { borderColor: tokens.cardBorder }]}>
+              <Text style={[s.fieldLabel, { color: tokens.sub }]}>AUTHENTICATION MODE</Text>
+              <View style={s.dailyModeRow}>
+                <View style={s.dailyModeSelected}>
+                  <Fingerprint size={34} color={colors.blueFlat} />
+                  <Text style={[s.authModeText, { color: colors.blue }]}>Fingerprint</Text>
+                  <CircleDot size={15} color={colors.green} />
+                </View>
+                <View style={s.dailyModeDisabled}>
+                  <ScanEye size={34} color={tokens.mute} />
+                  <Text style={[s.authModeText, { color: tokens.mute }]}>Eye Scan</Text>
+                  <Text style={[s.dailySoon, { color: tokens.mute }]}>Coming soon</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={s.dailyFeeNote}>
+              <Text style={s.dailyFeeText}>₹  Note: Provider/bank may charge ₹0.94 for daily AePS 2FA.</Text>
+            </View>
+
+            <View style={s.dailyDeviceRow}>
+              <View style={[s.bioIconCircle, { backgroundColor: activeDevice.color }]}>
+                <Text style={s.bioIconLetter}>{activeDevice.letter}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.bioDevice, { color: tokens.txt }]}>{activeDevice.name}</Text>
+                <Pressable onPress={() => setDeviceModalOpen(true)}>
+                  <Text style={[s.bioChange, { color: colors.blueLight }]}>Change Device</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <Pressable
+              onPress={() => void verifyDailyAgentAuth()}
+              disabled={!agentAuthConsent || !agentAuthKycReady || agentAuthScanning}
+              style={[
+                s.scanBtn,
+                (!agentAuthConsent || !agentAuthKycReady || agentAuthScanning) && s.scanBtnDisabled,
+              ]}
+            >
+              <LinearGradient
+                colors={[colors.greenLight, colors.greenDark]}
+                start={gradientDirection.diagonal.start}
+                end={gradientDirection.diagonal.end}
+                style={s.scanBtnGradient}
+              >
+                {agentAuthScanning ? <ActivityIndicator color="#fff" /> : <Fingerprint size={18} color="#fff" />}
+                <Text style={s.scanBtnText}>
+                  {agentAuthScanning ? "Place finger on scanner…" : "Scan Finger"}
+                </Text>
+              </LinearGradient>
+            </Pressable>
+          </View>
+        </ScrollView>
+
+        <DeviceModal
+          visible={deviceModalOpen}
+          onClose={() => setDeviceModalOpen(false)}
+          activeDeviceId={activeDevice.id}
+          onSelect={setActiveDevice}
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[s.safe, { backgroundColor: tokens.bg }]} edges={["top", "bottom"]}>
@@ -680,7 +838,7 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
                   }}
                 >
                   <View style={{ flex: 1, justifyContent: "center" }}>
-                    <Text style={[s.input, { color: tokens.txt }]} pointerEvents="none">
+                    <Text style={[s.input, { color: tokens.txt }]}>
                       {maskAadhaarDisplay(aadhaar)}
                     </Text>
                   </View>
@@ -919,6 +1077,27 @@ export function AepsScreen({ onBack, initialTab, serviceCode }: AepsScreenProps)
 
 const s = StyleSheet.create({
   safe: { flex: 1 },
+  authLoading: { alignItems: "center", justifyContent: "center", gap: 12 },
+  authLoadingText: { fontSize: 13, fontWeight: "600" },
+  dailyAuthContent: { padding: 16, paddingBottom: 40 },
+  dailyAuthTitle: { fontSize: 20, fontWeight: "800" },
+  dailyAuthCopy: { fontSize: 12.5, lineHeight: 19, marginTop: 5 },
+  dailyAadhaar: { flex: 1, fontSize: 15, fontWeight: "700" },
+  dailyModeCard: { borderWidth: 1, borderRadius: 16, padding: 14, marginTop: 20 },
+  dailyModeRow: { flexDirection: "row", marginTop: 14 },
+  dailyModeSelected: { flex: 1, alignItems: "center", gap: 6 },
+  dailyModeDisabled: { flex: 1, alignItems: "center", gap: 6, opacity: 0.65 },
+  dailySoon: { fontSize: 9, fontWeight: "700" },
+  dailyFeeNote: {
+    backgroundColor: "#FFF0BF",
+    borderColor: "#F4D77D",
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 13,
+    marginTop: 18,
+  },
+  dailyFeeText: { color: "#6B4B00", fontSize: 12, fontWeight: "700", lineHeight: 18 },
+  dailyDeviceRow: { flexDirection: "row", alignItems: "center", gap: 12, marginVertical: 18 },
   header: {
     paddingTop: 50,
     paddingHorizontal: 18,

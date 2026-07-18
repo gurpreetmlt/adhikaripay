@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 export function useLongPress(onLongPress: () => void, delayMs = 500) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -10,6 +10,10 @@ export function useLongPress(onLongPress: () => void, delayMs = 500) {
       timerRef.current = null;
     }
   }, []);
+
+  // Tile can unmount mid-press (tap opens a full-screen flow before pressOut
+  // fires) — without this the pending timer still fires and toggles edit mode.
+  useEffect(() => clear, [clear]);
 
   const start = useCallback(() => {
     clear();

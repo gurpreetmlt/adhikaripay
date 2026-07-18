@@ -20,6 +20,7 @@
         </intent>
         <package android:name="com.mantra.mfs110.rdservice" />
         <package android:name="com.mantra.rdservice" />
+        <package android:name="com.idemia.l1rdservice" />
         <package android:name="com.mantra.mfs100" />
         <package android:name="com.mantra.mfs110" />
         <package android:name="com.mantra.morfinauth" />
@@ -29,6 +30,7 @@
         <package android:name="com.linkwell.rdservice" />
         <package android:name="com.evolute.rdservice" />
         <package android:name="com.precision.pb510.rdservice" />
+        <package android:name="com.idemia.l1rdservice" />
     </queries>
 
     <application

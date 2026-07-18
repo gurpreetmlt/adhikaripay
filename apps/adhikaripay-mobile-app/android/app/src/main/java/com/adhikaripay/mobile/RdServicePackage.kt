@@ -1,4 +1,4 @@
-package com.lokalpaymobile
+package com.adhikaripay.mobile
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

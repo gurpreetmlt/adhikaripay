@@ -1,4 +1,4 @@
-package com.lokalpaymobile
+package com.adhikaripay.mobile
 
 import android.app.Activity
 import android.content.Intent
@@ -38,6 +38,7 @@ class RdServiceModule(private val reactContext: ReactApplicationContext) :
             "com.evolute",
             "com.precision",
             "com.mantralabsindia",
+            "com.idemia",
         )
   }
 

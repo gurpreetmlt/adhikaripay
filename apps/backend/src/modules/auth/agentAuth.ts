@@ -7,16 +7,40 @@ import { insertAuditLog } from "../../db/postgres/repositories/auditLog";
 import { assertFreshBiometric } from "../transactions/biometricReplay";
 import { resolveProvidersForService, callProvider } from "../providers/provider.router";
 
-// Retailer-own-identity proof-of-presence, distinct from the customer's AEPS biometric. Money
-// endpoints (AEPS + DMT) require this within a rolling window before they'll run — see
-// wireAgentAuthGate in txn.controller.ts. Rolling, not calendar-day: consistent with
-// DEVICE_TRUST_WINDOW_MS's reasoning (a 11:58pm/12:02am boundary is not "a new day").
-export const AGENT_AUTH_WINDOW_MS = 12 * 60 * 60 * 1000;
+// Retailer-own-identity proof-of-presence, distinct from the customer's AEPS biometric.
+// NPCI daily 2FA is based on the Indian calendar day, not a rolling-hour window.
+function indiaDayKey(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+export async function getAgentAuthStatus(userId: string): Promise<{
+  verifiedToday: boolean;
+  lastVerifiedAt: Date | null;
+  kycReady: boolean;
+}> {
+  const [user] = await db
+    .select({
+      lastAgentAuthAt: users.lastAgentAuthAt,
+      aadhaarNumberEncrypted: users.aadhaarNumberEncrypted,
+    })
+    .from(users)
+    .where(eq(users.id, userId));
+  const last = user?.lastAgentAuthAt ?? null;
+  return {
+    verifiedToday: Boolean(last && indiaDayKey(last) === indiaDayKey(new Date())),
+    lastVerifiedAt: last,
+    kycReady: Boolean(user?.aadhaarNumberEncrypted),
+  };
+}
 
 export async function assertAgentAuthFresh(userId: string): Promise<void> {
-  const [user] = await db.select({ lastAgentAuthAt: users.lastAgentAuthAt }).from(users).where(eq(users.id, userId));
-  const last = user?.lastAgentAuthAt;
-  if (!last || Date.now() - last.getTime() > AGENT_AUTH_WINDOW_MS) {
+  const status = await getAgentAuthStatus(userId);
+  if (!status.verifiedToday) {
     throw new HttpError(
       403,
       "Scan your fingerprint to start today's session before using this service.",
