@@ -52,15 +52,81 @@ export const dmtBeneficiarySchema = z.object({
   name: z.string().min(2).max(120),
   accountNumber: z.string().min(6).max(24),
   ifsc: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/),
+  beneficiaryMobile: z
+    .string()
+    .regex(/^\d{10}$/)
+    .optional(),
+  bankId: z.string().min(1).max(20).optional(),
+});
+
+export const dmtRemitterProfileSchema = z.object({
+  customerMobile: z.string().regex(/^\d{10}$/),
+});
+
+export const dmtBeneficiaryVerifySchema = z.object({
+  customerMobile: z.string().regex(/^\d{10}$/),
+  otp: z.string().regex(/^\d{4,8}$/),
+  beneficiaryId: z.string().min(1).max(128),
+  referenceKey: z.string().min(8).max(512),
+});
+
+export const dmtBeneficiaryDeleteSchema = z.object({
+  customerMobile: z.string().regex(/^\d{10}$/),
+  beneficiaryId: z.string().min(1).max(128),
+});
+
+export const dmtRemitterRegisterSchema = z.object({
+  customerMobile: z.string().regex(/^\d{10}$/),
+  aadhaarNumber: z.string().regex(/^\d{12}$/),
+  referenceKey: z.string().min(8).max(512),
+});
+
+export const dmtRemitterRegisterVerifySchema = z.object({
+  customerMobile: z.string().regex(/^\d{10}$/),
+  otp: z.string().regex(/^\d{4,8}$/),
+  referenceKey: z.string().min(8).max(512),
+});
+
+export const dmtRemitterKycSchema = z.object({
+  customerMobile: z.string().regex(/^\d{10}$/),
+  referenceKey: z.string().min(8).max(512),
+  biometricPayload: z.string().min(1),
+  captureType: z.enum(["FINGER", "FACE"]).optional(),
+  latitude: z.string().min(1).max(32).optional(),
+  longitude: z.string().min(1).max(32).optional(),
+});
+
+export const dmtTransactionOtpSchema = z.object({
+  customerMobile: z.string().regex(/^\d{10}$/),
+  amount,
+  referenceKey: z.string().min(8).max(512),
+});
+
+export const dmtRefundOtpSchema = z.object({
+  /** InstantPay orderid (providerTxnId on our txn) of the pending remittance. */
+  ipayId: z.string().min(6).max(64),
+});
+
+export const dmtRefundSchema = z.object({
+  ipayId: z.string().min(6).max(64),
+  /** referenceKey from the refund OTP response. */
+  referenceKey: z.string().min(8).max(512),
+  otp: z.string().regex(/^\d{4,8}$/),
 });
 
 export const dmtTransferSchema = z
   .object({
     ...txnAuthFields,
     customerMobile: z.string().regex(/^\d{10}$/),
-    beneficiaryId: z.string().min(1).max(100),
+    accountNumber: z.string().min(6).max(24),
+    ifsc: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/),
     amount,
     mode: z.enum(["imps", "neft"]).default("imps"),
+    otp: z.string().regex(/^\d{4,8}$/),
+    referenceKey: z.string().min(8).max(512),
+    beneficiaryId: z.string().min(1).max(128).optional(),
+    latitude: z.string().min(1).max(32).optional(),
+    longitude: z.string().min(1).max(32).optional(),
   })
   .superRefine(requireTxnProof);
 

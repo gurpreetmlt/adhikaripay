@@ -8,7 +8,19 @@ import type {
   BbpsFetchBillParams,
   BbpsPayBillParams,
   CheckStatusParams,
+  DmtBank,
+  DmtBankListParams,
+  DmtBeneficiaryDeleteParams,
   DmtBeneficiaryParams,
+  DmtBeneficiaryVerifyParams,
+  DmtRefundOtpParams,
+  DmtRefundParams,
+  DmtTransactionOtpParams,
+  DmtRemitterProfile,
+  DmtRemitterKycParams,
+  DmtRemitterProfileParams,
+  DmtRemitterRegistrationParams,
+  DmtRemitterRegistrationVerifyParams,
   DmtTransferParams,
   ProviderAdapter,
   ProviderResult,
@@ -120,12 +132,158 @@ export abstract class MockAdapterBase implements ProviderAdapter {
     return this.respond("AEPS bank list", undefined, { banks });
   }
 
-  dmtAddBeneficiary(params: DmtBeneficiaryParams): Promise<ProviderResult<{ beneficiaryId: string }>> {
-    return this.respond("DMT add beneficiary", undefined, { beneficiaryId: `BENE-${randomUUID().slice(0, 8)}` });
+  dmtBankList(_params: DmtBankListParams): Promise<ProviderResult<{ banks: DmtBank[] }>> {
+    const banks: DmtBank[] = [
+      { bankId: 109005, name: "STATE BANK OF INDIA", ifscAlias: "SBIN", ifscGlobal: "SBIN0000001", neftEnabled: true, impsEnabled: true, upiEnabled: false, neftFailureRate: "0", impsFailureRate: "0", upiFailureRate: "0" },
+      { bankId: 11263, name: "HDFC BANK", ifscAlias: "HDFC", ifscGlobal: "HDFC0999999", neftEnabled: true, impsEnabled: true, upiEnabled: false, neftFailureRate: "0", impsFailureRate: "0", upiFailureRate: "0" },
+      { bankId: 15910, name: "ICICI Bank", ifscAlias: "ICIC", ifscGlobal: "ICIC0000011", neftEnabled: true, impsEnabled: true, upiEnabled: false, neftFailureRate: "0", impsFailureRate: "0", upiFailureRate: "0" },
+      { bankId: 130878, name: "Axis Bank", ifscAlias: "UTIB", ifscGlobal: "UTIB0000248", neftEnabled: true, impsEnabled: true, upiEnabled: false, neftFailureRate: "0", impsFailureRate: "0", upiFailureRate: "0" },
+      { bankId: 74984, name: "PUNJAB NATIONAL BANK", ifscAlias: "PUNB", ifscGlobal: "PUNB0244200", neftEnabled: true, impsEnabled: true, upiEnabled: false, neftFailureRate: "0", impsFailureRate: "0", upiFailureRate: "0" },
+      { bankId: 39287, name: "BANK OF BARODA", ifscAlias: "BARB", ifscGlobal: "BARB0HEADOF", neftEnabled: true, impsEnabled: true, upiEnabled: false, neftFailureRate: "0", impsFailureRate: "0", upiFailureRate: "0" },
+    ];
+    return this.respond("DMT bank list", undefined, { banks });
   }
 
-  dmtTransfer(params: DmtTransferParams): Promise<ProviderResult<Record<string, never>>> {
-    return this.respond("DMT transfer", params.amount, {});
+  dmtRemitterProfile(
+    params: DmtRemitterProfileParams,
+  ): Promise<ProviderResult<{ profile: DmtRemitterProfile | null }>> {
+    // Mobile ending in 0000 → not registered (UI can test registration path).
+    if (params.customerMobile.endsWith("0000")) {
+      return this.respond("DMT remitter profile", undefined, {
+        profile: null,
+        referenceKey: `MOCK-REGKEY-${randomUUID().slice(0, 8)}`,
+        validity: "2099-12-31 23:59:59",
+      });
+    }
+    const profile: DmtRemitterProfile = {
+      registered: true,
+      mobileNumber: params.customerMobile,
+      firstName: "Test",
+      lastName: "Remitter",
+      city: "Faridabad",
+      pincode: "121009",
+      limitPerTransaction: "5000",
+      limitTotal: "25000.00",
+      limitConsumed: "0.00",
+      limitAvailable: "25000.00",
+      limitDetails: {
+        maximumDailyLimit: "25000.00",
+        consumedDailyLimit: "0.00",
+        availableDailyLimit: "25000.00",
+        maximumMonthlyLimit: "25000.00",
+        consumedMonthlyLimit: "0.00",
+        availableMonthlyLimit: "25000.00",
+      },
+      beneficiaries: [
+        {
+          id: `BENE-${randomUUID().slice(0, 12)}`,
+          name: "Test Beneficiary",
+          account: "07160150991234",
+          ifsc: "ICIC0000716",
+          bank: "ICICI BANK LIMITED",
+          beneficiaryMobileNumber: "8860622709",
+          verificationDt: "2025-02-25 11:13:33",
+        },
+      ],
+      isTxnOtpRequired: true,
+      isTxnBioAuthRequired: false,
+      isImpsAllowed: true,
+      isNeftAllowed: true,
+      isFaceAuthAvailable: true,
+      referenceKey: `MOCK-REF-${randomUUID().slice(0, 8)}`,
+      validity: "2099-12-31 23:59:59",
+      pidOptionWadh: "",
+    };
+    return this.respond("DMT remitter profile", undefined, { profile });
+  }
+
+  dmtRemitterRegister(
+    _params: DmtRemitterRegistrationParams,
+  ): Promise<ProviderResult<{ otpReference: string }>> {
+    return this.respond("DMT remitter registration OTP", undefined, {
+      otpReference: `MOCK-OTPREF-${randomUUID().slice(0, 12)}`,
+    });
+  }
+
+  dmtRemitterRegisterVerify(
+    _params: DmtRemitterRegistrationVerifyParams,
+  ): Promise<ProviderResult<{ referenceId: string }>> {
+    return this.respond("DMT remitter registration verify", undefined, {
+      referenceId: `MOCK-REGREF-${randomUUID().slice(0, 12)}`,
+    });
+  }
+
+  dmtRemitterKyc(_params: DmtRemitterKycParams): Promise<ProviderResult<{ poolReferenceId: string }>> {
+    return this.respond("DMT remitter eKYC", undefined, {
+      poolReferenceId: `MOCK-KYCREF-${randomUUID().slice(0, 12)}`,
+    });
+  }
+
+  dmtAddBeneficiary(
+    params: DmtBeneficiaryParams,
+  ): Promise<ProviderResult<{ beneficiaryId: string; referenceKey: string; validity: string }>> {
+    return this.respond("DMT add beneficiary", undefined, {
+      beneficiaryId: `BENE-${randomUUID().slice(0, 8)}`,
+      referenceKey: `MOCK-BENKEY-${randomUUID().slice(0, 12)}`,
+      validity: new Date(Date.now() + 15 * 60 * 1000).toISOString().replace("T", " ").slice(0, 19),
+    });
+  }
+
+  dmtAddBeneficiaryVerify(
+    params: DmtBeneficiaryVerifyParams,
+  ): Promise<ProviderResult<{ beneficiaryId: string }>> {
+    return this.respond("DMT beneficiary registration verify", undefined, {
+      beneficiaryId: params.beneficiaryId,
+    });
+  }
+
+  dmtDeleteBeneficiary(
+    params: DmtBeneficiaryDeleteParams,
+  ): Promise<ProviderResult<{ beneficiaryId: string; referenceKey: string; validity: string }>> {
+    return this.respond("DMT delete beneficiary", undefined, {
+      beneficiaryId: params.beneficiaryId,
+      referenceKey: `MOCK-BENDELKEY-${randomUUID().slice(0, 12)}`,
+      validity: new Date(Date.now() + 15 * 60 * 1000).toISOString().replace("T", " ").slice(0, 19),
+    });
+  }
+
+  dmtDeleteBeneficiaryVerify(
+    params: DmtBeneficiaryVerifyParams,
+  ): Promise<ProviderResult<{ beneficiaryId: string }>> {
+    return this.respond("DMT delete beneficiary verify", undefined, {
+      beneficiaryId: params.beneficiaryId,
+    });
+  }
+
+  dmtGenerateTransactionOtp(
+    _params: DmtTransactionOtpParams,
+  ): Promise<ProviderResult<{ referenceKey: string; validity: string }>> {
+    return this.respond("DMT transaction OTP", undefined, {
+      referenceKey: `MOCK-TXNOTPKEY-${randomUUID().slice(0, 12)}`,
+      validity: new Date(Date.now() + 15 * 60 * 1000).toISOString().replace("T", " ").slice(0, 19),
+    });
+  }
+
+  dmtTransactionRefundOtp(
+    _params: DmtRefundOtpParams,
+  ): Promise<ProviderResult<{ referenceKey: string; validity: string }>> {
+    return this.respond("DMT refund OTP", undefined, {
+      referenceKey: `MOCK-REFUNDOTPKEY-${randomUUID().slice(0, 12)}`,
+      validity: new Date(Date.now() + 15 * 60 * 1000).toISOString().replace("T", " ").slice(0, 19),
+    });
+  }
+
+  dmtTransactionRefund(params: DmtRefundParams): Promise<ProviderResult> {
+    return this.respond("DMT transaction refund", undefined, { ipayId: params.ipayId });
+  }
+
+  dmtTransfer(params: DmtTransferParams): Promise<ProviderResult> {
+    return this.respond("DMT transfer", params.amount, {
+      externalRef: params.externalRef ?? `MOCK-DT-${randomUUID().slice(0, 8)}`,
+      txnReferenceId: `MOCK-RRN-${randomUUID().slice(0, 12)}`,
+      poolReferenceId: `MOCK-POOL-${randomUUID().slice(0, 8)}`,
+      beneficiaryName: "MOCK BENEFICIARY",
+    });
   }
 
   bbpsFetchBill(

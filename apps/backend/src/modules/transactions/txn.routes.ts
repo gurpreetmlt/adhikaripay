@@ -7,7 +7,18 @@ import {
   bbpsFetchBill,
   bbpsPayBill,
   dmtAddBeneficiary,
+  dmtAddBeneficiaryVerify,
+  dmtDeleteBeneficiary,
+  dmtDeleteBeneficiaryVerify,
+  dmtGenerateTransactionOtp,
+  dmtTransactionRefundOtp,
+  dmtTransactionRefund,
   dmtTransfer,
+  dmtBankList,
+  dmtRemitterProfile,
+  dmtRemitterRegister,
+  dmtRemitterRegisterVerify,
+  dmtRemitterKyc,
   aepsBankList,
   aepsBalanceEnquiry,
   aepsMiniStatement,
@@ -24,6 +35,15 @@ import {
   bbpsFetchBillSchema,
   bbpsPayBillSchema,
   dmtBeneficiarySchema,
+  dmtBeneficiaryDeleteSchema,
+  dmtBeneficiaryVerifySchema,
+  dmtTransactionOtpSchema,
+  dmtRemitterProfileSchema,
+  dmtRemitterRegisterSchema,
+  dmtRemitterRegisterVerifySchema,
+  dmtRemitterKycSchema,
+  dmtRefundOtpSchema,
+  dmtRefundSchema,
   dmtTransferSchema,
   aepsEnquirySchema,
   aepsTxnOtpSchema,
@@ -45,8 +65,19 @@ txnRouter.post("/recharge", retailerOnly, walletTxnLimiter, validateBody(recharg
 txnRouter.post("/bbps/fetch-bill", retailerOnly, validateBody(bbpsFetchBillSchema), bbpsFetchBill);
 txnRouter.post("/bbps/pay", retailerOnly, walletTxnLimiter, validateBody(bbpsPayBillSchema), bbpsPayBill);
 
+txnRouter.get("/dmt/banks", retailerOnly, dmtBankList);
+txnRouter.post("/dmt/remitter/profile", retailerOnly, validateBody(dmtRemitterProfileSchema), dmtRemitterProfile);
+txnRouter.post("/dmt/remitter/register", retailerOnly, validateBody(dmtRemitterRegisterSchema), dmtRemitterRegister);
+txnRouter.post("/dmt/remitter/register/verify", retailerOnly, validateBody(dmtRemitterRegisterVerifySchema), dmtRemitterRegisterVerify);
+txnRouter.post("/dmt/remitter/kyc", retailerOnly, validateBody(dmtRemitterKycSchema), dmtRemitterKyc);
 txnRouter.post("/dmt/beneficiary", retailerOnly, validateBody(dmtBeneficiarySchema), dmtAddBeneficiary);
+txnRouter.post("/dmt/beneficiary/verify", retailerOnly, validateBody(dmtBeneficiaryVerifySchema), dmtAddBeneficiaryVerify);
+txnRouter.post("/dmt/beneficiary/delete", retailerOnly, validateBody(dmtBeneficiaryDeleteSchema), dmtDeleteBeneficiary);
+txnRouter.post("/dmt/beneficiary/delete/verify", retailerOnly, validateBody(dmtBeneficiaryVerifySchema), dmtDeleteBeneficiaryVerify);
+txnRouter.post("/dmt/transfer/otp", retailerOnly, validateBody(dmtTransactionOtpSchema), dmtGenerateTransactionOtp);
 txnRouter.post("/dmt/transfer", retailerOnly, walletTxnLimiter, validateBody(dmtTransferSchema), dmtTransfer);
+txnRouter.post("/dmt/refund/otp", retailerOnly, validateBody(dmtRefundOtpSchema), dmtTransactionRefundOtp);
+txnRouter.post("/dmt/refund", retailerOnly, validateBody(dmtRefundSchema), dmtTransactionRefund);
 
 txnRouter.get("/aeps/banks", retailerOnly, aepsBankList);
 txnRouter.post("/aeps/balance-enquiry", retailerOnly, validateBody(aepsEnquirySchema), aepsBalanceEnquiry);

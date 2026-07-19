@@ -67,9 +67,23 @@ async function resolveAepsProvider(serviceCode: string): Promise<RoutedProvider[
     throw new HttpError(503, "AEPS provider is disabled", "NO_PROVIDER_AVAILABLE");
   }
 
-  // agent_auth (daily 2FA) and aeps_bank_list (directory read) have no service row / move no
+  // agent_auth (daily 2FA) and bank-list directory reads have no service row / move no
   // money, so skip the service catalog gate for them.
-  const skipServiceGate = serviceCode === "agent_auth" || serviceCode === "aeps_bank_list";
+  const skipServiceGate =
+    serviceCode === "agent_auth" ||
+    serviceCode === "aeps_bank_list" ||
+    serviceCode === "dmt_bank_list" ||
+    serviceCode === "dmt_remitter_profile" ||
+    serviceCode === "dmt_remitter_register" ||
+    serviceCode === "dmt_remitter_register_verify" ||
+    serviceCode === "dmt_remitter_kyc" ||
+    serviceCode === "dmt_add_beneficiary" ||
+    serviceCode === "dmt_add_beneficiary_verify" ||
+    serviceCode === "dmt_delete_beneficiary" ||
+    serviceCode === "dmt_delete_beneficiary_verify" ||
+    serviceCode === "dmt_txn_otp" ||
+    serviceCode === "dmt_refund_otp" ||
+    serviceCode === "dmt_refund";
   if (!skipServiceGate) {
     const [svc] = await db
       .select({ id: services.id, isActive: services.isActive })

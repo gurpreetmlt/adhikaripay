@@ -69,6 +69,10 @@ export function ServiceTile({
       router.push("/upi-cash-point");
       return;
     }
+    if (code === "MONEY_TRANSFER" || code === "DMT") {
+      router.push("/dmt");
+      return;
+    }
     toast(`${name} — coming soon`, { icon: "🚧" });
   }
 

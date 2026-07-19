@@ -67,20 +67,196 @@ export interface AepsTxnOtpParams {
   endpointIp?: string;
 }
 
+/** DMT remittance bank (from /fi/remit/out/domestic/v2/banks). */
+export interface DmtBank {
+  bankId: number | string;
+  name: string;
+  ifscAlias: string;
+  ifscGlobal: string;
+  neftEnabled: boolean;
+  impsEnabled: boolean;
+  upiEnabled: boolean;
+  neftFailureRate: string;
+  impsFailureRate: string;
+  upiFailureRate: string;
+}
+
+export interface DmtBankListParams {
+  retailerUserId: string;
+  outletId?: string;
+  endpointIp?: string;
+}
+
+export interface DmtRemitterProfileParams {
+  retailerUserId: string;
+  /** Remitter (customer) mobile number. */
+  customerMobile: string;
+  outletId?: string;
+  endpointIp?: string;
+}
+
+export interface DmtRemitterRegistrationParams {
+  retailerUserId: string;
+  customerMobile: string;
+  /** Plain 12-digit Aadhaar — adapter encrypts (AES-256-CBC) before sending. */
+  aadhaarNumber: string;
+  /** referenceKey from the Remitter Profile response. */
+  referenceKey: string;
+  outletId?: string;
+  endpointIp?: string;
+}
+
+export interface DmtRemitterRegistrationVerifyParams {
+  retailerUserId: string;
+  customerMobile: string;
+  /** OTP received on remitter mobile (from registration step). */
+  otp: string;
+  /** referenceKey from the Remitter Profile response. */
+  referenceKey: string;
+  outletId?: string;
+  endpointIp?: string;
+}
+
+export interface DmtRemitterKycParams {
+  retailerUserId: string;
+  customerMobile: string;
+  /** PidData XML from the RD-service biometric device (or JSON biometric blob in tests). */
+  biometricPayload: string;
+  /** referenceKey from the Remitter Profile response. */
+  referenceKey: string;
+  captureType?: "FINGER" | "FACE";
+  latitude?: string;
+  longitude?: string;
+  outletId?: string;
+  endpointIp?: string;
+  externalRef?: string;
+}
+
+/** Beneficiary as returned inside remitter profile. */
+export interface DmtRemitterBeneficiary {
+  id: string;
+  name: string;
+  account: string;
+  ifsc: string;
+  bank: string;
+  beneficiaryMobileNumber: string;
+  verificationDt: string;
+}
+
+/** Remitter profile (from /fi/remit/out/domestic/v2/remitterProfile). */
+export interface DmtRemitterProfile {
+  registered: boolean;
+  mobileNumber: string;
+  firstName: string;
+  lastName: string;
+  city: string;
+  pincode: string;
+  limitPerTransaction: string;
+  limitTotal: string;
+  limitConsumed: string;
+  limitAvailable: string;
+  limitDetails: Record<string, string>;
+  beneficiaries: DmtRemitterBeneficiary[];
+  isTxnOtpRequired: boolean;
+  isTxnBioAuthRequired: boolean;
+  isImpsAllowed: boolean;
+  isNeftAllowed: boolean;
+  isFaceAuthAvailable: boolean;
+  /** Reference key for follow-up calls (registration/txn) with its validity. */
+  referenceKey: string;
+  validity: string;
+  pidOptionWadh: string;
+}
+
 export interface DmtBeneficiaryParams {
   retailerUserId: string;
   customerMobile: string;
   name: string;
   accountNumber: string;
   ifsc: string;
+  /** Beneficiary's own mobile — falls back to remitter mobile when absent. */
+  beneficiaryMobile?: string;
+  /** bankId from the DMT bank list (InstantPay). */
+  bankId?: string;
+  outletId?: string;
+  endpointIp?: string;
+}
+
+export interface DmtBeneficiaryVerifyParams {
+  retailerUserId: string;
+  /** Remitter mobile — OTP isi number pe gaya hota hai. */
+  customerMobile: string;
+  otp: string;
+  /** beneficiaryId from the Beneficiary Registration response. */
+  beneficiaryId: string;
+  /** referenceKey from the Beneficiary Registration response. */
+  referenceKey: string;
+  outletId?: string;
+  endpointIp?: string;
+}
+
+export interface DmtBeneficiaryDeleteParams {
+  retailerUserId: string;
+  /** Remitter mobile — delete OTP isi number pe jaata hai. */
+  customerMobile: string;
+  beneficiaryId: string;
+  outletId?: string;
+  endpointIp?: string;
+}
+
+export interface DmtTransactionOtpParams {
+  retailerUserId: string;
+  /** Remitter mobile — transaction OTP isi number pe jaata hai. */
+  customerMobile: string;
+  /** Amount to be transferred (rupees, up to 2 decimals). */
+  amount: string;
+  /** referenceKey from the Remitter Profile response. */
+  referenceKey: string;
+  outletId?: string;
+  endpointIp?: string;
+}
+
+export interface DmtRefundOtpParams {
+  retailerUserId: string;
+  /** InstantPay orderid of the pending remittance txn that needs refund authorisation. */
+  ipayId: string;
+  outletId?: string;
+  endpointIp?: string;
+}
+
+export interface DmtRefundParams {
+  retailerUserId: string;
+  /** InstantPay orderid of the pending remittance txn being refunded. */
+  ipayId: string;
+  /** referenceKey from the Transaction Refund OTP response. */
+  referenceKey: string;
+  /** OTP received on the remitter's mobile. */
+  otp: string;
+  outletId?: string;
+  endpointIp?: string;
 }
 
 export interface DmtTransferParams {
   retailerUserId: string;
+  /** Remitter mobile. */
   customerMobile: string;
-  beneficiaryId: string;
+  /** Beneficiary account details (from beneficiary registration). */
+  accountNumber: string;
+  ifsc: string;
   amount: string;
   mode: "imps" | "neft";
+  /** OTP received on remitter mobile (from generateTransactionOtp step). */
+  otp: string;
+  /** referenceKey from the Generate Transaction OTP response. */
+  referenceKey: string;
+  /** Our txnRef — sent as externalRef so txn-status recheck can find it. */
+  externalRef?: string;
+  /** Record-keeping only; not sent to the provider. */
+  beneficiaryId?: string;
+  latitude?: string;
+  longitude?: string;
+  outletId?: string;
+  endpointIp?: string;
 }
 
 export interface BbpsFetchBillParams {
@@ -151,8 +327,56 @@ export interface ProviderAdapter {
   ): Promise<ProviderResult<{ statement: { date: string; narration: string; amount: string; type: "credit" | "debit" }[] }>>;
   aadhaarPay(params: AepsParams): Promise<ProviderResult>;
 
-  dmtAddBeneficiary(params: DmtBeneficiaryParams): Promise<ProviderResult<{ beneficiaryId: string }>>;
+  /** DMT remittance bank directory (IMPS/NEFT flags + IFSC alias). */
+  dmtBankList(params: DmtBankListParams): Promise<ProviderResult<{ banks: DmtBank[] }>>;
+  /** Remitter existence check + limits + registered beneficiaries. */
+  dmtRemitterProfile(
+    params: DmtRemitterProfileParams,
+  ): Promise<
+    ProviderResult<{
+      profile: DmtRemitterProfile | null;
+      /** Present when profile is null — needed to start remitter registration. */
+      referenceKey?: string;
+      validity?: string;
+    }>
+  >;
+  /** Start remitter registration — sends OTP to remitter mobile; returns otpReference for verify. */
+  dmtRemitterRegister(
+    params: DmtRemitterRegistrationParams,
+  ): Promise<ProviderResult<{ otpReference: string }>>;
+  /** Verify registration OTP — completes remitter registration; returns provider referenceId. */
+  dmtRemitterRegisterVerify(
+    params: DmtRemitterRegistrationVerifyParams,
+  ): Promise<ProviderResult<{ referenceId: string }>>;
+  /** Remitter biometric/face eKYC — chargeable (pool debit); needed for full-KYC limits. */
+  dmtRemitterKyc(params: DmtRemitterKycParams): Promise<ProviderResult<{ poolReferenceId: string }>>;
+  /** Start beneficiary registration — sends OTP to remitter mobile; returns referenceKey for verify. */
+  dmtAddBeneficiary(
+    params: DmtBeneficiaryParams,
+  ): Promise<ProviderResult<{ beneficiaryId: string; referenceKey: string; validity: string }>>;
+  /** Verify beneficiary registration OTP — completes beneficiary registration. */
+  dmtAddBeneficiaryVerify(
+    params: DmtBeneficiaryVerifyParams,
+  ): Promise<ProviderResult<{ beneficiaryId: string }>>;
+  /** Start beneficiary delete — sends OTP to remitter mobile; returns referenceKey for verify. */
+  dmtDeleteBeneficiary(
+    params: DmtBeneficiaryDeleteParams,
+  ): Promise<ProviderResult<{ beneficiaryId: string; referenceKey: string; validity: string }>>;
+  /** Verify beneficiary delete OTP — completes beneficiary deletion. Same params shape as add-verify. */
+  dmtDeleteBeneficiaryVerify(
+    params: DmtBeneficiaryVerifyParams,
+  ): Promise<ProviderResult<{ beneficiaryId: string }>>;
+  /** Transaction OTP for transfer — sends OTP to remitter mobile; returns referenceKey for the transfer call. */
+  dmtGenerateTransactionOtp(
+    params: DmtTransactionOtpParams,
+  ): Promise<ProviderResult<{ referenceKey: string; validity: string }>>;
   dmtTransfer(params: DmtTransferParams): Promise<ProviderResult>;
+  /** Refund OTP for a pending txn flagged ReversalAuthorisationRequired — sends OTP to remitter. */
+  dmtTransactionRefundOtp(
+    params: DmtRefundOtpParams,
+  ): Promise<ProviderResult<{ referenceKey: string; validity: string }>>;
+  /** Confirm refund of a pending txn with the OTP + referenceKey from the refund OTP step. */
+  dmtTransactionRefund(params: DmtRefundParams): Promise<ProviderResult>;
 
   bbpsFetchBill(
     params: BbpsFetchBillParams,
@@ -175,8 +399,19 @@ export type ProviderOperation =
   | "aeps_txn_otp"
   | "aeps_mini_statement"
   | "aadhaar_pay"
+  | "dmt_bank_list"
+  | "dmt_remitter_profile"
+  | "dmt_remitter_register"
+  | "dmt_remitter_register_verify"
+  | "dmt_remitter_kyc"
   | "dmt_add_beneficiary"
+  | "dmt_add_beneficiary_verify"
+  | "dmt_delete_beneficiary"
+  | "dmt_delete_beneficiary_verify"
+  | "dmt_txn_otp"
   | "dmt_transfer"
+  | "dmt_refund_otp"
+  | "dmt_refund"
   | "bbps_fetch_bill"
   | "bbps_pay_bill"
   | "recharge"

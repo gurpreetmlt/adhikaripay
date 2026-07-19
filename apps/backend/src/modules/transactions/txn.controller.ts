@@ -17,6 +17,15 @@ import type {
   bbpsFetchBillSchema,
   bbpsPayBillSchema,
   dmtBeneficiarySchema,
+  dmtBeneficiaryDeleteSchema,
+  dmtBeneficiaryVerifySchema,
+  dmtTransactionOtpSchema,
+  dmtRemitterProfileSchema,
+  dmtRemitterRegisterSchema,
+  dmtRemitterRegisterVerifySchema,
+  dmtRemitterKycSchema,
+  dmtRefundOtpSchema,
+  dmtRefundSchema,
   dmtTransferSchema,
   aepsEnquirySchema,
   aepsTxnOtpSchema,
@@ -116,15 +125,220 @@ export async function bbpsPayBill(req: Request, res: Response): Promise<void> {
 }
 
 // ── DMT ─────────────────────────────────────────────────────────────────────
+export async function dmtRemitterProfile(req: Request, res: Response): Promise<void> {
+  const body = req.body as z.infer<typeof dmtRemitterProfileSchema>;
+  const userId = actor(req).id;
+  const routedProviders = await resolveProvidersForService("dmt_remitter_profile");
+  const result = await callProvider(
+    routedProviders[0]!,
+    "dmt_remitter_profile",
+    null,
+    { customerMobile: body.customerMobile },
+    (adapter) =>
+      adapter.dmtRemitterProfile({
+        retailerUserId: userId,
+        customerMobile: body.customerMobile,
+        endpointIp: req.ip ?? undefined,
+      }),
+  );
+  sendSuccess(res, result);
+}
+
+export async function dmtRemitterRegister(req: Request, res: Response): Promise<void> {
+  const body = req.body as z.infer<typeof dmtRemitterRegisterSchema>;
+  const userId = actor(req).id;
+  const routedProviders = await resolveProvidersForService("dmt_remitter_register");
+  const result = await callProvider(
+    routedProviders[0]!,
+    "dmt_remitter_register",
+    null,
+    { customerMobile: body.customerMobile },
+    (adapter) =>
+      adapter.dmtRemitterRegister({
+        retailerUserId: userId,
+        customerMobile: body.customerMobile,
+        aadhaarNumber: body.aadhaarNumber,
+        referenceKey: body.referenceKey,
+        endpointIp: req.ip ?? undefined,
+      }),
+  );
+  sendSuccess(res, result);
+}
+
+export async function dmtRemitterRegisterVerify(req: Request, res: Response): Promise<void> {
+  const body = req.body as z.infer<typeof dmtRemitterRegisterVerifySchema>;
+  const userId = actor(req).id;
+  const routedProviders = await resolveProvidersForService("dmt_remitter_register_verify");
+  const result = await callProvider(
+    routedProviders[0]!,
+    "dmt_remitter_register_verify",
+    null,
+    { customerMobile: body.customerMobile },
+    (adapter) =>
+      adapter.dmtRemitterRegisterVerify({
+        retailerUserId: userId,
+        customerMobile: body.customerMobile,
+        otp: body.otp,
+        referenceKey: body.referenceKey,
+        endpointIp: req.ip ?? undefined,
+      }),
+  );
+  sendSuccess(res, result);
+}
+
+export async function dmtRemitterKyc(req: Request, res: Response): Promise<void> {
+  const body = req.body as z.infer<typeof dmtRemitterKycSchema>;
+  const userId = actor(req).id;
+  const routedProviders = await resolveProvidersForService("dmt_remitter_kyc");
+  const result = await callProvider(
+    routedProviders[0]!,
+    "dmt_remitter_kyc",
+    null,
+    // Biometric payload never goes into provider_logs context — only the mobile.
+    { customerMobile: body.customerMobile },
+    (adapter) =>
+      adapter.dmtRemitterKyc({
+        retailerUserId: userId,
+        customerMobile: body.customerMobile,
+        referenceKey: body.referenceKey,
+        biometricPayload: body.biometricPayload,
+        captureType: body.captureType,
+        latitude: body.latitude,
+        longitude: body.longitude,
+        endpointIp: req.ip ?? undefined,
+      }),
+  );
+  sendSuccess(res, result);
+}
+
 export async function dmtAddBeneficiary(req: Request, res: Response): Promise<void> {
   const body = req.body as z.infer<typeof dmtBeneficiarySchema>;
-  const routedProviders = await resolveProvidersForService("dmt");
+  const routedProviders = await resolveProvidersForService("dmt_add_beneficiary");
   const result = await callProvider(
     routedProviders[0]!,
     "dmt_add_beneficiary",
     null,
     { customerMobile: body.customerMobile, accountNumber: body.accountNumber, ifsc: body.ifsc },
-    (adapter) => adapter.dmtAddBeneficiary({ retailerUserId: actor(req).id, ...body }),
+    (adapter) =>
+      adapter.dmtAddBeneficiary({
+        retailerUserId: actor(req).id,
+        ...body,
+        endpointIp: req.ip ?? undefined,
+      }),
+  );
+  sendSuccess(res, result);
+}
+
+export async function dmtAddBeneficiaryVerify(req: Request, res: Response): Promise<void> {
+  const body = req.body as z.infer<typeof dmtBeneficiaryVerifySchema>;
+  const routedProviders = await resolveProvidersForService("dmt_add_beneficiary_verify");
+  const result = await callProvider(
+    routedProviders[0]!,
+    "dmt_add_beneficiary_verify",
+    null,
+    { customerMobile: body.customerMobile, beneficiaryId: body.beneficiaryId },
+    (adapter) =>
+      adapter.dmtAddBeneficiaryVerify({
+        retailerUserId: actor(req).id,
+        ...body,
+        endpointIp: req.ip ?? undefined,
+      }),
+  );
+  sendSuccess(res, result);
+}
+
+export async function dmtDeleteBeneficiaryVerify(req: Request, res: Response): Promise<void> {
+  const body = req.body as z.infer<typeof dmtBeneficiaryVerifySchema>;
+  const routedProviders = await resolveProvidersForService("dmt_delete_beneficiary_verify");
+  const result = await callProvider(
+    routedProviders[0]!,
+    "dmt_delete_beneficiary_verify",
+    null,
+    { customerMobile: body.customerMobile, beneficiaryId: body.beneficiaryId },
+    (adapter) =>
+      adapter.dmtDeleteBeneficiaryVerify({
+        retailerUserId: actor(req).id,
+        ...body,
+        endpointIp: req.ip ?? undefined,
+      }),
+  );
+  sendSuccess(res, result);
+}
+
+export async function dmtDeleteBeneficiary(req: Request, res: Response): Promise<void> {
+  const body = req.body as z.infer<typeof dmtBeneficiaryDeleteSchema>;
+  const routedProviders = await resolveProvidersForService("dmt_delete_beneficiary");
+  const result = await callProvider(
+    routedProviders[0]!,
+    "dmt_delete_beneficiary",
+    null,
+    { customerMobile: body.customerMobile, beneficiaryId: body.beneficiaryId },
+    (adapter) =>
+      adapter.dmtDeleteBeneficiary({
+        retailerUserId: actor(req).id,
+        ...body,
+        endpointIp: req.ip ?? undefined,
+      }),
+  );
+  sendSuccess(res, result);
+}
+
+export async function dmtGenerateTransactionOtp(req: Request, res: Response): Promise<void> {
+  const body = req.body as z.infer<typeof dmtTransactionOtpSchema>;
+  const routedProviders = await resolveProvidersForService("dmt_txn_otp");
+  const result = await callProvider(
+    routedProviders[0]!,
+    "dmt_txn_otp",
+    null,
+    { customerMobile: body.customerMobile, amount: body.amount },
+    (adapter) =>
+      adapter.dmtGenerateTransactionOtp({
+        retailerUserId: actor(req).id,
+        ...body,
+        endpointIp: req.ip ?? undefined,
+      }),
+  );
+  sendSuccess(res, result);
+}
+
+// Refund OTP — only for pending txns flagged ReversalAuthorisationRequired (optional7 in
+// statement/status-check response). Sends OTP to remitter; referenceKey feeds the refund call.
+export async function dmtTransactionRefundOtp(req: Request, res: Response): Promise<void> {
+  const body = req.body as z.infer<typeof dmtRefundOtpSchema>;
+  const routedProviders = await resolveProvidersForService("dmt_refund_otp");
+  const result = await callProvider(
+    routedProviders[0]!,
+    "dmt_refund_otp",
+    null,
+    { ipayId: body.ipayId },
+    (adapter) =>
+      adapter.dmtTransactionRefundOtp({
+        retailerUserId: actor(req).id,
+        ipayId: body.ipayId,
+        endpointIp: req.ip ?? undefined,
+      }),
+  );
+  sendSuccess(res, result);
+}
+
+// Refund confirm — OTP + referenceKey from the refund OTP step. Provider-side reversal only;
+// hamare ledger mein wallet credit recheck (`POST /api/txn/:txnRef/recheck`) se hota hai.
+export async function dmtTransactionRefund(req: Request, res: Response): Promise<void> {
+  const body = req.body as z.infer<typeof dmtRefundSchema>;
+  const routedProviders = await resolveProvidersForService("dmt_refund");
+  const result = await callProvider(
+    routedProviders[0]!,
+    "dmt_refund",
+    null,
+    { ipayId: body.ipayId },
+    (adapter) =>
+      adapter.dmtTransactionRefund({
+        retailerUserId: actor(req).id,
+        ipayId: body.ipayId,
+        referenceKey: body.referenceKey,
+        otp: body.otp,
+        endpointIp: req.ip ?? undefined,
+      }),
   );
   sendSuccess(res, result);
 }
@@ -142,14 +356,29 @@ export async function dmtTransfer(req: Request, res: Response): Promise<void> {
     operation: "dmt_transfer",
     direction: "debit",
     walletType: "main",
-    metadata: { customerMobile: body.customerMobile, beneficiaryId: body.beneficiaryId, mode: body.mode },
-    invoke: (routed) =>
+    metadata: {
+      customerMobile: body.customerMobile,
+      accountNumber: body.accountNumber,
+      ifsc: body.ifsc,
+      beneficiaryId: body.beneficiaryId,
+      mode: body.mode,
+    },
+    invoke: (routed, txnRef) =>
       routed.adapter.dmtTransfer({
         retailerUserId: actor(req).id,
         customerMobile: body.customerMobile,
-        beneficiaryId: body.beneficiaryId,
+        accountNumber: body.accountNumber,
+        ifsc: body.ifsc,
         amount: body.amount,
         mode: body.mode,
+        otp: body.otp,
+        referenceKey: body.referenceKey,
+        beneficiaryId: body.beneficiaryId,
+        latitude: body.latitude,
+        longitude: body.longitude,
+        // externalRef = our txnRef so the provider's txn-status report can find it on recheck.
+        externalRef: txnRef,
+        endpointIp: req.ip ?? undefined,
       }),
   });
   sendSuccess(res, { txn: outcome.txn, provider: outcome.provider });
@@ -161,6 +390,16 @@ export async function aepsBankList(req: Request, res: Response): Promise<void> {
   const routedProviders = await resolveProvidersForService("aeps_bank_list");
   const result = await callProvider(routedProviders[0]!, "aeps_bank_list", null, {}, (adapter) =>
     adapter.aepsBankList({ retailerUserId: userId, endpointIp: req.ip ?? undefined }),
+  );
+  sendSuccess(res, result);
+}
+
+/** DMT remittance bank directory — InstantPay recommends syncing at most once/hour. */
+export async function dmtBankList(req: Request, res: Response): Promise<void> {
+  const userId = actor(req).id;
+  const routedProviders = await resolveProvidersForService("dmt_bank_list");
+  const result = await callProvider(routedProviders[0]!, "dmt_bank_list", null, {}, (adapter) =>
+    adapter.dmtBankList({ retailerUserId: userId, endpointIp: req.ip ?? undefined }),
   );
   sendSuccess(res, result);
 }

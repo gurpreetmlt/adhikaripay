@@ -15,7 +15,20 @@ import type {
   BbpsFetchBillParams,
   BbpsPayBillParams,
   CheckStatusParams,
+  DmtBank,
+  DmtBankListParams,
+  DmtBeneficiaryDeleteParams,
   DmtBeneficiaryParams,
+  DmtBeneficiaryVerifyParams,
+  DmtRemitterBeneficiary,
+  DmtRemitterProfile,
+  DmtRemitterKycParams,
+  DmtRemitterProfileParams,
+  DmtRemitterRegistrationParams,
+  DmtRemitterRegistrationVerifyParams,
+  DmtRefundOtpParams,
+  DmtRefundParams,
+  DmtTransactionOtpParams,
   DmtTransferParams,
   ProviderAdapter,
   ProviderResult,
@@ -363,12 +376,428 @@ export class InstantPayAdapter implements ProviderAdapter {
     };
   }
 
-  dmtAddBeneficiary(_params: DmtBeneficiaryParams): Promise<ProviderResult<{ beneficiaryId: string }>> {
-    return Promise.reject(new HttpError(501, "InstantPay DMT not wired yet", "INSTANTPAY_DMT_UNWIRED"));
+  async dmtBankList(params: DmtBankListParams): Promise<ProviderResult<{ banks: DmtBank[] }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    // InstantPay expects POST with empty body; sync at most once/hour on the client.
+    const res = await instantPayPost(
+      "/fi/remit/out/domestic/v2/banks",
+      {},
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+    const rows = Array.isArray(res.data) ? (res.data as Record<string, unknown>[]) : [];
+    const banks: DmtBank[] = rows.map((r) => ({
+      bankId: (r.bankId as number | string) ?? "",
+      name: String(r.name ?? ""),
+      ifscAlias: String(r.ifscAlias ?? ""),
+      ifscGlobal: String(r.ifscGlobal ?? ""),
+      neftEnabled: Number(r.neftEnabled) === 1,
+      impsEnabled: Number(r.impsEnabled) === 1,
+      upiEnabled: Number(r.upiEnabled) === 1,
+      neftFailureRate: String(r.neftFailureRate ?? "0"),
+      impsFailureRate: String(r.impsFailureRate ?? "0"),
+      upiFailureRate: String(r.upiFailureRate ?? "0"),
+    }));
+    const mapped = this.toResult(res, null, { banks });
+    return { ...mapped, data: { banks } };
   }
 
-  dmtTransfer(_params: DmtTransferParams): Promise<ProviderResult> {
-    return Promise.reject(new HttpError(501, "InstantPay DMT not wired yet", "INSTANTPAY_DMT_UNWIRED"));
+  async dmtRemitterProfile(
+    params: DmtRemitterProfileParams,
+  ): Promise<ProviderResult<{ profile: DmtRemitterProfile | null }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/domestic/v2/remitterProfile",
+      {
+        mobileNumber: params.customerMobile,
+        txnMode: "ALL",
+        iftEnable: "YES",
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    const code = String(res.statuscode ?? "").toUpperCase();
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const hasProfile = code === "TXN" && raw != null && String(raw.mobileNumber ?? "").length > 0;
+
+    if (!hasProfile) {
+      // Existence check: remitter not registered is a valid outcome (start registration).
+      // InstantPay still returns referenceKey on RNF — needed for remitterRegistration.
+      const referenceKey = String(raw?.referenceKey ?? "");
+      const validity = String(raw?.validity ?? "");
+      const notFound =
+        code === "RNF" ||
+        code === "SNR" ||
+        /not\s*(found|register)/i.test(String(res.status ?? ""));
+      if (notFound) {
+        return {
+          success: true,
+          status: "success",
+          providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+          amount: null,
+          message: String(res.status ?? "Remitter not registered"),
+          data: { profile: null, referenceKey: referenceKey || undefined, validity: validity || undefined },
+          raw: res as Record<string, unknown>,
+        };
+      }
+      const mapped = this.toResult(res, null, {
+        profile: null,
+        referenceKey: referenceKey || undefined,
+        validity: validity || undefined,
+      });
+      return {
+        ...mapped,
+        data: { profile: null, referenceKey: referenceKey || undefined, validity: validity || undefined },
+      };
+    }
+
+    const limitDetailsRaw =
+      raw.limitDetails && typeof raw.limitDetails === "object" && !Array.isArray(raw.limitDetails)
+        ? (raw.limitDetails as Record<string, unknown>)
+        : {};
+    const limitDetails: Record<string, string> = {};
+    for (const [k, v] of Object.entries(limitDetailsRaw)) {
+      limitDetails[k] = String(v ?? "");
+    }
+
+    const beneficiariesRaw = Array.isArray(raw.beneficiaries) ? raw.beneficiaries : [];
+    const beneficiaries: DmtRemitterBeneficiary[] = beneficiariesRaw.map((b) => {
+      const row = (b && typeof b === "object" ? b : {}) as Record<string, unknown>;
+      return {
+        id: String(row.id ?? ""),
+        name: String(row.name ?? ""),
+        account: String(row.account ?? ""),
+        ifsc: String(row.ifsc ?? ""),
+        bank: String(row.bank ?? ""),
+        beneficiaryMobileNumber: String(row.beneficiaryMobileNumber ?? ""),
+        verificationDt: String(row.verificationDt ?? ""),
+      };
+    });
+
+    const profile: DmtRemitterProfile = {
+      registered: true,
+      mobileNumber: String(raw.mobileNumber ?? params.customerMobile),
+      firstName: String(raw.firstName ?? ""),
+      lastName: String(raw.lastName ?? ""),
+      city: String(raw.city ?? ""),
+      pincode: String(raw.pincode ?? ""),
+      limitPerTransaction: String(raw.limitPerTransaction ?? ""),
+      limitTotal: String(raw.limitTotal ?? ""),
+      limitConsumed: String(raw.limitConsumed ?? ""),
+      limitAvailable: String(raw.limitAvailable ?? ""),
+      limitDetails,
+      beneficiaries,
+      isTxnOtpRequired: Boolean(raw.isTxnOtpRequired),
+      isTxnBioAuthRequired: Boolean(raw.isTxnBioAuthRequired),
+      isImpsAllowed: Boolean(raw.isImpsAllowed),
+      isNeftAllowed: Boolean(raw.isNeftAllowed),
+      isFaceAuthAvailable: Boolean(raw.isFaceAuthAvailable),
+      referenceKey: String(raw.referenceKey ?? ""),
+      validity: String(raw.validity ?? ""),
+      pidOptionWadh: String(raw.pidOptionWadh ?? ""),
+    };
+
+    return {
+      success: true,
+      status: "success",
+      providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+      amount: null,
+      message: String(res.status ?? "Success"),
+      data: { profile },
+      raw: res as Record<string, unknown>,
+    };
+  }
+
+  async dmtRemitterRegister(
+    params: DmtRemitterRegistrationParams,
+  ): Promise<ProviderResult<{ otpReference: string }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/domestic/v2/remitterRegistration",
+      {
+        mobileNumber: params.customerMobile,
+        encryptedAadhaar: encryptInstantPayAadhaar(params.aadhaarNumber),
+        referenceKey: params.referenceKey,
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    const code = String(res.statuscode ?? "").toUpperCase();
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const otpReference = String(raw?.otpReference ?? "");
+
+    // Success = statuscode OTP (OTP sent to remitter mobile, verify in next step).
+    if (code === "OTP" && otpReference.length > 0) {
+      return {
+        success: true,
+        status: "success",
+        providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+        amount: null,
+        message: String(res.status ?? "OTP sent to remitter mobile"),
+        data: { otpReference },
+        raw: res as Record<string, unknown>,
+      };
+    }
+
+    const mapped = this.toResult(res, null, { otpReference });
+    return { ...mapped, data: { otpReference } };
+  }
+
+  async dmtRemitterRegisterVerify(
+    params: DmtRemitterRegistrationVerifyParams,
+  ): Promise<ProviderResult<{ referenceId: string }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/domestic/v2/remitterRegistrationVerify",
+      {
+        mobileNumber: params.customerMobile,
+        otp: params.otp,
+        referenceKey: params.referenceKey,
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const referenceId = String(raw?.referenceID ?? "");
+    const mapped = this.toResult(res, null, { referenceId });
+    return { ...mapped, data: { referenceId } };
+  }
+
+  async dmtRemitterKyc(params: DmtRemitterKycParams): Promise<ProviderResult<{ poolReferenceId: string }>> {
+    const ctx = await this.resolveOutletContext(params);
+    const externalRef = params.externalRef || `RK-${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+    // Aadhaar rides inside the encrypted PID block, so no encryptedAadhaar field here.
+    const bio = parsePidDataXml(params.biometricPayload, "");
+    const res = await instantPayPost(
+      "/fi/remit/out/domestic/v2/remitterKyc",
+      {
+        mobileNumber: params.customerMobile,
+        referenceKey: params.referenceKey,
+        latitude: ctx.latitude,
+        longitude: ctx.longitude,
+        externalRef,
+        consentTaken: "Y",
+        captureType: params.captureType || "FINGER",
+        biometricData: {
+          ci: bio.ci,
+          hmac: bio.hmac,
+          pidData: bio.pidData,
+          ts: bio.ts,
+          dc: bio.dc,
+          mi: bio.mi,
+          dpId: bio.dpId,
+          mc: bio.mc,
+          rdsId: bio.rdsId,
+          rdsVer: bio.rdsVer,
+          Skey: bio.sessionKey,
+          srno: bio.srno,
+        },
+      },
+      { outletId: ctx.outletId, endpointIp: params.endpointIp || ctx.endpointIp },
+    );
+
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const poolReferenceId = String(raw?.poolReferenceId ?? "");
+    const mapped = this.toResult(res, null, { poolReferenceId, externalRef });
+    return { ...mapped, data: { poolReferenceId } };
+  }
+
+  async dmtAddBeneficiary(
+    params: DmtBeneficiaryParams,
+  ): Promise<ProviderResult<{ beneficiaryId: string; referenceKey: string; validity: string }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/domestic/v2/beneficiaryRegistration",
+      {
+        remitterMobileNumber: params.customerMobile,
+        beneficiaryMobileNumber: params.beneficiaryMobile || params.customerMobile,
+        accountNumber: params.accountNumber,
+        ifsc: params.ifsc,
+        ...(params.bankId ? { bankId: params.bankId } : {}),
+        name: params.name,
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    const code = String(res.statuscode ?? "").toUpperCase();
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const beneficiaryId = String(raw?.beneficiaryId ?? "");
+    const referenceKey = String(raw?.referenceKey ?? "");
+    const validity = String(raw?.validity ?? "");
+
+    // Success = statuscode OTP (OTP sent to remitter mobile, verify in next step).
+    if (code === "OTP" && beneficiaryId.length > 0) {
+      return {
+        success: true,
+        status: "success",
+        providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+        amount: null,
+        message: String(res.status ?? "OTP sent to remitter mobile"),
+        data: { beneficiaryId, referenceKey, validity },
+        raw: res as Record<string, unknown>,
+      };
+    }
+
+    const mapped = this.toResult(res, null, { beneficiaryId });
+    return { ...mapped, data: { beneficiaryId, referenceKey, validity } };
+  }
+
+  async dmtAddBeneficiaryVerify(
+    params: DmtBeneficiaryVerifyParams,
+  ): Promise<ProviderResult<{ beneficiaryId: string }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/domestic/v2/beneficiaryRegistrationVerify",
+      {
+        remitterMobileNumber: params.customerMobile,
+        otp: params.otp,
+        beneficiaryId: params.beneficiaryId,
+        referenceKey: params.referenceKey,
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const beneficiaryId = String(raw?.beneficiaryId ?? params.beneficiaryId);
+    const mapped = this.toResult(res, null, { beneficiaryId });
+    return { ...mapped, data: { beneficiaryId } };
+  }
+
+  async dmtDeleteBeneficiary(
+    params: DmtBeneficiaryDeleteParams,
+  ): Promise<ProviderResult<{ beneficiaryId: string; referenceKey: string; validity: string }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/domestic/v2/beneficiaryDelete",
+      {
+        remitterMobileNumber: params.customerMobile,
+        beneficiaryId: params.beneficiaryId,
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    // statuscode "OTP" = delete initiated, OTP sent to remitter — verify step completes it.
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const data = {
+      beneficiaryId: String(raw?.beneficiaryId ?? params.beneficiaryId),
+      referenceKey: String(raw?.referenceKey ?? ""),
+      validity: String(raw?.validity ?? ""),
+    };
+    const mapped = this.toResult(res, null, data);
+    return { ...mapped, data };
+  }
+
+  async dmtDeleteBeneficiaryVerify(
+    params: DmtBeneficiaryVerifyParams,
+  ): Promise<ProviderResult<{ beneficiaryId: string }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/domestic/v2/beneficiaryDeleteVerify",
+      {
+        remitterMobileNumber: params.customerMobile,
+        otp: params.otp,
+        beneficiaryId: params.beneficiaryId,
+        referenceKey: params.referenceKey,
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const beneficiaryId = String(raw?.beneficiaryId ?? params.beneficiaryId);
+    const mapped = this.toResult(res, null, { beneficiaryId });
+    return { ...mapped, data: { beneficiaryId } };
+  }
+
+  async dmtGenerateTransactionOtp(
+    params: DmtTransactionOtpParams,
+  ): Promise<ProviderResult<{ referenceKey: string; validity: string }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/domestic/v2/generateTransactionOtp",
+      {
+        remitterMobileNumber: params.customerMobile,
+        amount: params.amount,
+        referenceKey: params.referenceKey,
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    // statuscode "OTP" = OTP sent to remitter — the new referenceKey goes into the transfer call.
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const data = {
+      referenceKey: String(raw?.referenceKey ?? ""),
+      validity: String(raw?.validity ?? ""),
+    };
+    const mapped = this.toResult(res, null, data);
+    return { ...mapped, data };
+  }
+
+  async dmtTransactionRefundOtp(
+    params: DmtRefundOtpParams,
+  ): Promise<ProviderResult<{ referenceKey: string; validity: string }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/domestic/v2/transactionRefundOtp",
+      { ipayId: params.ipayId },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    // statuscode "OTP" = OTP sent to remitter — referenceKey goes into the refund call.
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const data = {
+      referenceKey: String(raw?.referenceKey ?? ""),
+      validity: String(raw?.validity ?? ""),
+    };
+    const mapped = this.toResult(res, null, data);
+    return { ...mapped, data };
+  }
+
+  async dmtTransactionRefund(params: DmtRefundParams): Promise<ProviderResult> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/domestic/v2/transactionRefund",
+      {
+        ipayId: params.ipayId,
+        referenceKey: params.referenceKey,
+        otp: params.otp,
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    // Refund success pe pending txn reverse ho jaata hai — hamare ledger reversal ke liye
+    // client ko /api/txn/:txnRef/recheck chalana hai (txnStatus se auto-reversal).
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : {};
+    return this.toResult(res, null, { ipayId: params.ipayId, ...raw });
+  }
+
+  async dmtTransfer(params: DmtTransferParams): Promise<ProviderResult> {
+    const ctx = await this.resolveOutletContext(params);
+    const externalRef = params.externalRef || `DT-${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+    const res = await instantPayPost(
+      "/fi/remit/out/domestic/v2/transaction",
+      {
+        remitterMobileNumber: params.customerMobile,
+        accountNumber: params.accountNumber,
+        ifsc: params.ifsc,
+        transferMode: params.mode.toUpperCase(),
+        transferAmount: params.amount,
+        latitude: ctx.latitude,
+        longitude: ctx.longitude,
+        referenceKey: params.referenceKey,
+        otp: params.otp,
+        externalRef,
+      },
+      { outletId: ctx.outletId, endpointIp: params.endpointIp || ctx.endpointIp },
+    );
+
+    // TXN = success, TUP = pending (toResult maps it) — recheck via /reports/txnStatus with our
+    // externalRef. actcode OTPGENREF = declined for invalid OTP; client must restart with a fresh OTP.
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : {};
+    return this.toResult(res, params.amount, {
+      externalRef: String(raw.externalRef ?? externalRef),
+      txnReferenceId: String(raw.txnReferenceId ?? ""),
+      poolReferenceId: String(raw.poolReferenceId ?? ""),
+      beneficiaryName: String(raw.beneficiaryName ?? ""),
+    });
   }
 
   bbpsFetchBill(

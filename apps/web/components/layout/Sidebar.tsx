@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { toast } from "react-hot-toast";
-import { LayoutDashboard, LayoutGrid, History, HelpCircle, UserCircle, LogOut, Fingerprint } from "lucide-react";
+import { LayoutDashboard, LayoutGrid, History, HelpCircle, UserCircle, LogOut, Fingerprint, Banknote } from "lucide-react";
 import clsx from "clsx";
 import { ROLE_LABELS } from "@adhikaripay/shared-types";
 import { useAuthStore } from "@/lib/store";
@@ -21,6 +21,7 @@ export function Sidebar() {
     ? [
         { href: "/dashboard", label: "Services", icon: LayoutGrid },
         { href: "/aeps", label: "AePS", icon: Fingerprint },
+        { href: "/dmt", label: "DMT", icon: Banknote },
         { href: "/passbook", label: "History", icon: History },
         { href: null, label: "Help", icon: HelpCircle },
         { href: null, label: "Account", icon: UserCircle },
@@ -43,7 +44,7 @@ export function Sidebar() {
 
       <nav className="flex flex-col gap-1">
         {navItems.map((item) => {
-          const active = item.href !== null && pathname === item.href;
+          const active = item.href !== null && (pathname === item.href || pathname.startsWith(`${item.href}/`));
           const Icon = item.icon;
 
           if (item.href === null) {
