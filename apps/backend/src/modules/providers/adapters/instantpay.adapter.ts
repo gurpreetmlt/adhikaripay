@@ -313,18 +313,54 @@ export class InstantPayAdapter implements ProviderAdapter {
     return this.toResult(res, params.amount ?? null);
   }
 
+  /**
+   * Transaction Status (POST /reports/txnStatus) — client-level reports API, no outlet header.
+   * Provider rules: query only for TUP/timeout txns, ≥30 min after the txn, ≥4 h between
+   * retries for the same txn, history available for 30 days, nightly maintenance 11:30 PM–00:30 AM.
+   * Our recheck flow already spaces retries; finalizeTxn is idempotent either way.
+   */
   async checkStatus(params: CheckStatusParams): Promise<ProviderResult> {
+    if (!params.txnDate) {
+      throw new HttpError(422, "Transaction date required for status check", "TXN_DATE_REQUIRED");
+    }
+    const isAeps =
+      !params.serviceCode ||
+      params.serviceCode.startsWith("aeps_") ||
+      params.serviceCode === "aadhaar_pay";
     const res = await instantPayPost(
-      "/fi/aeps/transactionStatus",
+      "/reports/txnStatus",
       {
+        transactionDate: params.txnDate,
+        // We send externalRef = our txnRef on every money call, so lookup is deterministic.
         externalRef: params.clientRef,
-        orderId: params.providerTxnId,
+        // source ORDER applies to AePS transactions only per InstantPay docs.
+        ...(isAeps ? { source: "ORDER" } : {}),
       },
-      // Status checks still need outlet headers — use placeholder outlet from env mode docs;
-      // callers should pass clientRef that InstantPay can resolve.
-      { outletId: "0", endpointIp: "127.0.0.1" },
+      { endpointIp: "127.0.0.1" },
     );
-    return this.toResult(res, null);
+
+    // Two-level status: outer statuscode must be TXN for the QUERY itself; the txn's real
+    // state is transactionStatusCode (TXN success / TUP pending / anything else failed).
+    // Outer non-TXN = query didn't resolve — treat as pending, never settle on it.
+    const outer = String(res.statuscode ?? "").toUpperCase();
+    const data = (res.data && !Array.isArray(res.data) ? res.data : {}) as Record<string, unknown>;
+    const inner = String(data.transactionStatusCode ?? "").toUpperCase();
+    const status: "success" | "failed" | "pending" =
+      outer !== "TXN" ? "pending" : inner === "TXN" ? "success" : inner === "TUP" ? "pending" : "failed";
+    const amount = data.transactionAmount != null ? String(data.transactionAmount) : null;
+    return {
+      success: status === "success",
+      status,
+      providerTxnId:
+        (data.transactionReferenceId as string | null) ??
+        (res.orderid as string | null) ??
+        (res.ipay_uuid as string | null) ??
+        null,
+      amount,
+      message: String(data.transactionStatus ?? res.status ?? status),
+      data: {},
+      raw: res as Record<string, unknown>,
+    };
   }
 
   dmtAddBeneficiary(_params: DmtBeneficiaryParams): Promise<ProviderResult<{ beneficiaryId: string }>> {

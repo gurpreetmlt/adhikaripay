@@ -272,7 +272,7 @@ export async function aepsWithdraw(req: Request, res: Response): Promise<void> {
       latitude: body.latitude,
       longitude: body.longitude,
     },
-    invoke: (routed) =>
+    invoke: (routed, txnRef) =>
       routed.adapter.aepsWithdraw({
         retailerUserId: userId,
         aadhaarNumber: body.aadhaarNumber,
@@ -283,6 +283,8 @@ export async function aepsWithdraw(req: Request, res: Response): Promise<void> {
         latitude: body.latitude,
         longitude: body.longitude,
         otpReferenceKey: body.otpReferenceKey,
+        // externalRef = our txnRef so the provider's txn-status report can find it on recheck.
+        externalRef: txnRef,
         endpointIp: req.ip ?? undefined,
       }),
   });
@@ -333,7 +335,7 @@ export async function aepsDeposit(req: Request, res: Response): Promise<void> {
       latitude: body.latitude,
       longitude: body.longitude,
     },
-    invoke: (routed) =>
+    invoke: (routed, txnRef) =>
       routed.adapter.aepsDeposit({
         retailerUserId: userId,
         aadhaarNumber: body.aadhaarNumber,
@@ -343,6 +345,7 @@ export async function aepsDeposit(req: Request, res: Response): Promise<void> {
         amount: body.amount,
         latitude: body.latitude,
         longitude: body.longitude,
+        externalRef: txnRef,
         endpointIp: req.ip ?? undefined,
       }),
   });
@@ -378,7 +381,7 @@ export async function aadhaarPay(req: Request, res: Response): Promise<void> {
       latitude: body.latitude,
       longitude: body.longitude,
     },
-    invoke: (routed) =>
+    invoke: (routed, txnRef) =>
       routed.adapter.aadhaarPay({
         retailerUserId: userId,
         aadhaarNumber: body.aadhaarNumber,
@@ -388,6 +391,7 @@ export async function aadhaarPay(req: Request, res: Response): Promise<void> {
         amount: body.amount,
         latitude: body.latitude,
         longitude: body.longitude,
+        externalRef: txnRef,
         endpointIp: req.ip ?? undefined,
       }),
   });

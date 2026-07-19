@@ -14,6 +14,7 @@ import { txnRouter } from "./modules/transactions/txn.routes";
 import { kycRouter } from "./modules/kyc/kyc.routes";
 import { adminRouter } from "./modules/admin/admin.routes";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
+import { onboardingRouter } from "./modules/onboarding/onboarding.routes";
 
 export function createApp(): Express {
   const app = express();
@@ -77,6 +78,7 @@ export function createApp(): Express {
   app.use("/api/kyc", kycRouter);
   app.use("/api/admin", adminRouter);
   app.use("/api/dashboard", dashboardRouter);
+  app.use("/api/onboarding", onboardingRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -19,11 +19,18 @@ Real InstantPay adapter behind the existing `ProviderAdapter` contract so AEPS /
 - [x] Cash Deposit: `POST /txn/aeps/deposit` (debit AEPS wallet) → InstantPay `/fi/aeps/cashDeposit`; mobile Deposit tab live; migration `0014` seeds hidden AEPS rail service rows
 - [x] Mini Statement: backend already mapped `miniStatement[]` (date/txnType/amount/narration); mobile now renders the recent-txn list instead of a generic alert
 - [x] Bank List: `GET /txn/aeps/banks` → InstantPay `GET /fi/aeps/banks` (dummy has real IINs); mobile static IINs replaced with real NPCI IINs + live override by name
+- [x] Merchant Onboarding (Signup Min-KYC): `POST /api/onboarding/instantpay` → InstantPay `POST /user/outlet/signup/minKyc`; saves `instantpay_outlet_id` + outlet lat/long; `GET /api/onboarding/instantpay/status`; dummy mode → mock outletId
+- [x] Biometric eKYC Status: `POST /api/onboarding/instantpay/bio-kyc-status` (spKey DMI/WAP) → InstantPay `/user/outlet/signup/biometricKycStatus`; returns action + status (poll till APPROVED) + `pidOptionWadh`/`referenceKey` for the bio-KYC capture
+- [x] Biometric KYC submit: `POST /api/onboarding/instantpay/bio-kyc` (referenceKey + PID XML, optional aadhaarNumber) → InstantPay `/user/outlet/signup/biometricKyc`; capture needs PidOptions `wadh` from status API (client wadh support pending with onboarding UI)
+- [x] Mobile change: `POST /api/onboarding/instantpay/mobile-change` (initiate → OTPs to both numbers + `otpReferenceID`/`hash`) + `POST .../mobile-change/verify` (otp + otpReferenceID + hash) → InstantPay `/user/outlet/v2/mobileUpdate[Verify]`
+- [x] Merchant List (admin): `POST /api/onboarding/instantpay/merchants` (pagination + filters) → InstantPay `/user/outlet/list`; `wapStatus` = bank AePS enablement; dummy mode lists locally-onboarded retailers
+- [x] Transaction Status: recheck now hits `POST /reports/txnStatus` (client-level — outlet placeholder removed); externalRef = our txnRef on every AEPS money call; status from `transactionStatusCode` (TXN/TUP/other), outer non-TXN treated as pending
 
 ## Remaining (next chats)
 
-- [ ] InstantPay DMT / BBPS / recharge rails
-- [ ] Merchant onboarding API → populate `instantpay_outlet_id` + outlet geo
+- [ ] InstantPay DMT rails (remitter profile/registration → beneficiary → transfer → status)
+- [ ] InstantPay BBPS / recharge rails
+- [ ] Onboarding UI (mobile/web) — backend API ready
 - [ ] Customer photo / CCTV object storage for cash evidence
 - [ ] Seed `provider_services` for non-mode-routed rails
 

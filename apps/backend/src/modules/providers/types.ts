@@ -107,6 +107,10 @@ export interface CheckStatusParams {
   providerTxnId: string | null;
   /** Our txnRef — providers that support client-ref lookup use this as fallback. */
   clientRef: string;
+  /** Transaction date (YYYY-MM-DD, IST) — InstantPay reports API requires it. */
+  txnDate?: string;
+  /** Service code of the original txn — lets adapters pick rail-specific query params. */
+  serviceCode?: string;
 }
 
 /** Retailer proving THEIR OWN identity (not the customer's) — see modules/auth/agentAuth.ts. */

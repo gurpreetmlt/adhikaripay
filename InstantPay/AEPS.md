@@ -48,7 +48,7 @@ Har row: humara backend endpoint → InstantPay endpoint. Sab AEPS services `AEP
 | 7 | Cash Withdrawal | `POST /api/txn/aeps/withdraw` | `POST /fi/aeps/cashWithdrawal` | ✅ Done |
 | 8 | Cash Deposit | `POST /api/txn/aeps/deposit` | `POST /fi/aeps/cashDeposit` | ✅ Done |
 | 9 | Aadhaar Pay | `POST /api/txn/aeps/aadhaar-pay` | `POST /fi/aeps/aadhaarPay` | ✅ Backend done (UI adhura) |
-| 10 | Txn status recheck | `POST /api/txn/:txnRef/recheck` | `POST /fi/aeps/transactionStatus` | ⚠️ Wired, outlet header placeholder |
+| 10 | Txn status recheck | `POST /api/txn/:txnRef/recheck` | `POST /reports/txnStatus` | ✅ Done (client-level reports API) |
 
 ### Details per service
 
@@ -77,7 +77,7 @@ Sirf **₹5,000 se upar** cash withdrawal ke liye. Flow: OTP request → `refere
 Backend + adapter done, `direction: credit`. Mobile/web UI abhi adhura.
 
 **10. Recheck**
-Pending txns ke liye status check. InstantPay `transactionStatus` call me abhi outlet header placeholder (`"0"`) — live me har txn ka outlet id resolve karna baaki (see Pending).
+Pending txns ke liye status check — InstantPay `POST /reports/txnStatus` (client-level, koi outlet header nahi). Request: `transactionDate` (IST YYYY-MM-DD) + `externalRef` (= humara txnRef, ab har money call me bheja jaata hai) + `source: ORDER` (sirf AEPS). Two-level status: outer `statuscode` = query ka result; asli txn state `transactionStatusCode` me (TXN success / TUP pending / baaki failed; outer non-TXN = pending treat karo, settle mat karo). Provider rules: txn ke ≥30 min baad, same txn pe ≥4 ghante gap, sirf last 30 days, roz 11:30 PM–00:30 AM API maintenance.
 
 ---
 
@@ -150,12 +150,16 @@ AEPS_BIO_MISMATCH_LIMIT=2
 - [ ] **Endpoint IP rule** — `X-Ipay-Endpoint-Ip` = end customer IP (mandatory header). Confirm exact expectation.
 
 ### Per-merchant (onboarding)
-- [ ] **Outlet ID** har retailer ka (`X-Ipay-Outlet-Id`) — bina iske txn fail + account suspend risk
-- [ ] **Merchant onboarding API** — outlet ID + KYC InstantPay pe register karne ke liye (abhi humare paas nahi; manual/API dono clarify karo)
-- [ ] Outlet ka registered **lat/long** (geofence ke liye)
+- [x] **Merchant onboarding API** — Signup Min-KYC wired: `POST /api/onboarding/instantpay` → InstantPay `POST /user/outlet/signup/minKyc`. Success pe `instantpay_outlet_id` + outlet lat/long auto-save. Status: `GET /api/onboarding/instantpay/status`. Dummy mode me mock outletId milta hai.
+- [x] **Biometric eKYC status** — `POST /api/onboarding/instantpay/bio-kyc-status` body `{"spKey":"WAP"}` (AePS) ya `"DMI"` (DMT) → InstantPay `/user/outlet/signup/biometricKycStatus`. `action: ACTION-REQUIRED` → bio-KYC capture karna hai (`pidOptionWadh` + `referenceKey` isi response me). Status PENDING/APPROVAL_PENDING → 30-min interval pe poll; APPROVED → rail transact-ready.
+- [x] **Biometric KYC submit** — `POST /api/onboarding/instantpay/bio-kyc` body `{referenceKey, biometricPayload (PID XML), aadhaarNumber?, latitude?, longitude?}` → InstantPay `/user/outlet/signup/biometricKyc`. `aadhaarNumber` sirf tab mandatory jab status API ka `outletAadhaarNumber` empty tha. Capture RD-service se `pidOptionWadh` ke saath hona chahiye (PidOptions `wadh` attribute — client support onboarding UI ke saath aayega). Success ke baad status API poll karo till APPROVED.
+- [x] **Mobile change initiate** — `POST /api/onboarding/instantpay/mobile-change` body `{newMobileNumber, aadhaarNumber, existingMobileNumber?, latitude?, longitude?}` → InstantPay `/user/outlet/v2/mobileUpdate`. OTP dono numbers (existing + new) pe jaata hai; response me `otpReferenceID` + `hash` milta hai. Sirf InstantPay profile update hota hai — humara `users.mobile` nahi.
+- [x] **Mobile change verify** — `POST /api/onboarding/instantpay/mobile-change/verify` body `{otpReferenceID, otp, hash}` → InstantPay `/user/outlet/v2/mobileUpdateVerify`. Success = "Mobile Number successfully changed".
+- [x] **Merchant List (admin only)** — `POST /api/onboarding/instantpay/merchants` body `{pageNumber, recordsPerPage, outletId?, mobile?, pan?}` → InstantPay `/user/outlet/list`. `wapStatus: true` = outlet bank-side AEPS-enabled; false/null = bank end pe pending. Dummy mode locally onboarded retailers ki list deta hai.
+- [ ] Onboarding ke liye merchant ka PAN-matching name/DOB aur Aadhaar-matching mobile/address chahiye (InstantPay mismatch pe reject karta hai)
 
 ### Service-specific clarifications chahiye
-- [ ] **Transaction status** (`/fi/aeps/transactionStatus`) — outlet header kaise pass ho recheck me (abhi placeholder), aur exact request shape
+- [x] **Transaction status** — `/reports/txnStatus` docs mil gaye aur wired (outlet header ki zaroorat hi nahi)
 - [ ] **Face auth** availability + flow (response me `isFaceAuthAvailable` aata hai)
 - [ ] **Onus vs Ofus** (`isOnusTxn`) — commission/settlement pe kya farak
 - [ ] **DMT / BBPS / Recharge** endpoints + docs (abhi sirf AEPS wired)
@@ -167,8 +171,9 @@ AEPS_BIO_MISMATCH_LIMIT=2
 ## 6. Pending (next chats)
 
 - [ ] Aadhaar Pay ka mobile/web UI complete karo (backend ready)
-- [ ] Merchant onboarding API → `instantpay_outlet_id` + outlet geo auto-populate
-- [ ] Recheck (`transactionStatus`) me proper outlet id resolve karo (placeholder hata do)
+- [x] Merchant onboarding API → `instantpay_outlet_id` + outlet geo auto-populate (`POST /api/onboarding/instantpay`)
+- [ ] Onboarding UI (mobile/web) — abhi sirf backend API hai
+- [x] Recheck ab `POST /reports/txnStatus` use karta hai (client-level — outlet placeholder khatam)
 - [ ] Web AEPS withdraw/deposit backend se wire karo (abhi sirf capture hota hai, submit nahi)
 - [ ] InstantPay DMT / BBPS / Recharge rails
 - [ ] Customer photo / CCTV object storage (cash evidence — compliance)

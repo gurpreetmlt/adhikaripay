@@ -4,7 +4,8 @@ import { logger } from "../../../utils/logger";
 const DEFAULT_BASE = "https://api.instantpay.in";
 
 export interface InstantPayHeaders {
-  outletId: string;
+  /** Omitted for pre-onboarding calls (e.g. outlet signup) where no outlet exists yet. */
+  outletId?: string;
   endpointIp: string;
 }
 
@@ -34,7 +35,7 @@ export function buildInstantPayHeaders(h: InstantPayHeaders): Record<string, str
     "X-Ipay-Auth-Code": env.INSTANTPAY_AUTH_CODE,
     "X-Ipay-Client-Id": env.INSTANTPAY_CLIENT_ID,
     "X-Ipay-Client-Secret": env.INSTANTPAY_CLIENT_SECRET,
-    "X-Ipay-Outlet-Id": h.outletId,
+    ...(h.outletId ? { "X-Ipay-Outlet-Id": h.outletId } : {}),
     "X-Ipay-Endpoint-Ip": h.endpointIp,
   };
 }

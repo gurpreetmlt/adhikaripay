@@ -366,7 +366,13 @@ export async function recheckTxnStatus(actor: Actor, txnRef: string): Promise<Tx
   const routed = routedProviders[0]!;
 
   const result = await callProvider(routed, "check_status", txn.txnRef, { txnRef: txn.txnRef }, (adapter) =>
-    adapter.checkStatus({ providerTxnId: txn.providerTxnId, clientRef: txn.txnRef }),
+    adapter.checkStatus({
+      providerTxnId: txn.providerTxnId,
+      clientRef: txn.txnRef,
+      // InstantPay reports API needs the txn date in IST (YYYY-MM-DD).
+      txnDate: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(txn.createdAt),
+      serviceCode: service.code,
+    }),
   );
 
   // Recheck context: direction from service code; wallet from the stored txn row (not re-derived).
