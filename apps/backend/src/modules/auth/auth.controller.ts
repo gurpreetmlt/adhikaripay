@@ -163,6 +163,10 @@ export async function signupVerify(req: Request, res: Response): Promise<void> {
     ipAddress: req.ip ?? null,
     userAgent: req.headers["user-agent"] ?? null,
   });
+  if ("pendingApproval" in result && result.pendingApproval) {
+    sendSuccess(res, result, result.message, 201);
+    return;
+  }
   sendSuccess(res, result, "Account created successfully", 201);
 }
 

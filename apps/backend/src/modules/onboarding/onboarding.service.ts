@@ -46,7 +46,7 @@ export async function signupMinKyc(
     .where(eq(users.id, userId));
   if (!user) throw new HttpError(404, "User not found", "USER_NOT_FOUND");
 
-  const mobile = input.mobile ?? user.mobile;
+  const mobile = input.mobile;
   // InstantPay wants degrees with 4 decimals.
   const latitude = input.latitude.toFixed(4);
   const longitude = input.longitude.toFixed(4);

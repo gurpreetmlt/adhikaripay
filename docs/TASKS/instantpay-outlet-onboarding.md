@@ -4,12 +4,14 @@
 Retailer primary onboarding uses **InstantPay Register Outlet** (Min-KYC), not Adhikari `/kyc`.
 
 Funnel: Login/Signup → `/onboarding/outlet` → `/onboarding/pin` → Dashboard
-Next chat: Bio-KYC UI + mobile parity.
+Mobile: Signup **Outlet Details** → `POST /onboarding/instantpay` (same Min-KYC body).
+Next chat: Bio-KYC UI + `wadh`.
 
 ## Done
 - [x] `AuthUser.hasInstantpayOutlet`
 - [x] `nextOnboardingPath` / gate → `/onboarding/outlet`
 - [x] Web Min-KYC form → `POST /onboarding/instantpay`
+- [x] Mobile signup Outlet Details → InstantPay Min-KYC (address, city, pincode, lat/long, email, DOB, gender)
 
 ## Read ONLY
 - `InstantPay/ONBOARDING.md`
@@ -17,7 +19,8 @@ Next chat: Bio-KYC UI + mobile parity.
 - `apps/web/lib/onboarding.ts`
 - `apps/backend/src/modules/onboarding/*`
 - `packages/shared-types/index.ts`
+- `apps/adhikaripay-mobile-app/src/screens/signup/SignupScreen.tsx`
 
 ## Still pending
 - Bio-KYC screens + `wadh` RD capture
-- Mobile Register Outlet
+- Standalone mobile Register Outlet screen (if needed post-login for incomplete outlet)

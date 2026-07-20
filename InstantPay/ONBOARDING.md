@@ -3,7 +3,7 @@
 > Ek jagah full picture: merchant (retailer outlet) InstantPay pe kaise onboard hota hai, kya done hai, kya pending hai, aur provider se kya-kya chahiye. Kisi bhi agent/chat me onboarding pe kaam shuru karne se pehle YE padho. AEPS rails ke liye alag doc: [`AEPS.md`](AEPS.md).
 
 **Provider:** InstantPay (Customer/Outlet Onboarding — eKYC)
-**Status:** Backend wired. **Product decision (2026-07-20):** retailer primary onboarding = InstantPay Register Outlet (not Adhikari `/kyc`). Web Min-KYC UI: `/onboarding/outlet`. Bio-KYC UI + mobile still pending.
+**Status:** Backend wired. **Product decision (2026-07-20):** retailer primary onboarding = InstantPay Register Outlet (not Adhikari `/kyc`). Web Min-KYC UI: `/onboarding/outlet`. Mobile Min-KYC: signup **Outlet Details** step → `POST /onboarding/instantpay`. Bio-KYC UI (`wadh`) still pending.
 **Last updated:** 2026-07-20
 
 ---
@@ -51,7 +51,7 @@ Har row: humara backend endpoint → InstantPay endpoint. Sab `AEPS_PROVIDER_MOD
 ### Details per service
 
 **1. Signup Min-KYC**
-Retailer khud ko outlet ke roop me register/update karta hai. Body: `name` (PAN-matching), `gender` (M/F/T), `pan`, `email`, `address {full, city, pincode}`, `aadhaarNumber` (12 digit — AES-256-CBC encrypt hoke `aadhaar` field me jaata hai), `dateOfBirth` (YYYY-MM-DD, PAN-matching), `latitude`/`longitude` (4-decimal degrees). `mobile` optional — default user ka registered mobile (Aadhaar-registered hona chahiye). Success pe response ka `outletId` → `users.instantpay_outlet_id`, aur lat/long → `outlet_latitude`/`outlet_longitude` save. InstantPay side idempotent (already registered ho to profile update). Dummy mode `MOCK…` outletId deta hai.
+Retailer khud ko outlet ke roop me register/update karta hai. Body: `mobile` (10-digit, Aadhaar-linked — **required**), `name` (PAN-matching), `gender` (M/F/T), `pan`, `email`, `address {full, city, pincode}`, `aadhaarNumber` (12 digit — AES-256-CBC encrypt hoke `aadhaar` field me jaata hai), `dateOfBirth` (YYYY-MM-DD, PAN-matching), `latitude`/`longitude` (4-decimal degrees). Success pe response ka `outletId` → `users.instantpay_outlet_id`, aur lat/long → `outlet_latitude`/`outlet_longitude` save. InstantPay side idempotent (already registered ho to profile update). Dummy mode `MOCK…` outletId deta hai.
 
 **2. Onboarding status**
 Local DB read — `{ onboarded, outletId, latitude, longitude, mode }`. Koi InstantPay call nahi. UI is se decide kar sakti hai ki onboarding form dikhana hai ya nahi.

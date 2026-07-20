@@ -29,9 +29,9 @@ interface SponsorInfo {
 }
 
 const ROLE_OPTIONS: { value: SignupRole; label: string }[] = [
-  { value: "master_distributor", label: "Super Distributor" },
-  { value: "distributor", label: "Distributor" },
   { value: "retailer", label: "Retailer" },
+  { value: "distributor", label: "Distributor" },
+  { value: "master_distributor", label: "Super Distributor" },
 ];
 
 const SPONSOR_ROLE: Record<SignupRole, SponsorRole> = {
@@ -40,8 +40,7 @@ const SPONSOR_ROLE: Record<SignupRole, SponsorRole> = {
   retailer: "distributor",
 };
 
-const UPLINE_LABEL: Record<SignupRole, string> = {
-  master_distributor: "Admin mobile no.",
+const UPLINE_LABEL: Record<Exclude<SignupRole, "master_distributor">, string> = {
   distributor: "Super Distributor mobile no.",
   retailer: "Distributor mobile no.",
 };
@@ -68,6 +67,7 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
 
   const sponsorRole = SPONSOR_ROLE[signupRole];
+  const needsUpline = signupRole !== "master_distributor";
 
   useEffect(() => {
     setSponsor(null);
@@ -76,6 +76,7 @@ export default function SignupPage() {
   }, [signupRole]);
 
   useEffect(() => {
+    if (!needsUpline) return;
     const phone = sponsorMobile.replace(/\D/g, "").slice(0, 10);
     setSponsor(null);
     if (phone.length !== 10) {
@@ -109,12 +110,12 @@ export default function SignupPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [sponsorMobile, sponsorRole]);
+  }, [sponsorMobile, sponsorRole, needsUpline]);
 
   async function requestOtp(e?: FormEvent) {
     e?.preventDefault();
     if (!name || !mobile) return;
-    if (!sponsor) {
+    if (needsUpline && !sponsor) {
       toast.error(`Enter a valid 10-digit ${UPLINE_ROLE_LABEL[sponsorRole].toLowerCase()} mobile`);
       return;
     }
@@ -123,9 +124,9 @@ export default function SignupPage() {
       const { data } = await api.post<ApiResponse<{ otp?: string; message: string }>>("/auth/signup/request", {
         name,
         mobile,
-        sponsorUid: sponsor.uid,
         role: signupRole,
         portal: "agent",
+        ...(sponsor ? { sponsorUid: sponsor.uid } : {}),
       });
       if (!data.success) throw new Error(data.message);
       setDevOtp(data.data.otp ?? null);
@@ -140,25 +141,37 @@ export default function SignupPage() {
 
   async function verify(e?: FormEvent) {
     e?.preventDefault();
-    if (!otp || !sponsor) return;
+    if (!otp) return;
+    if (needsUpline && !sponsor) return;
     setLoading(true);
     try {
-      const { data } = await api.post<ApiResponse<SessionData>>("/auth/signup/verify", {
+      const { data } = await api.post<
+        ApiResponse<
+          | SessionData
+          | { pendingApproval: true; user: AuthUser; message: string }
+        >
+      >("/auth/signup/verify", {
         name,
         mobile,
         otp,
-        sponsorUid: sponsor.uid,
         role: signupRole,
         portal: "agent",
+        ...(sponsor ? { sponsorUid: sponsor.uid } : {}),
         ...(password ? { password } : {}),
       });
       if (!data.success) throw new Error(data.message);
-      setAuth(data.data.user, {
-        accessToken: data.data.accessToken,
-        refreshToken: data.data.refreshToken,
+      if ("pendingApproval" in data.data && data.data.pendingApproval) {
+        toast.success(data.data.message);
+        router.replace("/login");
+        return;
+      }
+      const session = data.data as SessionData;
+      setAuth(session.user, {
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
       });
-      toast.success(`Account created under ${sponsor.name}`);
-      router.replace(nextOnboardingPath(data.data.user) ?? "/dashboard");
+      toast.success(sponsor ? `Account created under ${sponsor.name}` : "Account created");
+      router.replace(nextOnboardingPath(session.user) ?? "/dashboard");
     } catch (err) {
       toast.error(extractApiError(err, "Signup failed"));
     } finally {
@@ -174,7 +187,7 @@ export default function SignupPage() {
           Create agent account
         </h1>
         <p className="mt-1 text-sm" style={{ color: B.muted }}>
-          Select your role, then map under your upline with their mobile number.
+          Select your role. Retailer and Distributor map under an upline; Super Distributor registers directly for admin approval.
         </p>
 
         {step === "form" ? (
@@ -190,7 +203,9 @@ export default function SignupPage() {
                 Register as
               </div>
               <p className="mt-0.5 mb-3 text-xs font-medium" style={{ color: B.muted }}>
-                Tap one option — this decides your upline
+                {needsUpline
+                  ? "Tap one option — this decides your upline"
+                  : "Super Distributor registers directly — admin will approve"}
               </p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 {ROLE_OPTIONS.map((opt) => {
@@ -237,8 +252,9 @@ export default function SignupPage() {
                 placeholder="10-digit mobile"
               />
             </Field>
+            {needsUpline ? (
             <div>
-              <Field label={UPLINE_LABEL[signupRole]} icon={Phone}>
+              <Field label={UPLINE_LABEL[signupRole as Exclude<SignupRole, "master_distributor">]} icon={Phone}>
                 <input
                   required
                   inputMode="numeric"
@@ -286,6 +302,14 @@ export default function SignupPage() {
                 </div>
               ) : null}
             </div>
+            ) : (
+              <div
+                className="rounded-xl px-3 py-2.5 text-xs font-medium"
+                style={{ background: `${B.blue}12`, color: B.blue }}
+              >
+                No upline mobile needed. After OTP, your account waits for admin activation.
+              </div>
+            )}
             <Field label="Login password (optional)" icon={Lock}>
               <input
                 type="password"
@@ -297,7 +321,7 @@ export default function SignupPage() {
             </Field>
             <button
               type="submit"
-              disabled={loading || !sponsor}
+              disabled={loading || (needsUpline && !sponsor)}
               className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold text-white disabled:opacity-60"
               style={{ background: B.badgeGrad }}
             >

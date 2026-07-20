@@ -116,13 +116,24 @@ export type SignupChildRole = (typeof SIGNUP_CHILD_ROLES)[number];
 export const SPONSOR_SEARCH_ROLES = ["admin", "master_distributor", "distributor"] as const;
 export type SponsorSearchRole = (typeof SPONSOR_SEARCH_ROLES)[number];
 
-export const signupRequestSchema = z.object({
-  name: z.string().trim().min(2).max(120),
-  mobile: mobileSchema,
-  sponsorUid: z.string().trim().min(6).max(20),
-  role: z.enum(SIGNUP_CHILD_ROLES),
-  portal: z.enum(AUTH_PORTALS).default("agent"),
-});
+export const signupRequestSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+    mobile: mobileSchema,
+    /** Required for distributor / retailer. Super Distributor self-registers under admin (no upline mobile). */
+    sponsorUid: z.string().trim().min(6).max(20).optional(),
+    role: z.enum(SIGNUP_CHILD_ROLES),
+    portal: z.enum(AUTH_PORTALS).default("agent"),
+  })
+  .superRefine((data, ctx) => {
+    if (data.role !== "master_distributor" && !data.sponsorUid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Sponsor UID is required",
+        path: ["sponsorUid"],
+      });
+    }
+  });
 export type SignupRequestInput = z.infer<typeof signupRequestSchema>;
 
 /** Public sponsor name lookup by UID. */
@@ -141,16 +152,26 @@ export const sponsorMobileQuerySchema = z.object({
 });
 export type SponsorMobileQuery = z.infer<typeof sponsorMobileQuerySchema>;
 
-export const signupVerifySchema = z.object({
-  name: z.string().trim().min(2).max(120),
-  mobile: mobileSchema,
-  otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
-  sponsorUid: z.string().trim().min(6).max(20),
-  role: z.enum(SIGNUP_CHILD_ROLES),
-  /** Optional login password; if omitted a strong random one is generated (OTP/PIN login). */
-  password: passwordSchema.optional(),
-  portal: z.enum(AUTH_PORTALS).default("agent"),
-});
+export const signupVerifySchema = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+    mobile: mobileSchema,
+    otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
+    sponsorUid: z.string().trim().min(6).max(20).optional(),
+    role: z.enum(SIGNUP_CHILD_ROLES),
+    /** Optional login password; if omitted a strong random one is generated (OTP/PIN login). */
+    password: passwordSchema.optional(),
+    portal: z.enum(AUTH_PORTALS).default("agent"),
+  })
+  .superRefine((data, ctx) => {
+    if (data.role !== "master_distributor" && !data.sponsorUid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Sponsor UID is required",
+        path: ["sponsorUid"],
+      });
+    }
+  });
 export type SignupVerifyInput = z.infer<typeof signupVerifySchema>;
 
 export const kycSubmitSchema = z.object({

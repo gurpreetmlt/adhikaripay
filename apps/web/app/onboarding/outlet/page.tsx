@@ -25,6 +25,7 @@ export default function RegisterOutletPage() {
   const [geoBusy, setGeoBusy] = useState(false);
   const [form, setForm] = useState({
     name: "",
+    mobile: "",
     gender: "M" as Gender,
     pan: "",
     email: "",
@@ -42,10 +43,13 @@ export default function RegisterOutletPage() {
   }, [hydrated, accessToken, router]);
 
   useEffect(() => {
-    if (user?.name) {
-      setForm((f) => ({ ...f, name: f.name || user.name }));
-    }
-  }, [user?.name]);
+    if (!user) return;
+    setForm((f) => ({
+      ...f,
+      name: f.name || user.name,
+      mobile: f.mobile || user.mobile || "",
+    }));
+  }, [user]);
 
   useEffect(() => {
     if (!hydrated || !accessToken || !user) return;
@@ -100,6 +104,7 @@ export default function RegisterOutletPage() {
     setLoading(true);
     try {
       await api.post("/onboarding/instantpay", {
+        mobile: form.mobile.replace(/\D/g, "").slice(0, 10),
         name: form.name.trim(),
         gender: form.gender,
         pan: form.pan.toUpperCase(),
@@ -164,6 +169,25 @@ export default function RegisterOutletPage() {
                 className={inputCls}
                 style={inputStyle}
               />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                Mobile (Aadhaar-linked)
+              </label>
+              <input
+                required
+                inputMode="numeric"
+                maxLength={10}
+                value={form.mobile}
+                onChange={(e) => set("mobile", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                placeholder="10-digit mobile"
+                className={`${inputCls} font-mono`}
+                style={inputStyle}
+              />
+              <p className="mt-1 text-xs" style={{ color: B.muted }}>
+                Must be the mobile linked to Aadhaar (InstantPay verifies this).
+              </p>
             </div>
 
             <div>
@@ -320,7 +344,7 @@ export default function RegisterOutletPage() {
           </button>
 
           <p className="text-xs" style={{ color: B.muted }}>
-            Mobile used: <span className="font-semibold">{user.mobile}</span> (must be Aadhaar-linked)
+            All fields are sent to InstantPay Min-KYC. Mobile must be Aadhaar-linked.
           </p>
 
           <button

@@ -1,8 +1,20 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  PermissionsAndroid,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import LinearGradient from "react-native-linear-gradient";
+import Geolocation from "@react-native-community/geolocation";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CheckCircle2, FileText, Fingerprint, Phone, ScanFace } from "lucide-react-native";
+import { CheckCircle2, FileText, Fingerprint, MapPin, Phone, ScanFace } from "lucide-react-native";
 import type { ApiResponse, AuthUser } from "@adhikaripay/shared-types";
 import { api, setAuthHeader } from "../../lib/api";
 import { apiError } from "../../utils/apiError";
@@ -15,11 +27,12 @@ import { showAlert } from "../../components/AppAlert";
 
 type SignupRole = "master_distributor" | "distributor" | "retailer";
 type SponsorRole = "admin" | "master_distributor" | "distributor";
+type Gender = "M" | "F" | "T";
 
 const SIGNUP_ROLES: { value: SignupRole; label: string }[] = [
-  { value: "master_distributor", label: "Super Distributor" },
-  { value: "distributor", label: "Distributor" },
   { value: "retailer", label: "Retailer" },
+  { value: "distributor", label: "Distributor" },
+  { value: "master_distributor", label: "Super Distributor" },
 ];
 
 const SPONSOR_ROLE: Record<SignupRole, SponsorRole> = {
@@ -28,8 +41,7 @@ const SPONSOR_ROLE: Record<SignupRole, SponsorRole> = {
   retailer: "distributor",
 };
 
-const UPLINE_LABEL: Record<SignupRole, string> = {
-  master_distributor: "ADMIN MOBILE NO.",
+const UPLINE_LABEL: Record<Exclude<SignupRole, "master_distributor">, string> = {
   distributor: "SUPER DISTRIBUTOR MOBILE NO.",
   retailer: "DISTRIBUTOR MOBILE NO.",
 };
@@ -62,6 +74,7 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [sessionResult, setSessionResult] = useState<LoginResponse | null>(null);
+  const [pendingApproval, setPendingApproval] = useState(false);
 
   // Step 0 — the backend's signup/request already requires name + sponsorUid alongside
   // mobile, so those are collected up front (design mockup only asks for mobile here).
@@ -81,6 +94,7 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
   const [devOtp, setDevOtp] = useState("");
 
   const sponsorRole = SPONSOR_ROLE[signupRole];
+  const needsUpline = signupRole !== "master_distributor";
 
   useEffect(() => {
     setSponsorUid("");
@@ -89,9 +103,11 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
     setSponsorList([]);
     setSponsorMobile("");
     setOtpSent(false);
+    setPendingApproval(false);
   }, [signupRole]);
 
   useEffect(() => {
+    if (!needsUpline) return;
     const phone = sponsorMobile.replace(/\D/g, "").slice(0, 10);
     setSponsorUid("");
     setSponsorName(null);
@@ -132,7 +148,7 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [sponsorMobile, sponsorRole]);
+  }, [sponsorMobile, sponsorRole, needsUpline]);
 
   function selectSponsor(item: { uid: string; name: string; mobile: string; role?: string }) {
     setSponsorUid(item.uid);
@@ -155,12 +171,71 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
   // Step 2
   const [selfieDone, setSelfieDone] = useState(false);
 
-  // Step 3
-  const [shop, setShop] = useState("");
+  // Step 3 — InstantPay Min-KYC outlet (retailers)
+  const [gender, setGender] = useState<Gender>("M");
+  const [email, setEmail] = useState("");
+  const [addressFull, setAddressFull] = useState("");
+  const [city, setCity] = useState("");
   const [pincode, setPincode] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [geoBusy, setGeoBusy] = useState(false);
 
   function toggleUpload(key: UploadKey) {
     setUploads((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function outletReady(): boolean {
+    if (signupRole !== "retailer") return true;
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    return (
+      mobile.length === 10 &&
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) &&
+      addressFull.trim().length >= 5 &&
+      city.trim().length >= 2 &&
+      /^\d{6}$/.test(pincode) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lng)
+    );
+  }
+
+  async function captureLocation() {
+    setGeoBusy(true);
+    try {
+      if (Platform.OS === "android") {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: "Outlet location",
+            message: "Adhikari Pay needs your location to register the outlet on InstantPay.",
+            buttonPositive: "Allow",
+            buttonNegative: "Deny",
+          },
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          showAlert("Location denied", "Allow location or enter latitude and longitude manually.");
+          return;
+        }
+      }
+      await new Promise<void>((resolve, reject) => {
+        Geolocation.getCurrentPosition(
+          (pos) => {
+            setLatitude(pos.coords.latitude.toFixed(4));
+            setLongitude(pos.coords.longitude.toFixed(4));
+            resolve();
+          },
+          (err) => reject(err),
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
+        );
+      });
+    } catch {
+      showAlert("Location failed", "Could not get GPS. Enter latitude and longitude manually.");
+    } finally {
+      setGeoBusy(false);
+    }
   }
 
   async function requestOtp() {
@@ -168,7 +243,7 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
       showAlert("Name required", "Enter your full name.");
       return;
     }
-    if (!sponsorOk || !sponsorUid) {
+    if (needsUpline && (!sponsorOk || !sponsorUid)) {
       showAlert("Upline required", "Enter your upline's 10-digit mobile number.");
       return;
     }
@@ -180,7 +255,13 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
     try {
       const { data } = await api.post<ApiResponse<{ message: string; otp?: string }>>(
         "/auth/signup/request",
-        { name: name.trim(), mobile, sponsorUid: sponsorUid.trim(), role: signupRole, portal: "agent" },
+        {
+          name: name.trim(),
+          mobile,
+          role: signupRole,
+          portal: "agent",
+          ...(needsUpline && sponsorUid ? { sponsorUid: sponsorUid.trim() } : {}),
+        },
       );
       if (!data.success) throw new Error(data.message);
       setOtpSent(true);
@@ -199,23 +280,34 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
     if (step === 0) return otpSent && otp.length === 6;
     if (step === 1) return /^[A-Z]{5}\d{4}[A-Z]$/.test(pan) && /^\d{12}$/.test(aadhaar);
     if (step === 2) return selfieDone;
-    if (step === 3) return shop.trim().length > 1 && /^\d{6}$/.test(pincode);
+    if (step === 3) return outletReady();
     return true;
   }
 
-  async function verifySignupOtp(): Promise<void> {
-    const { data } = await api.post<ApiResponse<LoginResponse>>("/auth/signup/verify", {
+  async function verifySignupOtp(): Promise<"session" | "pending"> {
+    const { data } = await api.post<
+      ApiResponse<
+        | LoginResponse
+        | { pendingApproval: true; user: AuthUser; message: string }
+      >
+    >("/auth/signup/verify", {
       name: name.trim(),
       mobile,
       otp,
-      sponsorUid: sponsorUid.trim(),
       role: signupRole,
       portal: "agent",
+      ...(needsUpline && sponsorUid ? { sponsorUid: sponsorUid.trim() } : {}),
     });
     if (!data.success) throw new Error(data.message);
+    if ("pendingApproval" in data.data && data.data.pendingApproval) {
+      setPendingApproval(true);
+      return "pending";
+    }
+    const session = data.data as LoginResponse;
     // Hold session locally — setAuth() would unmount this screen before KYC/success.
-    setAuthHeader(data.data.accessToken);
-    setSessionResult(data.data);
+    setAuthHeader(session.accessToken);
+    setSessionResult(session);
+    return "session";
   }
 
   async function handleNext() {
@@ -225,13 +317,21 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
     }
     // Verify OTP right after step 0 — KYC steps often exceed OTP TTL.
     if (step === 0) {
-      if (sessionResult) {
+      if (sessionResult || pendingApproval) {
+        if (pendingApproval) {
+          setDone(true);
+          return;
+        }
         setStep(1);
         return;
       }
       setSubmitting(true);
       try {
-        await verifySignupOtp();
+        const result = await verifySignupOtp();
+        if (result === "pending") {
+          setDone(true);
+          return;
+        }
         setStep(1);
       } catch (err) {
         showAlert("OTP failed", apiError(err, "Invalid or expired OTP. Request a new one."));
@@ -251,15 +351,36 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
     setSubmitting(true);
     try {
       if (!sessionResult) {
-        await verifySignupOtp();
+        const result = await verifySignupOtp();
+        if (result === "pending") {
+          setDone(true);
+          return;
+        }
       }
 
-      // KYC number submission — real endpoint, but only accepts PAN/Aadhaar numbers,
-      // not the document images/selfie captured above (no upload endpoint exists yet).
       try {
         await api.post("/kyc/submit", { panNumber: pan, aadhaarNumber: aadhaar });
       } catch {
         /* account is already created; KYC can be retried later from Profile */
+      }
+
+      if (signupRole === "retailer") {
+        await api.post("/onboarding/instantpay", {
+          mobile,
+          name: name.trim(),
+          gender,
+          pan,
+          email: email.trim(),
+          address: {
+            full: addressFull.trim(),
+            city: city.trim(),
+            pincode,
+          },
+          aadhaarNumber: aadhaar,
+          dateOfBirth,
+          latitude: Number(latitude),
+          longitude: Number(longitude),
+        });
       }
 
       setDone(true);
@@ -285,16 +406,34 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
           <LinearGradient colors={[...colors.gradientButton]} style={styles.successIcon}>
             <CheckCircle2 size={44} color="#fff" strokeWidth={2.3} />
           </LinearGradient>
-          <Text style={[styles.successTitle, { color: tokens.txt }]}>Application Submitted!</Text>
-          <Text style={[styles.successSub, { color: tokens.sub }]}>
-            Your KYC is under verification. You'll be activated within{" "}
-            <Text style={{ color: colors.greenDark, fontWeight: "800" }}>24 hours</Text> via SMS.
+          <Text style={[styles.successTitle, { color: tokens.txt }]}>
+            {pendingApproval ? "Submitted for Approval" : "Application Submitted!"}
           </Text>
-          <Pressable onPress={continueToApp} style={styles.footerBtnPress}>
-            <LinearGradient colors={[...colors.gradient]} style={[styles.footerBtn, { marginTop: 26, width: 220 }]}>
-              <Text style={styles.footerBtnText}>Go to Dashboard</Text>
-            </LinearGradient>
-          </Pressable>
+          <Text style={[styles.successSub, { color: tokens.sub }]}>
+            {pendingApproval ? (
+              <>
+                Your Super Distributor account is registered. An admin will review and activate it. You can log in after approval.
+              </>
+            ) : (
+              <>
+                Your KYC is under verification. You'll be activated within{" "}
+                <Text style={{ color: colors.greenDark, fontWeight: "800" }}>24 hours</Text> via SMS.
+              </>
+            )}
+          </Text>
+          {pendingApproval ? (
+            <Pressable onPress={onBack} style={styles.footerBtnPress}>
+              <LinearGradient colors={[...colors.gradient]} style={[styles.footerBtn, { marginTop: 26, width: 220 }]}>
+                <Text style={styles.footerBtnText}>Back to Login</Text>
+              </LinearGradient>
+            </Pressable>
+          ) : (
+            <Pressable onPress={continueToApp} style={styles.footerBtnPress}>
+              <LinearGradient colors={[...colors.gradient]} style={[styles.footerBtn, { marginTop: 26, width: 220 }]}>
+                <Text style={styles.footerBtnText}>Go to Dashboard</Text>
+              </LinearGradient>
+            </Pressable>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -372,7 +511,29 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
           ) : null}
           {step === 2 ? <StepSelfie done={selfieDone} onToggle={() => setSelfieDone((v) => !v)} /> : null}
           {step === 3 ? (
-            <StepOutlet shop={shop} setShop={setShop} pincode={pincode} setPincode={setPincode} />
+            <StepOutlet
+              isRetailer={signupRole === "retailer"}
+              mobile={mobile}
+              setMobile={setMobile}
+              gender={gender}
+              setGender={setGender}
+              email={email}
+              setEmail={setEmail}
+              addressFull={addressFull}
+              setAddressFull={setAddressFull}
+              city={city}
+              setCity={setCity}
+              pincode={pincode}
+              setPincode={setPincode}
+              dateOfBirth={dateOfBirth}
+              setDateOfBirth={setDateOfBirth}
+              latitude={latitude}
+              setLatitude={setLatitude}
+              longitude={longitude}
+              setLongitude={setLongitude}
+              geoBusy={geoBusy}
+              onCaptureLocation={captureLocation}
+            />
           ) : null}
           {step === 4 ? (
             <StepReview
@@ -383,8 +544,13 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
               sponsorName={sponsorName}
               pan={pan}
               aadhaar={aadhaar}
-              shop={shop}
+              email={email}
+              addressFull={addressFull}
+              city={city}
               pincode={pincode}
+              dateOfBirth={dateOfBirth}
+              latitude={latitude}
+              longitude={longitude}
             />
           ) : null}
         </ScrollView>
@@ -429,6 +595,7 @@ function StepDetails(props: {
   devOtp: string;
 }) {
   const { tokens } = useTheme();
+  const needsUpline = props.signupRole !== "master_distributor";
   return (
     <View>
       <View style={styles.iconBadgeWrap}>
@@ -437,7 +604,9 @@ function StepDetails(props: {
         </View>
         <Text style={[styles.stepTitle, { color: tokens.txt }]}>Let's get started</Text>
         <Text style={[styles.stepSub, { color: tokens.sub }]}>
-          Select your role, then map under your upline
+          {needsUpline
+            ? "Select your role, then map under your upline"
+            : "Select Super Distributor to register directly for admin approval"}
         </Text>
       </View>
 
@@ -453,7 +622,9 @@ function StepDetails(props: {
         <Text style={[styles.rolePanelEyebrow, { color: colors.blueFlat }]}>STEP 1 · CHOOSE ROLE</Text>
         <Text style={[styles.rolePanelTitle, { color: tokens.txt }]}>Register as</Text>
         <Text style={[styles.rolePanelHint, { color: tokens.sub }]}>
-          Tap one option below — this decides your upline
+          {needsUpline
+            ? "Tap one option below — this decides your upline"
+            : "No upline mobile — admin will activate your account"}
         </Text>
         <View style={styles.roleGrid}>
           {SIGNUP_ROLES.map((opt) => {
@@ -515,42 +686,52 @@ function StepDetails(props: {
         </View>
       </Field>
 
-      <Field label={UPLINE_LABEL[props.signupRole]} tokens={tokens}>
-        <View style={[fieldStyles.row, { backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}>
-          <Text style={[fieldStyles.prefix, { color: tokens.txt2 }]}>+91</Text>
-          <View style={[fieldStyles.divider, { backgroundColor: tokens.inputBorder }]} />
-          <TextInput
-            value={props.sponsorMobile}
-            onChangeText={(t) => props.setSponsorMobile(t.replace(/\D/g, "").slice(0, 10))}
-            placeholder="10-digit upline mobile"
-            keyboardType="number-pad"
-            maxLength={10}
-            placeholderTextColor={tokens.mute}
-            style={[fieldStyles.rowInput, { color: tokens.txt2 }]}
-          />
-        </View>
-      </Field>
-      {props.sponsorSearching ? (
-        <Text style={{ fontSize: 12, color: tokens.mute, marginBottom: 8 }}>Checking upline…</Text>
-      ) : null}
-      {props.sponsorOk && props.sponsorName ? (
-        <View style={[styles.sponsorOk, { backgroundColor: `${colors.green}22`, marginBottom: 8 }]}>
-          <CheckCircle2 size={16} color={colors.green} strokeWidth={2.5} />
-          <Text style={[styles.sponsorOkText, { color: colors.green, fontSize: 14 }]}>
-            {props.sponsorName} · {props.sponsorRoleLabel}
+      {needsUpline ? (
+        <>
+          <Field label={UPLINE_LABEL[props.signupRole as Exclude<SignupRole, "master_distributor">]} tokens={tokens}>
+            <View style={[fieldStyles.row, { backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}>
+              <Text style={[fieldStyles.prefix, { color: tokens.txt2 }]}>+91</Text>
+              <View style={[fieldStyles.divider, { backgroundColor: tokens.inputBorder }]} />
+              <TextInput
+                value={props.sponsorMobile}
+                onChangeText={(t) => props.setSponsorMobile(t.replace(/\D/g, "").slice(0, 10))}
+                placeholder="10-digit upline mobile"
+                keyboardType="number-pad"
+                maxLength={10}
+                placeholderTextColor={tokens.mute}
+                style={[fieldStyles.rowInput, { color: tokens.txt2 }]}
+              />
+            </View>
+          </Field>
+          {props.sponsorSearching ? (
+            <Text style={{ fontSize: 12, color: tokens.mute, marginBottom: 8 }}>Checking upline…</Text>
+          ) : null}
+          {props.sponsorOk && props.sponsorName ? (
+            <View style={[styles.sponsorOk, { backgroundColor: `${colors.green}22`, marginBottom: 8 }]}>
+              <CheckCircle2 size={16} color={colors.green} strokeWidth={2.5} />
+              <Text style={[styles.sponsorOkText, { color: colors.green, fontSize: 14 }]}>
+                {props.sponsorName} · {props.sponsorRoleLabel}
+              </Text>
+            </View>
+          ) : null}
+          {props.sponsorMobile.length === 10 && !props.sponsorSearching && !props.sponsorOk ? (
+            <Text style={styles.sponsorErr}>
+              No active {UPLINE_ROLE_LABEL[SPONSOR_ROLE[props.signupRole]].toLowerCase()} found for this number
+            </Text>
+          ) : null}
+        </>
+      ) : (
+        <View style={[styles.sponsorOk, { backgroundColor: tokens.softBlue, marginBottom: 10 }]}>
+          <Text style={[styles.sponsorOkText, { color: colors.blueFlat, fontSize: 13 }]}>
+            No upline mobile needed. After OTP, admin will activate your account.
           </Text>
         </View>
-      ) : null}
-      {props.sponsorMobile.length === 10 && !props.sponsorSearching && !props.sponsorOk ? (
-        <Text style={styles.sponsorErr}>
-          No active {UPLINE_ROLE_LABEL[SPONSOR_ROLE[props.signupRole]].toLowerCase()} found for this number
-        </Text>
-      ) : null}
+      )}
 
       {!props.otpSent ? (
         <Pressable
           onPress={props.onRequestOtp}
-          disabled={props.otpLoading || !props.sponsorOk}
+          disabled={props.otpLoading || (needsUpline && !props.sponsorOk)}
           style={styles.sendOtpBtnPress}
         >
           <LinearGradient colors={[...colors.gradientButton]} style={styles.sendOtpBtn}>
@@ -695,24 +876,149 @@ function StepSelfie({ done, onToggle }: { done: boolean; onToggle: () => void })
 }
 
 function StepOutlet(props: {
-  shop: string;
-  setShop: (v: string) => void;
+  isRetailer: boolean;
+  mobile: string;
+  setMobile: (v: string) => void;
+  gender: Gender;
+  setGender: (v: Gender) => void;
+  email: string;
+  setEmail: (v: string) => void;
+  addressFull: string;
+  setAddressFull: (v: string) => void;
+  city: string;
+  setCity: (v: string) => void;
   pincode: string;
   setPincode: (v: string) => void;
+  dateOfBirth: string;
+  setDateOfBirth: (v: string) => void;
+  latitude: string;
+  setLatitude: (v: string) => void;
+  longitude: string;
+  setLongitude: (v: string) => void;
+  geoBusy: boolean;
+  onCaptureLocation: () => void;
 }) {
   const { tokens } = useTheme();
+
+  if (!props.isRetailer) {
+    return (
+      <View>
+        <Text style={[styles.stepTitle, { color: tokens.txt }]}>Outlet Details</Text>
+        <Text style={[styles.stepSub, { color: tokens.sub, marginBottom: 12 }]}>
+          InstantPay outlet registration is only required for retailers. Continue to review.
+        </Text>
+        <View style={[styles.infoBox, { backgroundColor: tokens.softBlue }]}>
+          <MapPin size={16} color={colors.blueFlat} />
+          <Text style={[styles.infoText, { color: tokens.txt2 }]}>
+            Your account does not need an InstantPay outlet. Tap Continue.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View>
       <Text style={[styles.stepTitle, { color: tokens.txt }]}>Outlet Details</Text>
       <Text style={[styles.stepSub, { color: tokens.sub, marginBottom: 6 }]}>
-        Tell us about your business
+        InstantPay onboarding — address must match Aadhaar; name &amp; DOB must match PAN
       </Text>
 
-      <Field label="SHOP / OUTLET NAME" tokens={tokens}>
+      <Field label="MOBILE (AADHAAR-LINKED)" tokens={tokens}>
+        <View style={[fieldStyles.row, { backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}>
+          <Text style={[fieldStyles.prefix, { color: tokens.txt2 }]}>+91</Text>
+          <View style={[fieldStyles.divider, { backgroundColor: tokens.inputBorder }]} />
+          <TextInput
+            value={props.mobile}
+            onChangeText={(t) => props.setMobile(t.replace(/\D/g, "").slice(0, 10))}
+            keyboardType="number-pad"
+            maxLength={10}
+            placeholder="10-digit mobile"
+            placeholderTextColor={tokens.mute}
+            style={[fieldStyles.rowInput, { color: tokens.txt2 }]}
+          />
+        </View>
+      </Field>
+
+      <Field label="GENDER" tokens={tokens}>
+        <View style={styles.chipRow}>
+          {(
+            [
+              { value: "M" as const, label: "Male" },
+              { value: "F" as const, label: "Female" },
+              { value: "T" as const, label: "Other" },
+            ] as const
+          ).map((opt) => {
+            const active = props.gender === opt.value;
+            return (
+              <Pressable
+                key={opt.value}
+                onPress={() => props.setGender(opt.value)}
+                style={[
+                  styles.genderChip,
+                  {
+                    borderColor: active ? colors.blueFlat : tokens.inputBorder,
+                    backgroundColor: active ? colors.blueFlat : tokens.inputBg,
+                  },
+                ]}
+              >
+                <Text style={{ color: active ? "#fff" : tokens.txt2, fontWeight: "700", fontSize: 13 }}>
+                  {opt.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Field>
+
+      <Field label="DATE OF BIRTH (YYYY-MM-DD)" tokens={tokens}>
         <TextInput
-          value={props.shop}
-          onChangeText={props.setShop}
-          placeholder="e.g. Suresh Kirana Store"
+          value={props.dateOfBirth}
+          onChangeText={(t) => props.setDateOfBirth(t.replace(/[^\d-]/g, "").slice(0, 10))}
+          placeholder="1990-01-15"
+          placeholderTextColor={tokens.mute}
+          keyboardType="numbers-and-punctuation"
+          style={[fieldStyles.input, { color: tokens.txt2, backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}
+        />
+      </Field>
+
+      <Field label="EMAIL" tokens={tokens}>
+        <TextInput
+          value={props.email}
+          onChangeText={props.setEmail}
+          placeholder="you@example.com"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          placeholderTextColor={tokens.mute}
+          style={[fieldStyles.input, { color: tokens.txt2, backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}
+        />
+      </Field>
+
+      <Field label="OUTLET ADDRESS (AS ON AADHAAR)" tokens={tokens}>
+        <TextInput
+          value={props.addressFull}
+          onChangeText={props.setAddressFull}
+          placeholder="Full address"
+          multiline
+          placeholderTextColor={tokens.mute}
+          style={[
+            fieldStyles.input,
+            {
+              color: tokens.txt2,
+              backgroundColor: tokens.inputBg,
+              borderColor: tokens.inputBorder,
+              minHeight: 72,
+              textAlignVertical: "top",
+            },
+          ]}
+        />
+      </Field>
+
+      <Field label="CITY" tokens={tokens}>
+        <TextInput
+          value={props.city}
+          onChangeText={props.setCity}
+          placeholder="City"
           placeholderTextColor={tokens.mute}
           style={[fieldStyles.input, { color: tokens.txt2, backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}
         />
@@ -729,19 +1035,42 @@ function StepOutlet(props: {
         />
       </Field>
 
-      <Text style={[styles.label, { color: tokens.sub, marginTop: 6, marginBottom: 10 }]}>REGISTER AS</Text>
-      <View style={styles.chipRow}>
-        <View style={[styles.roleChip, styles.roleChipActive]}>
-          <Text style={[styles.roleChipTitle, styles.roleChipTitleActive]}>Retailer</Text>
-          <Text style={[styles.roleChipDesc, styles.roleChipDescActive]}>Run an outlet</Text>
-        </View>
-        {["Distributor", "Super Distributor"].map((r) => (
-          <View key={r} style={[styles.roleChip, styles.roleChipDisabled, { borderColor: tokens.cardBorder }]}>
-            <Text style={[styles.roleChipTitle, { color: tokens.mute }]}>{r}</Text>
-            <Text style={[styles.roleChipDesc, { color: tokens.mute }]}>Contact your distributor</Text>
-          </View>
-        ))}
-      </View>
+      <Field label="LATITUDE" tokens={tokens}>
+        <TextInput
+          value={props.latitude}
+          onChangeText={props.setLatitude}
+          placeholder="e.g. 28.6139"
+          keyboardType="decimal-pad"
+          placeholderTextColor={tokens.mute}
+          style={[fieldStyles.input, { color: tokens.txt2, backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}
+        />
+      </Field>
+
+      <Field label="LONGITUDE" tokens={tokens}>
+        <TextInput
+          value={props.longitude}
+          onChangeText={props.setLongitude}
+          placeholder="e.g. 77.2090"
+          keyboardType="decimal-pad"
+          placeholderTextColor={tokens.mute}
+          style={[fieldStyles.input, { color: tokens.txt2, backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}
+        />
+      </Field>
+
+      <Pressable
+        onPress={props.onCaptureLocation}
+        disabled={props.geoBusy}
+        style={[styles.geoBtn, { borderColor: colors.blueFlat }]}
+      >
+        {props.geoBusy ? (
+          <ActivityIndicator color={colors.blueFlat} />
+        ) : (
+          <>
+            <MapPin size={16} color={colors.blueFlat} strokeWidth={2.5} />
+            <Text style={[styles.geoBtnText, { color: colors.blueFlat }]}>Capture outlet location</Text>
+          </>
+        )}
+      </Pressable>
     </View>
   );
 }
@@ -754,23 +1083,44 @@ function StepReview(props: {
   sponsorName: string | null;
   pan: string;
   aadhaar: string;
-  shop: string;
+  email: string;
+  addressFull: string;
+  city: string;
   pincode: string;
+  dateOfBirth: string;
+  latitude: string;
+  longitude: string;
 }) {
   const { tokens } = useTheme();
   const roleLabel = SIGNUP_ROLES.find((r) => r.value === props.signupRole)?.label ?? props.signupRole;
+  const isRetailer = props.signupRole === "retailer";
   const rows = [
     { k: "Full Name", v: props.name },
     { k: "Mobile", v: `+91 ${props.mobile}` },
     {
-      k: "Upline",
-      v: props.sponsorName ? `${props.sponsorName} (${props.sponsorUid})` : props.sponsorUid,
+      k: "Role",
+      v: roleLabel,
     },
+    ...(props.sponsorUid
+      ? [
+          {
+            k: "Upline",
+            v: props.sponsorName ? `${props.sponsorName} (${props.sponsorUid})` : props.sponsorUid,
+          },
+        ]
+      : []),
     { k: "PAN", v: props.pan },
     { k: "Aadhaar", v: `XXXX XXXX ${props.aadhaar.slice(-4)}` },
-    { k: "Outlet Name", v: props.shop },
-    { k: "Pincode", v: props.pincode },
-    { k: "Register As", v: roleLabel },
+    ...(isRetailer
+      ? [
+          { k: "Email", v: props.email },
+          { k: "DOB", v: props.dateOfBirth },
+          { k: "Address", v: props.addressFull },
+          { k: "City", v: props.city },
+          { k: "Pincode", v: props.pincode },
+          { k: "Lat / Long", v: `${props.latitude}, ${props.longitude}` },
+        ]
+      : []),
   ];
   return (
     <View>
@@ -789,7 +1139,9 @@ function StepReview(props: {
       <View style={[styles.infoBox, { backgroundColor: tokens.softBlue }]}>
         <Fingerprint size={16} color={colors.blueFlat} />
         <Text style={[styles.infoText, { color: tokens.txt2 }]}>
-          By submitting, you agree to AdhikariPay's <Text style={{ color: colors.blueFlat, fontWeight: "700" }}>Agent Terms</Text> &amp; consent to KYC verification.
+          {isRetailer
+            ? "Submitting registers your InstantPay outlet with the details above."
+            : "By submitting, you agree to Adhikari Pay Agent Terms."}
         </Text>
       </View>
     </View>
@@ -922,6 +1274,25 @@ const styles = StyleSheet.create({
   tipRow: { flexDirection: "row", alignItems: "center", gap: 9 },
   tipText: { fontSize: 12.5, fontWeight: "500" },
   chipRow: { flexDirection: "row", gap: 8 },
+  genderChip: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  geoBtn: {
+    marginTop: 4,
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  geoBtnText: { fontSize: 14, fontWeight: "800" },
   roleChip: { flex: 1, borderRadius: 13, borderWidth: 1, paddingVertical: 10, paddingHorizontal: 8 },
   roleChipActive: { backgroundColor: colors.blue, borderColor: colors.blue },
   roleChipDisabled: { opacity: 0.6 },

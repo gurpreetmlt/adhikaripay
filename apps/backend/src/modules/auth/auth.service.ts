@@ -103,6 +103,7 @@ export async function getAuthMe(userId: string): Promise<AuthUser> {
 export async function registerUser(
   actor: { id: string; role: UserRole },
   input: RegisterInput,
+  opts?: { isActive?: boolean },
 ): Promise<AuthUser> {
   const expectedChildRole = ALLOWED_CHILD_ROLE[actor.role];
   if (!expectedChildRole || input.role !== expectedChildRole) {
@@ -135,6 +136,7 @@ export async function registerUser(
         mobile: input.mobile,
         email: input.email,
         passwordHash,
+        isActive: opts?.isActive ?? true,
         panNumberEncrypted: input.panNumber ? encryptPII(input.panNumber) : null,
         aadhaarNumberEncrypted: input.aadhaarNumber ? encryptPII(input.aadhaarNumber) : null,
       })
@@ -815,7 +817,9 @@ export async function searchSponsorsByMobile(
   }));
 }
 
-/** Self-signup: create child under upline identified by UID. */
+/** Self-signup: create child under upline identified by UID.
+ *  Super Distributor (`master_distributor`) registers without upline mobile —
+ *  parent is root admin; account stays inactive until admin activates. */
 export async function requestSignupOtp(
   input: SignupRequestInput,
   context: AuthContext,
@@ -829,10 +833,25 @@ export async function requestSignupOtp(
     throw new HttpError(422, "Unable to complete signup request", "SIGNUP_REJECTED");
   }
 
-  const expectedSponsorRole = SIGNUP_SPONSOR_ROLE[input.role];
-  const [sponsor] = await db.select().from(users).where(eq(users.uid, input.sponsorUid.trim().toUpperCase()));
-  if (!sponsor || !sponsor.isActive || sponsor.role !== expectedSponsorRole) {
-    throw new HttpError(422, "Unable to complete signup request", "SIGNUP_REJECTED");
+  let sponsorUid: string;
+  let sponsorId: string;
+
+  if (input.role === "master_distributor") {
+    const admin = await findRootAdmin();
+    if (!admin || !admin.isActive) {
+      throw new HttpError(503, "Signup temporarily unavailable", "ADMIN_UNAVAILABLE");
+    }
+    sponsorUid = admin.uid;
+    sponsorId = admin.id;
+  } else {
+    const expectedSponsorRole = SIGNUP_SPONSOR_ROLE[input.role];
+    const uid = (input.sponsorUid ?? "").trim().toUpperCase();
+    const [sponsor] = await db.select().from(users).where(eq(users.uid, uid));
+    if (!sponsor || !sponsor.isActive || sponsor.role !== expectedSponsorRole) {
+      throw new HttpError(422, "Unable to complete signup request", "SIGNUP_REJECTED");
+    }
+    sponsorUid = sponsor.uid;
+    sponsorId = sponsor.id;
   }
 
   const otp = getTestOtpOverride(input.mobile) ?? randomInt(100000, 1000000).toString();
@@ -843,16 +862,16 @@ export async function requestSignupOtp(
     expiresAt: new Date(Date.now() + OTP_TTL_MS),
     meta: {
       name: input.name.trim(),
-      sponsorUid: sponsor.uid,
+      sponsorUid,
       childRole: input.role,
     },
   });
 
   await insertAuditLog({
-    userId: sponsor.id,
+    userId: sponsorId,
     action: "auth.signup_otp_requested",
     entityType: "user",
-    entityId: sponsor.id,
+    entityId: sponsorId,
     ipAddress: context.ipAddress,
     userAgent: context.userAgent,
     metadata: { mobile: input.mobile, childRole: input.role },
@@ -873,7 +892,10 @@ export async function requestSignupOtp(
 export async function verifySignupOtp(
   input: SignupVerifyInput,
   context: AuthContext,
-): Promise<{ user: AuthUser; accessToken: string; refreshToken: string }> {
+): Promise<
+  | { user: AuthUser; accessToken: string; refreshToken: string; pendingApproval?: false }
+  | { pendingApproval: true; user: AuthUser; message: string }
+> {
   if (input.portal !== "agent") {
     throw new HttpError(400, "Signup is only available on the agent portal", "WRONG_PORTAL");
   }
@@ -895,14 +917,22 @@ export async function verifySignupOtp(
     throw new HttpError(401, "Incorrect OTP", "OTP_INCORRECT");
   }
 
-  const sponsorUid = (record.meta?.sponsorUid ?? input.sponsorUid).trim().toUpperCase();
   const name = record.meta?.name ?? input.name.trim();
   const childRole = (record.meta?.childRole ?? input.role) as SignupChildRole;
-  if (sponsorUid !== input.sponsorUid.trim().toUpperCase()) {
-    throw new HttpError(422, "Sponsor UID does not match OTP request", "SPONSOR_MISMATCH");
-  }
   if (childRole !== input.role) {
     throw new HttpError(422, "Role does not match OTP request", "ROLE_MISMATCH");
+  }
+
+  const isSuperDirect = childRole === "master_distributor";
+  const sponsorUid = (record.meta?.sponsorUid ?? input.sponsorUid ?? "").trim().toUpperCase();
+
+  if (!isSuperDirect) {
+    if (!input.sponsorUid || sponsorUid !== input.sponsorUid.trim().toUpperCase()) {
+      throw new HttpError(422, "Sponsor UID does not match OTP request", "SPONSOR_MISMATCH");
+    }
+  }
+  if (!sponsorUid) {
+    throw new HttpError(422, "Invalid sponsor UID", "INVALID_SPONSOR");
   }
 
   await markOtpConsumed(record.id);
@@ -925,6 +955,8 @@ export async function verifySignupOtp(
       password,
       role: childRole,
     },
+    // Super Dist self-signup waits for admin Activate in admin panel.
+    isSuperDirect ? { isActive: false } : undefined,
   );
 
   const [row] = await db.select().from(users).where(eq(users.id, user.id));
@@ -937,8 +969,21 @@ export async function verifySignupOtp(
     entityId: row.id,
     ipAddress: context.ipAddress,
     userAgent: context.userAgent,
-    metadata: { sponsorUid, method: "otp", childRole },
+    metadata: {
+      sponsorUid,
+      method: "otp",
+      childRole,
+      pendingApproval: isSuperDirect,
+    },
   });
+
+  if (isSuperDirect) {
+    return {
+      pendingApproval: true,
+      user: toAuthUser(row),
+      message: "Registration submitted. An admin will activate your Super Distributor account.",
+    };
+  }
 
   return issueSession(row, context, "otp");
 }

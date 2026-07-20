@@ -5,8 +5,8 @@ import { z } from "zod";
  * address must match Aadhaar records (InstantPay rejects mismatches).
  */
 export const minKycSignupSchema = z.object({
-  /** Defaults to the logged-in user's registered mobile when omitted. */
-  mobile: z.string().regex(/^\d{10}$/).optional(),
+  /** Aadhaar-linked 10-digit mobile (sent to InstantPay). */
+  mobile: z.string().regex(/^\d{10}$/, "Mobile must be 10 digits"),
   name: z.string().min(2).max(120),
   gender: z.enum(["M", "F", "T"]),
   pan: z.string().regex(/^[A-Z]{5}\d{4}[A-Z]$/, "Invalid PAN format"),
