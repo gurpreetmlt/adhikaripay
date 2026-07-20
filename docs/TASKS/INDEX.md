@@ -17,6 +17,7 @@
 | 03 | New API endpoint | M | [03-new-api-endpoint.md](03-new-api-endpoint.md) |
 | 12 | Wallet & ledger | M | [12-wallet-ledger.md](12-wallet-ledger.md) |
 | 13 | Fund management | M | [13-fund-management.md](13-fund-management.md) |
+| — | Wallet hierarchy | M | [wallet-hierarchy.md](wallet-hierarchy.md) |
 
 ## Web UI
 | # | Task | Size | File |

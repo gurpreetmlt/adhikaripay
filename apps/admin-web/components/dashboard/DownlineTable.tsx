@@ -51,8 +51,10 @@ export function DownlineTable({ users, onFund }: DownlineTableProps) {
               </td>
               <td className="px-4 py-3 text-right">
                 <button
+                  type="button"
+                  disabled={!u.isActive}
                   onClick={() => onFund(u)}
-                  className="rounded-lg border border-brand-600 px-3 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-50"
+                  className="rounded-lg border border-brand-600 px-3 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Fund
                 </button>

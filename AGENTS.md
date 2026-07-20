@@ -6,6 +6,7 @@ AI editor token bachane ke liye **poori repo mat padho**. Sirf is file + relevan
 
 | Need | Read |
 |------|------|
+| **App flows (AI)** | [`flow/INDEX.md`](flow/INDEX.md) |
 | Login / URLs | [`LOGIN.md`](LOGIN.md) |
 | **AI efficiency (global + project)** | [`docs/AGENT_PLAN.md`](docs/AGENT_PLAN.md) · Claude: [`CLAUDE.md`](CLAUDE.md) |
 | What's next (phases) | [`docs/ROADMAP.md`](docs/ROADMAP.md) |

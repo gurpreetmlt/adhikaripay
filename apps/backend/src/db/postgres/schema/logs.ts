@@ -33,8 +33,14 @@ export const auditLogs = pgTable(
 );
 
 export interface OtpMeta {
-  name: string;
-  sponsorUid: string;
+  /** Signup OTP */
+  name?: string;
+  sponsorUid?: string;
+  /** Wallet pull OTP — parent collects from direct child */
+  actorId?: string;
+  targetUserId?: string;
+  amount?: string;
+  walletType?: string;
 }
 
 // Login/signup OTPs. No native TTL in Postgres — rows are filtered by expiresAt on

@@ -13,7 +13,8 @@ const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_MS = 15 * 60 * 1000;
 
 /**
- * First-time and change both require password re-proof (session alone is not enough).
+ * First-time PIN: authenticated session is enough (OTP signup may have no known password).
+ * Change PIN: caller must prove login password (`passwordOk`).
  */
 export async function setTxnPin(
   userId: string,
@@ -30,11 +31,15 @@ export async function setTxnPin(
     throw new HttpError(403, "Account is not active", "ACCOUNT_INACTIVE");
   }
 
+  const isFirstSet = !user.txnPinHash;
   if (!opts.passwordOk) {
-    throw new HttpError(401, "Password verification failed", "INVALID_CREDENTIALS");
+    throw new HttpError(
+      401,
+      isFirstSet ? "Not authorized to set PIN" : "Password verification failed",
+      "INVALID_CREDENTIALS",
+    );
   }
 
-  const isFirstSet = !user.txnPinHash;
   const txnPinHash = await hashPassword(pin);
   await db
     .update(users)

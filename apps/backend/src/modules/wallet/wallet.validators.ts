@@ -42,6 +42,29 @@ export const transferWalletSchema = z
   .superRefine(requireTxnProof);
 export type TransferWalletInput = z.infer<typeof transferWalletSchema>;
 
+/** Parent requests OTP on child mobile before collecting funds. */
+export const pullRequestSchema = z.object({
+  targetUserId: z.string().uuid(),
+  walletType: z.enum(WALLET_TYPES).default("main"),
+  amount: amountSchema,
+});
+export type PullRequestInput = z.infer<typeof pullRequestSchema>;
+
+/** Confirm collect: child OTP + parent txn PIN. */
+export const pullConfirmSchema = z
+  .object({
+    targetUserId: z.string().uuid(),
+    walletType: z.enum(WALLET_TYPES).default("main"),
+    amount: amountSchema,
+    otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
+    description: z.string().trim().max(255).optional(),
+    txnPin: z.string().regex(/^\d{4,6}$/).optional(),
+    txnAuth: z.string().min(20).optional(),
+    idempotencyKey: z.string().min(8).max(100),
+  })
+  .superRefine(requireTxnProof);
+export type PullConfirmInput = z.infer<typeof pullConfirmSchema>;
+
 export const ledgerQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),

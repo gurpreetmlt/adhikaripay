@@ -1,5 +1,5 @@
 import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, like } from "drizzle-orm";
 import { db } from "../../db/postgres";
 import { users, userHierarchy, refreshTokens } from "../../db/postgres/schema";
 import { provisionWalletsForUser } from "../wallet/wallet.service";
@@ -728,6 +728,72 @@ export async function logoutUser(opts: {
   if (userId) {
     await revokeAllSessionsForUser(userId);
   }
+}
+
+/** Public lookup: active Distributor by UID — name only (for signup confirmation). */
+export async function lookupSponsorByUid(uidRaw: string): Promise<{
+  uid: string;
+  name: string;
+  mobile: string;
+  role: "distributor";
+}> {
+  const uid = uidRaw.trim().toUpperCase();
+  const [sponsor] = await db
+    .select({
+      uid: users.uid,
+      name: users.name,
+      mobile: users.mobile,
+      role: users.role,
+      isActive: users.isActive,
+    })
+    .from(users)
+    .where(eq(users.uid, uid))
+    .limit(1);
+
+  if (!sponsor || !sponsor.isActive || sponsor.role !== "distributor") {
+    throw new HttpError(404, "Distributor not found", "SPONSOR_NOT_FOUND");
+  }
+
+  return {
+    uid: sponsor.uid,
+    name: sponsor.name,
+    mobile: sponsor.mobile,
+    role: "distributor",
+  };
+}
+
+/** Public search: active Distributors by mobile prefix (3–10 digits). */
+export async function searchSponsorsByMobile(mobileRaw: string): Promise<
+  Array<{ uid: string; name: string; mobile: string; role: "distributor" }>
+> {
+  const mobile = mobileRaw.replace(/\D/g, "").slice(0, 10);
+  if (mobile.length < 3) {
+    throw new HttpError(422, "Enter at least 3 digits", "INVALID_MOBILE");
+  }
+
+  const rows = await db
+    .select({
+      uid: users.uid,
+      name: users.name,
+      mobile: users.mobile,
+      role: users.role,
+    })
+    .from(users)
+    .where(
+      and(
+        like(users.mobile, `${mobile}%`),
+        eq(users.role, "distributor"),
+        eq(users.isActive, true),
+      ),
+    )
+    .limit(15);
+
+  return rows.map((r) => ({
+    uid: r.uid,
+    name: r.name,
+    mobile: r.mobile,
+    role: "distributor" as const,
+  }));
 }
 
 /** Self-signup: retailer under a distributor identified by UID. */

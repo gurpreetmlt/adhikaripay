@@ -9,6 +9,8 @@ import {
   otpVerifySchema,
   signupRequestSchema,
   signupVerifySchema,
+  sponsorUidParamSchema,
+  sponsorMobileQuerySchema,
 } from "./auth.validators";
 import {
   registerUser,
@@ -21,6 +23,8 @@ import {
   setLoginMpin,
   requestSignupOtp,
   verifySignupOtp,
+  lookupSponsorByUid,
+  searchSponsorsByMobile,
   getAuthMe,
   listUserDevices,
   revokeUserDevice,
@@ -132,6 +136,18 @@ export async function revokeDevice(req: Request, res: Response): Promise<void> {
   sendSuccess(res, null, "Device signed out");
 }
 
+export async function lookupSponsor(req: Request, res: Response): Promise<void> {
+  const { uid } = sponsorUidParamSchema.parse(req.params);
+  const sponsor = await lookupSponsorByUid(uid);
+  sendSuccess(res, sponsor);
+}
+
+export async function searchSponsors(req: Request, res: Response): Promise<void> {
+  const { mobile } = sponsorMobileQuerySchema.parse(req.query);
+  const items = await searchSponsorsByMobile(mobile);
+  sendSuccess(res, { items });
+}
+
 export async function signupRequest(req: Request, res: Response): Promise<void> {
   const input = signupRequestSchema.parse(req.body);
   const result = await requestSignupOtp(input, {
@@ -151,7 +167,8 @@ export async function signupVerify(req: Request, res: Response): Promise<void> {
 }
 
 const setTxnPinSchema = z.object({
-  password: z.string().min(1),
+  /** Required when changing an existing PIN; optional on first set (session is enough). */
+  password: z.string().min(1).optional(),
   pin: z.string().regex(/^\d{4}$/, "PIN must be 4 digits"),
 });
 
@@ -162,10 +179,17 @@ export async function setTransactionPin(req: Request, res: Response): Promise<vo
   const [user] = await db.select().from(users).where(eq(users.id, req.auth.sub));
   if (!user) throw new HttpError(404, "User not found", "USER_NOT_FOUND");
 
-  if (!input.password) {
-    throw new HttpError(422, "Password is required to set or change PIN", "PASSWORD_REQUIRED");
+  const isFirstSet = !user.txnPinHash;
+  let passwordOk = false;
+  if (isFirstSet) {
+    // OTP/session signup users often have no known login password — first PIN uses auth session.
+    passwordOk = true;
+  } else {
+    if (!input.password) {
+      throw new HttpError(422, "Password is required to change PIN", "PASSWORD_REQUIRED");
+    }
+    passwordOk = await comparePassword(input.password, user.passwordHash);
   }
-  const passwordOk = await comparePassword(input.password, user.passwordHash);
 
   await setTxnPin(req.auth.sub, input.pin, { passwordOk });
   const meUser = await getAuthMe(req.auth.sub);

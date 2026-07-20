@@ -39,6 +39,9 @@
 - [x] SD/D direct-child Active/Inactive (`PATCH /users/:id/active`)
 - [x] Admin network tree move (`POST /admin/users/:id/reassign`) + hierarchy rebuild
 - [x] Admin removed from `POST /wallet/transfer` (fund mint only)
+- [x] Transfer role pair (SD→D, D→R) + inactive target blocked
+- [x] Wallet pull/Wapas (`/wallet/pull/request` + `/confirm`) child OTP + parent PIN
+- [x] Agent flow docs folder [`flow/`](../flow/INDEX.md)
 - [ ] KYC CRUD routes
 - [ ] Commission payout report
 - [ ] InstantPay DMT/BBPS rails + merchant outlet onboarding
@@ -63,6 +66,9 @@
 - [ ] History purge for any secrets ever pushed to remote
 
 ## Last updated
+2026-07-20 — Wallet pull (Wapas): child OTP + parent PIN; `flow/` agent docs; migration `0015_wallet_pull_otp`
+2026-07-20 — Signup: `GET /auth/sponsor/:uid` shows Distributor name; retailer maps under that Dist
+2026-07-20 — Wallet hierarchy: transfer enforces SD→D / D→R + active target; task doc `wallet-hierarchy.md`
 2026-07-20 — Wallet hierarchy gaps: child active toggle (SD/D), admin reassign parent, admin no longer on /wallet/transfer
 2026-07-18 — AEPS dummy/sandbox/live provider mode + InstantPay adapter + compliance gates
 2026-07-17 — Security hardening: Critical+High remediations (auth, wallet, mobile, web storage, release signing, Dependabot)

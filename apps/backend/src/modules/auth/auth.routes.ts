@@ -13,6 +13,8 @@ import {
   revokeDevice,
   signupRequest,
   signupVerify,
+  lookupSponsor,
+  searchSponsors,
   setTransactionPin,
   verifyTransactionPin,
   agentAuth,
@@ -39,6 +41,8 @@ authRouter.post("/mpin/set", requireAuth, setMpin);
 authRouter.get("/devices", requireAuth, listDevices);
 authRouter.post("/devices/:id/revoke", requireAuth, revokeDevice);
 
+authRouter.get("/sponsor/search", otpRequestLimiter, searchSponsors);
+authRouter.get("/sponsor/:uid", otpRequestLimiter, lookupSponsor);
 authRouter.post("/signup/request", otpRequestLimiter, signupRequest);
 authRouter.post("/signup/verify", authLimiter, signupVerify);
 

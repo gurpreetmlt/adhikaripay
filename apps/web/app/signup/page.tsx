@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
-import { Phone, Lock, ArrowRight, UserPlus } from "lucide-react";
+import { Phone, Lock, ArrowRight, UserPlus, CheckCircle2, AlertCircle } from "lucide-react";
 import type { ApiResponse, AuthUser } from "@adhikaripay/shared-types";
 import { AdhikariPayLogo } from "@/components/brand/Logo";
 import api from "@/lib/api";
@@ -18,27 +18,82 @@ interface SessionData {
   refreshToken: string;
 }
 
+interface SponsorInfo {
+  uid: string;
+  name: string;
+  mobile: string;
+  role: "distributor";
+}
+
 export default function SignupPage() {
   const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
   const [step, setStep] = useState<"form" | "otp">("form");
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
-  const [sponsorUid, setSponsorUid] = useState("DSB6EBF70D7992");
+  const [sponsorMobile, setSponsorMobile] = useState("");
+  const [sponsorList, setSponsorList] = useState<SponsorInfo[]>([]);
+  const [sponsor, setSponsor] = useState<SponsorInfo | null>(null);
+  const [sponsorStatus, setSponsorStatus] = useState<"idle" | "loading" | "ok" | "empty" | "error">("idle");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [devOtp, setDevOtp] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const phone = sponsorMobile.replace(/\D/g, "").slice(0, 10);
+    setSponsor(null);
+    if (phone.length < 3) {
+      setSponsorList([]);
+      setSponsorStatus("idle");
+      return;
+    }
+
+    let cancelled = false;
+    setSponsorStatus("loading");
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await api.get<ApiResponse<{ items: SponsorInfo[] }>>("/auth/sponsor/search", {
+          params: { mobile: phone },
+        });
+        if (cancelled) return;
+        if (!data.success) throw new Error(data.message);
+        const items = data.data.items ?? [];
+        setSponsorList(items);
+        if (items.length === 0) {
+          setSponsorStatus("empty");
+        } else if (items.length === 1 && phone.length === 10) {
+          setSponsor(items[0]!);
+          setSponsorStatus("ok");
+        } else {
+          setSponsorStatus("ok");
+        }
+      } catch {
+        if (cancelled) return;
+        setSponsorList([]);
+        setSponsorStatus("error");
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [sponsorMobile]);
+
   async function requestOtp(e?: FormEvent) {
     e?.preventDefault();
-    if (!name || !mobile || !sponsorUid) return;
+    if (!name || !mobile) return;
+    if (!sponsor) {
+      toast.error("Distributor phone se list mein se select karo");
+      return;
+    }
     setLoading(true);
     try {
       const { data } = await api.post<ApiResponse<{ otp?: string; message: string }>>("/auth/signup/request", {
         name,
         mobile,
-        sponsorUid: sponsorUid.trim().toUpperCase(),
+        sponsorUid: sponsor.uid,
         portal: "agent",
       });
       if (!data.success) throw new Error(data.message);
@@ -54,14 +109,14 @@ export default function SignupPage() {
 
   async function verify(e?: FormEvent) {
     e?.preventDefault();
-    if (!otp) return;
+    if (!otp || !sponsor) return;
     setLoading(true);
     try {
       const { data } = await api.post<ApiResponse<SessionData>>("/auth/signup/verify", {
         name,
         mobile,
         otp,
-        sponsorUid: sponsorUid.trim().toUpperCase(),
+        sponsorUid: sponsor.uid,
         portal: "agent",
         ...(password ? { password } : {}),
       });
@@ -70,7 +125,7 @@ export default function SignupPage() {
         accessToken: data.data.accessToken,
         refreshToken: data.data.refreshToken,
       });
-      toast.success("Account created — complete KYC next");
+      toast.success(`Account created under ${sponsor.name} — complete KYC next`);
       router.replace(nextOnboardingPath(data.data.user) ?? "/kyc?onboarding=1");
     } catch (err) {
       toast.error(extractApiError(err, "Signup failed"));
@@ -87,7 +142,7 @@ export default function SignupPage() {
           Create agent account
         </h1>
         <p className="mt-1 text-sm" style={{ color: B.muted }}>
-          Signup with OTP → KYC → set PIN. Need your Distributor UID.
+          Signup with OTP → KYC → set PIN. Distributor ka 10-digit phone dalo.
         </p>
 
         {step === "form" ? (
@@ -112,15 +167,80 @@ export default function SignupPage() {
                 placeholder="10-digit mobile"
               />
             </Field>
-            <Field label="Distributor UID (sponsor)" icon={Lock}>
-              <input
-                required
-                value={sponsorUid}
-                onChange={(e) => setSponsorUid(e.target.value.toUpperCase())}
-                className="w-full bg-transparent text-sm outline-none"
-                placeholder="DS…"
-              />
-            </Field>
+            <div>
+              <Field label="Distributor phone (sponsor)" icon={Phone}>
+                <input
+                  required
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={sponsorMobile}
+                  onChange={(e) => setSponsorMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  className="w-full bg-transparent text-sm outline-none"
+                  placeholder="Min 3 digits — list below"
+                  autoComplete="off"
+                />
+              </Field>
+              {sponsorStatus === "loading" ? (
+                <p className="mt-1.5 text-xs" style={{ color: B.muted }}>
+                  Searching distributor…
+                </p>
+              ) : null}
+              {sponsorMobile.length > 0 && sponsorMobile.length < 3 ? (
+                <p className="mt-1.5 text-xs" style={{ color: B.muted }}>
+                  Kam se kam 3 digit type karo
+                </p>
+              ) : null}
+              {sponsorList.length > 0 ? (
+                <ul className="mt-2 space-y-1.5">
+                  {sponsorList.map((item) => {
+                    const selected = sponsor?.uid === item.uid;
+                    return (
+                      <li key={item.uid}>
+                        <button
+                          type="button"
+                          onClick={() => setSponsor(item)}
+                          className="flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition"
+                          style={{
+                            borderColor: selected ? B.green : B.border,
+                            background: selected ? `${B.green}14` : "#fff",
+                            color: B.blue,
+                          }}
+                        >
+                          {selected ? <CheckCircle2 size={16} style={{ color: B.green }} /> : <Phone size={14} style={{ color: B.muted }} />}
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-semibold">{item.name}</span>
+                            <span className="block text-xs font-normal" style={{ color: B.muted }}>
+                              {item.mobile} · {item.uid}
+                            </span>
+                          </span>
+                          <span className="text-[10px] font-semibold uppercase" style={{ color: B.muted }}>
+                            Dist
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+              {sponsorStatus === "empty" ? (
+                <div
+                  className="mt-2 flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium"
+                  style={{ background: "#DC262614", color: "#B91C1C" }}
+                >
+                  <AlertCircle size={14} className="shrink-0" />
+                  Is number pe koi active Distributor nahi mila
+                </div>
+              ) : null}
+              {sponsorStatus === "error" ? (
+                <div
+                  className="mt-2 flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium"
+                  style={{ background: "#DC262614", color: "#B91C1C" }}
+                >
+                  <AlertCircle size={14} className="shrink-0" />
+                  Search failed — dubara try karo
+                </div>
+              ) : null}
+            </div>
             <Field label="Login password (optional)" icon={Lock}>
               <input
                 type="password"
@@ -132,7 +252,7 @@ export default function SignupPage() {
             </Field>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !sponsor}
               className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold text-white disabled:opacity-60"
               style={{ background: B.badgeGrad }}
             >
@@ -141,6 +261,14 @@ export default function SignupPage() {
           </form>
         ) : (
           <form onSubmit={verify} className="mt-6 space-y-4">
+            {sponsor ? (
+              <div
+                className="rounded-xl px-3 py-2 text-xs font-semibold"
+                style={{ background: `${B.green}14`, color: B.greenDark ?? B.green }}
+              >
+                Mapping under {sponsor.name} ({sponsor.mobile})
+              </div>
+            ) : null}
             {devOtp && (
               <div className="rounded-xl px-3 py-2 text-xs font-semibold" style={{ background: `${B.green}18`, color: B.greenDark }}>
                 Dev OTP: {devOtp}

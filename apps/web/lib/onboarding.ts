@@ -20,5 +20,11 @@ export function nextOnboardingPath(user: AuthUser | null | undefined): string | 
 export function extractApiError(err: unknown, fallback: string): string {
   const status = (err as { response?: { status?: number } }).response?.status;
   if (status === 429) return "Too many requests — wait a moment and retry";
-  return (err as { response?: { data?: { message?: string } } }).response?.data?.message ?? fallback;
+  const data = (err as { response?: { data?: { message?: string; errors?: Record<string, string[] | undefined> } } })
+    .response?.data;
+  if (data?.errors) {
+    const first = Object.values(data.errors).flat().find(Boolean);
+    if (first) return first;
+  }
+  return data?.message ?? fallback;
 }

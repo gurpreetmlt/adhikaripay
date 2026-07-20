@@ -1,6 +1,19 @@
 import type { Request, Response } from "express";
-import { fundWalletSchema, transferWalletSchema, ledgerQuerySchema } from "./wallet.validators";
-import { getWalletBalances, transferToChild, adminFundOwnWallet, getWalletLedger } from "./wallet.service";
+import {
+  fundWalletSchema,
+  transferWalletSchema,
+  pullRequestSchema,
+  pullConfirmSchema,
+  ledgerQuerySchema,
+} from "./wallet.validators";
+import {
+  getWalletBalances,
+  transferToChild,
+  adminFundOwnWallet,
+  getWalletLedger,
+  requestPullFromChild,
+  confirmPullFromChild,
+} from "./wallet.service";
 import { assertTxnAuthorization } from "../auth/txnPin";
 import { sendSuccess } from "../../utils/apiResponse";
 import { HttpError } from "../../utils/httpError";
@@ -43,6 +56,28 @@ export async function transfer(req: Request, res: Response): Promise<void> {
     input.idempotencyKey,
   );
   sendSuccess(res, result, "Transfer completed successfully");
+}
+
+export async function pullRequest(req: Request, res: Response): Promise<void> {
+  const actor = requireActor(req);
+  const input = pullRequestSchema.parse(req.body);
+  const result = await requestPullFromChild(actor, input.targetUserId, input.amount, input.walletType);
+  sendSuccess(res, result, result.message);
+}
+
+export async function pullConfirm(req: Request, res: Response): Promise<void> {
+  const actor = requireActor(req);
+  const input = pullConfirmSchema.parse(req.body);
+  await assertTxnAuthorization(actor.id, { txnPin: input.txnPin, txnAuth: input.txnAuth });
+  const result = await confirmPullFromChild(actor, {
+    targetUserId: input.targetUserId,
+    amount: input.amount,
+    otp: input.otp,
+    walletType: input.walletType,
+    description: input.description,
+    idempotencyKey: input.idempotencyKey,
+  });
+  sendSuccess(res, result, "Funds collected successfully");
 }
 
 export async function ledger(req: Request, res: Response): Promise<void> {

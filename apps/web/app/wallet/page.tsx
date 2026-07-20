@@ -14,6 +14,7 @@ import {
 import { toast } from "react-hot-toast";
 import { AppShell } from "@/components/layout/AppShell";
 import { FundForm } from "@/components/dashboard/FundForm";
+import { PullForm } from "@/components/dashboard/PullForm";
 import { fetchApi } from "@/lib/api";
 import { B, initials, roleFromUserRole } from "@/lib/brand";
 import { extractApiError } from "@/lib/onboarding";
@@ -34,6 +35,7 @@ export default function WalletPage() {
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [downline, setDownline] = useState<DownlineUser[]>([]);
   const [fundTarget, setFundTarget] = useState<DownlineUser | null>(null);
+  const [pullTarget, setPullTarget] = useState<DownlineUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -206,10 +208,10 @@ export default function WalletPage() {
           <div className="overflow-hidden rounded-2xl border bg-white" style={{ borderColor: B.border }}>
             <div className="border-b px-5 py-4" style={{ borderColor: B.border }}>
               <h2 className="font-bold" style={{ color: B.blue }}>
-                Downline — Fund partners
+                Downline — Fund / Wapas
               </h2>
               <p className="mt-0.5 text-xs" style={{ color: B.muted }}>
-                Transfer from your main wallet (requires transaction PIN)
+                Send needs your PIN. Wapas sends OTP to partner phone, then you enter OTP + PIN.
               </p>
             </div>
             {downline.length === 0 ? (
@@ -271,14 +273,26 @@ export default function WalletPage() {
                         </span>
                       </td>
                       <td className="px-5 py-3 text-right">
-                        <button
-                          type="button"
-                          className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
-                          style={{ background: B.badgeGrad }}
-                          onClick={() => setFundTarget(d)}
-                        >
-                          Fund
-                        </button>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            disabled={!d.isActive}
+                            className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                            style={{ background: B.badgeGrad }}
+                            onClick={() => setFundTarget(d)}
+                          >
+                            Fund
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!d.isActive || Number(d.mainBalance) <= 0}
+                            className="rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                            style={{ borderColor: B.blue, color: B.blue }}
+                            onClick={() => setPullTarget(d)}
+                          >
+                            Wapas
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -370,6 +384,13 @@ export default function WalletPage() {
         <FundForm
           target={fundTarget}
           onClose={() => setFundTarget(null)}
+          onSuccess={() => void load()}
+        />
+      )}
+      {pullTarget && (
+        <PullForm
+          target={pullTarget}
+          onClose={() => setPullTarget(null)}
           onSuccess={() => void load()}
         />
       )}

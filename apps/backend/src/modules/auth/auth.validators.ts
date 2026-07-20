@@ -117,6 +117,21 @@ export const signupRequestSchema = z.object({
 });
 export type SignupRequestInput = z.infer<typeof signupRequestSchema>;
 
+/** Public sponsor name lookup (Distributor UID on signup). */
+export const sponsorUidParamSchema = z.object({
+  uid: z.string().trim().min(6).max(20),
+});
+export type SponsorUidParam = z.infer<typeof sponsorUidParamSchema>;
+
+/** Public sponsor search by Distributor mobile (signup). Min 3 digits = prefix list. */
+export const sponsorMobileQuerySchema = z.object({
+  mobile: z
+    .string()
+    .trim()
+    .regex(/^\d{3,10}$/, "Enter at least 3 digits of mobile"),
+});
+export type SponsorMobileQuery = z.infer<typeof sponsorMobileQuerySchema>;
+
 export const signupVerifySchema = z.object({
   name: z.string().trim().min(2).max(120),
   mobile: mobileSchema,

@@ -88,7 +88,7 @@ export default function SetPinPage() {
             {firstSet ? "Set your PIN" : "Change PIN"}
           </h1>
           <p className="mt-1 text-sm" style={{ color: B.muted }}>
-            4-digit PIN for wallet transfers and money services. Later you can unlock login with fingerprint.
+            4-digit PIN for wallet transfers and money services. Avoid 1234 / 0000 / repeats.
           </p>
         </div>
 

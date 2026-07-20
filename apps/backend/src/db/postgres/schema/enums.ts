@@ -24,4 +24,4 @@ export const transactionStatusEnum = pgEnum("transaction_status", [
 
 export const commissionRuleTypeEnum = pgEnum("commission_rule_type", ["flat", "percentage"]);
 
-export const otpPurposeEnum = pgEnum("otp_purpose", ["login", "signup"]);
+export const otpPurposeEnum = pgEnum("otp_purpose", ["login", "signup", "wallet_pull"]);

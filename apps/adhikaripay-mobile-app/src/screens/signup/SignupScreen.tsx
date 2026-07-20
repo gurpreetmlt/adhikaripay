@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -39,12 +39,63 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
   // Step 0 — the backend's signup/request already requires name + sponsorUid alongside
   // mobile, so those are collected up front (design mockup only asks for mobile here).
   const [name, setName] = useState("");
+  const [sponsorMobile, setSponsorMobile] = useState("");
+  const [sponsorList, setSponsorList] = useState<Array<{ uid: string; name: string; mobile: string }>>([]);
   const [sponsorUid, setSponsorUid] = useState("");
+  const [sponsorName, setSponsorName] = useState<string | null>(null);
+  const [sponsorOk, setSponsorOk] = useState(false);
+  const [sponsorSearching, setSponsorSearching] = useState(false);
   const [mobile, setMobile] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
   const [otp, setOtp] = useState("");
   const [devOtp, setDevOtp] = useState("");
+
+  useEffect(() => {
+    const phone = sponsorMobile.replace(/\D/g, "").slice(0, 10);
+    setSponsorUid("");
+    setSponsorName(null);
+    setSponsorOk(false);
+    if (phone.length < 3) {
+      setSponsorList([]);
+      setSponsorSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setSponsorSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await api.get<ApiResponse<{ items: Array<{ uid: string; name: string; mobile: string }> }>>(
+          "/auth/sponsor/search",
+          { params: { mobile: phone } },
+        );
+        if (cancelled) return;
+        if (!data.success) throw new Error("not found");
+        const items = data.data.items ?? [];
+        setSponsorList(items);
+        if (items.length === 1 && phone.length === 10) {
+          setSponsorUid(items[0]!.uid);
+          setSponsorName(items[0]!.name);
+          setSponsorOk(true);
+        }
+      } catch {
+        if (cancelled) return;
+        setSponsorList([]);
+      } finally {
+        if (!cancelled) setSponsorSearching(false);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [sponsorMobile]);
+
+  function selectSponsor(item: { uid: string; name: string; mobile: string }) {
+    setSponsorUid(item.uid);
+    setSponsorName(item.name);
+    setSponsorOk(true);
+  }
 
   // Step 1
   const [pan, setPan] = useState("");
@@ -71,8 +122,8 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
       showAlert("Name required", "Enter your full name.");
       return;
     }
-    if (sponsorUid.trim().length < 6) {
-      showAlert("Sponsor ID required", "Enter your distributor's Sponsor / Distributor ID.");
+    if (!sponsorOk || !sponsorUid) {
+      showAlert("Distributor select karo", "Distributor ka phone dalo aur list se select karo.");
       return;
     }
     if (mobile.length !== 10) {
@@ -220,8 +271,14 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
             <StepDetails
               name={name}
               setName={setName}
+              sponsorMobile={sponsorMobile}
+              setSponsorMobile={setSponsorMobile}
+              sponsorList={sponsorList}
               sponsorUid={sponsorUid}
-              setSponsorUid={setSponsorUid}
+              sponsorName={sponsorName}
+              sponsorOk={sponsorOk}
+              sponsorSearching={sponsorSearching}
+              onSelectSponsor={selectSponsor}
               mobile={mobile}
               setMobile={setMobile}
               otpSent={otpSent}
@@ -251,6 +308,7 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
               name={name}
               mobile={mobile}
               sponsorUid={sponsorUid}
+              sponsorName={sponsorName}
               pan={pan}
               aadhaar={aadhaar}
               shop={shop}
@@ -278,8 +336,14 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
 function StepDetails(props: {
   name: string;
   setName: (v: string) => void;
+  sponsorMobile: string;
+  setSponsorMobile: (v: string) => void;
+  sponsorList: Array<{ uid: string; name: string; mobile: string }>;
   sponsorUid: string;
-  setSponsorUid: (v: string) => void;
+  sponsorName: string | null;
+  sponsorOk: boolean;
+  sponsorSearching: boolean;
+  onSelectSponsor: (item: { uid: string; name: string; mobile: string }) => void;
   mobile: string;
   setMobile: (v: string) => void;
   otpSent: boolean;
@@ -312,16 +376,60 @@ function StepDetails(props: {
         />
       </Field>
 
-      <Field label="SPONSOR / DISTRIBUTOR ID" tokens={tokens}>
+      <Field label="DISTRIBUTOR PHONE" tokens={tokens}>
         <TextInput
-          value={props.sponsorUid}
-          onChangeText={(t) => props.setSponsorUid(t.toUpperCase())}
-          placeholder="Your distributor's UID"
-          autoCapitalize="characters"
+          value={props.sponsorMobile}
+          onChangeText={(t) => props.setSponsorMobile(t.replace(/\D/g, "").slice(0, 10))}
+          placeholder="Type Dist mobile (min 3 digits)"
+          keyboardType="number-pad"
+          maxLength={10}
           placeholderTextColor={tokens.mute}
           style={[fieldStyles.input, { color: tokens.txt2, backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}
         />
       </Field>
+      {props.sponsorSearching ? (
+        <Text style={{ fontSize: 12, color: tokens.mute, marginBottom: 8 }}>Searching distributors…</Text>
+      ) : null}
+      {props.sponsorList.map((item) => {
+        const selected = props.sponsorUid === item.uid;
+        return (
+          <Pressable
+            key={item.uid}
+            onPress={() => props.onSelectSponsor(item)}
+            style={[
+              styles.sponsorOk,
+              {
+                backgroundColor: selected ? `${colors.green}18` : tokens.inputBg,
+                borderWidth: 1,
+                borderColor: selected ? colors.green : tokens.inputBorder,
+                marginBottom: 6,
+              },
+            ]}
+          >
+            {selected ? (
+              <CheckCircle2 size={14} color={colors.green} strokeWidth={2.5} />
+            ) : (
+              <Phone size={14} color={tokens.mute} strokeWidth={2} />
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sponsorOkText, { color: selected ? colors.green : tokens.txt }]}>
+                {item.name}
+              </Text>
+              <Text style={{ fontSize: 11, color: tokens.mute, marginTop: 2 }}>
+                {item.mobile} · {item.uid}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+      {props.sponsorMobile.length >= 3 && !props.sponsorSearching && props.sponsorList.length === 0 ? (
+        <Text style={styles.sponsorErr}>Koi active Distributor nahi mila — number check karo</Text>
+      ) : null}
+      {props.sponsorMobile.length > 0 && props.sponsorMobile.length < 3 ? (
+        <Text style={{ fontSize: 12, color: tokens.mute, marginBottom: 8 }}>
+          Kam se kam 3 digit type karo — list yahan aayegi
+        </Text>
+      ) : null}
 
       <Field label="MOBILE NUMBER" tokens={tokens}>
         <View style={[fieldStyles.row, { backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}>
@@ -341,7 +449,11 @@ function StepDetails(props: {
       </Field>
 
       {!props.otpSent ? (
-        <Pressable onPress={props.onRequestOtp} disabled={props.otpLoading} style={styles.sendOtpBtnPress}>
+        <Pressable
+          onPress={props.onRequestOtp}
+          disabled={props.otpLoading || !props.sponsorOk}
+          style={styles.sendOtpBtnPress}
+        >
           <LinearGradient colors={[...colors.gradientButton]} style={styles.sendOtpBtn}>
             {props.otpLoading ? (
               <ActivityIndicator color="#fff" />
@@ -539,6 +651,7 @@ function StepReview(props: {
   name: string;
   mobile: string;
   sponsorUid: string;
+  sponsorName: string | null;
   pan: string;
   aadhaar: string;
   shop: string;
@@ -548,7 +661,10 @@ function StepReview(props: {
   const rows = [
     { k: "Full Name", v: props.name },
     { k: "Mobile", v: `+91 ${props.mobile}` },
-    { k: "Sponsor ID", v: props.sponsorUid },
+    {
+      k: "Sponsor",
+      v: props.sponsorName ? `${props.sponsorName} (${props.sponsorUid})` : props.sponsorUid,
+    },
     { k: "PAN", v: props.pan },
     { k: "Aadhaar", v: `XXXX XXXX ${props.aadhaar.slice(-4)}` },
     { k: "Outlet Name", v: props.shop },
@@ -624,6 +740,18 @@ const styles = StyleSheet.create({
   stepSub: { fontSize: 13, fontWeight: "500", marginTop: 4 },
   label: { fontSize: 11.5, fontWeight: "700", letterSpacing: 0.3 },
   sendOtpBtnPress: { marginTop: 6, borderRadius: 14 },
+  sponsorOk: {
+    marginTop: 8,
+    marginBottom: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  sponsorOkText: { fontSize: 13, fontWeight: "600", flexShrink: 1 },
+  sponsorErr: { marginTop: 6, marginBottom: 4, fontSize: 12, fontWeight: "500", color: "#B91C1C" },
   sendOtpBtn: { borderRadius: 14, paddingVertical: 15, alignItems: "center" },
   sendOtpBtnText: { color: "#fff", fontSize: 15, fontWeight: "800" },
   otpBlock: { marginTop: 4 },
