@@ -87,21 +87,21 @@ export function DistributorDashboard() {
   return (
     <div className="space-y-5">
       {/* Top Row: Wallet + Retailer Overview */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
         <div
-          className="relative overflow-hidden rounded-2xl p-5 text-white lg:col-span-1"
+          className="relative overflow-hidden rounded-2xl p-4 text-white lg:col-span-1"
           style={{ background: role.gradient, boxShadow: `0 8px 32px ${role.color}40` }}
         >
-          <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white opacity-10" />
-          <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-white/70">
-            <Wallet size={14} /> Main Balance
+          <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white opacity-10" />
+          <div className="mb-0.5 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-white/70">
+            <Wallet size={13} /> Main Balance
           </div>
-          <div className="mb-1 text-3xl font-bold">
+          <div className="text-2xl font-bold leading-tight">
             {loading ? "…" : formatInr(primary?.balance ?? "0")}
           </div>
-          <div className="mt-3 flex items-center gap-3 border-t border-white/15 pt-3">
-            <span className="flex items-center gap-1 text-xs text-white/70">
-              <Clock size={12} /> Pending: {formatInr(totalPending)}
+          <div className="mt-2 flex items-center gap-2 border-t border-white/15 pt-2">
+            <span className="flex items-center gap-1 text-[11px] text-white/70">
+              <Clock size={11} /> Pending: {formatInr(totalPending)}
             </span>
           </div>
         </div>
@@ -267,61 +267,6 @@ export function DistributorDashboard() {
             onClick={() => router.push("/reports")}
           />
         </div>
-      </div>
-
-      {/* Monthly Activity History */}
-      <div className="rounded-2xl border bg-white p-5" style={{ borderColor: B.border }}>
-        <div className="mb-4 flex items-center gap-2">
-          <CalendarDays size={16} style={{ color: B.blue }} />
-          <h3 className="text-sm font-bold" style={{ color: B.blue }}>
-            Monthly Activity History
-          </h3>
-        </div>
-        {loading ? (
-          <p className="py-6 text-center text-sm" style={{ color: B.muted }}>
-            Loading…
-          </p>
-        ) : history.length === 0 ? (
-          <p className="py-6 text-center text-sm" style={{ color: B.muted }}>
-            No history yet
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b" style={{ borderColor: B.border }}>
-                  {["Month", "Total Retailers", "Transacted", "No Activity"].map((h) => (
-                    <th
-                      key={h}
-                      className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider"
-                      style={{ color: B.muted }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((row) => (
-                  <tr key={row.month} className="border-b" style={{ borderColor: B.border }}>
-                    <td className="px-3 py-2.5 font-semibold" style={{ color: B.blue }}>
-                      {row.monthLabel}
-                    </td>
-                    <td className="px-3 py-2.5 tabular-nums" style={{ color: B.blue }}>
-                      {row.total}
-                    </td>
-                    <td className="px-3 py-2.5 font-semibold tabular-nums" style={{ color: B.green }}>
-                      {row.transacted}
-                    </td>
-                    <td className="px-3 py-2.5 font-semibold tabular-nums" style={{ color: "#DC2626" }}>
-                      {row.noActivity}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
 
       {/* Top Performing Retailers + Fund Requests */}
