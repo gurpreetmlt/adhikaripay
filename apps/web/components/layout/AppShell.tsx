@@ -29,25 +29,63 @@ import type { WalletBalance } from "@/lib/types";
 import { useOnboardingGate } from "@/lib/useOnboardingGate";
 import { formatInr, walletDisplayName } from "@/lib/walletLabels";
 
-const NAV = [
+const NAV_CORE = [
   { icon: LayoutDashboard, label: "Dashboard", to: "/dashboard" },
   { icon: ArrowLeftRight, label: "Transactions", to: "/transactions" },
   { icon: Wallet, label: "Wallet", to: "/wallet" },
   { icon: Network, label: "Network", to: "/network" },
-  { icon: Users, label: "Customers", to: "/customers" },
   { icon: BarChart3, label: "Reports", to: "/reports" },
   { icon: FileText, label: "Statements", to: "/statements" },
   { icon: Settings, label: "Settings", to: "/settings" },
   { icon: Shield, label: "KYC", to: "/kyc" },
-];
+] as const;
 
-const MOBILE_TABS = [
+const NAV_CUSTOMERS = { icon: Users, label: "Customers", to: "/customers" } as const;
+
+const MOBILE_CORE = [
   { icon: LayoutDashboard, label: "Home", to: "/dashboard" },
   { icon: ArrowLeftRight, label: "Txns", to: "/transactions" },
   { icon: Wallet, label: "Wallet", to: "/wallet" },
-  { icon: Users, label: "Customers", to: "/customers" },
   { icon: Settings, label: "More", to: "/settings" },
-];
+] as const;
+
+function sidebarNavForRole(role: string | undefined) {
+  // Customers = retailer only. Distributor / Super Dist use Network.
+  if (role === "retailer") {
+    return [
+      NAV_CORE[0],
+      NAV_CORE[1],
+      NAV_CORE[2],
+      NAV_CORE[3],
+      NAV_CUSTOMERS,
+      NAV_CORE[4],
+      NAV_CORE[5],
+      NAV_CORE[6],
+      NAV_CORE[7],
+    ];
+  }
+  return [...NAV_CORE];
+}
+
+function mobileTabsForRole(role: string | undefined) {
+  if (role === "retailer") {
+    return [
+      MOBILE_CORE[0],
+      MOBILE_CORE[1],
+      MOBILE_CORE[2],
+      NAV_CUSTOMERS,
+      MOBILE_CORE[3],
+    ];
+  }
+  // Distributor / Super Dist: Network instead of Customers
+  return [
+    MOBILE_CORE[0],
+    MOBILE_CORE[1],
+    MOBILE_CORE[2],
+    { icon: Network, label: "Network", to: "/network" },
+    MOBILE_CORE[3],
+  ];
+}
 
 function SidebarContent({
   open,
@@ -67,6 +105,8 @@ function SidebarContent({
   av: string;
 }) {
   const pathname = usePathname();
+  const authRole = useAuthStore((s) => s.user?.role);
+  const items = sidebarNavForRole(authRole);
 
   return (
     <>
@@ -106,7 +146,7 @@ function SidebarContent({
       )}
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-        {NAV.map(({ icon: Icon, label, to }) => {
+        {items.map(({ icon: Icon, label, to }) => {
           const isActive = pathname === to || pathname.startsWith(`${to}/`);
           return (
             <Link
@@ -399,7 +439,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         style={{ borderColor: B.border }}
       >
         <nav className="flex items-stretch justify-around px-1 py-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
-          {MOBILE_TABS.map(({ icon: Icon, label, to }) => {
+          {mobileTabsForRole(user?.role).map(({ icon: Icon, label, to }) => {
             const active = pathname === to || pathname.startsWith(`${to}/`);
             return (
               <Link

@@ -218,6 +218,13 @@ export default function NetworkPage() {
 
   const canToggleChildren = user?.role === "master_distributor" || user?.role === "distributor";
   const canMoneyActions = canToggleChildren;
+  /** Tree view: Super Distributor only. Distributors always get flat table. */
+  const isSuperDist = user?.role === "master_distributor";
+  const effectiveView: "tree" | "table" = isSuperDist ? view : "table";
+
+  useEffect(() => {
+    if (!isSuperDist && view !== "table") setView("table");
+  }, [isSuperDist, view]);
 
   function toDownlineUser(m: DownlineItem): DownlineUser {
     return {
@@ -379,7 +386,9 @@ export default function NetworkPage() {
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <Users size={18} style={{ color: B.blue }} />
-                <h2 className="font-bold" style={{ color: B.blue }}>Network Hierarchy</h2>
+                <h2 className="font-bold" style={{ color: B.blue }}>
+                  {user.role === "distributor" ? "My Retailers" : "Network Hierarchy"}
+                </h2>
                 {totalAll > 0 && (
                   <span className="rounded-full px-2.5 py-0.5 text-xs font-bold text-white" style={{ background: B.green }}>
                     {totalAll} agents
@@ -387,25 +396,27 @@ export default function NetworkPage() {
                 )}
               </div>
               <div className="flex items-center gap-3">
-                <div className="flex rounded-lg border" style={{ borderColor: B.border }}>
-                  <button
-                    type="button"
-                    onClick={() => setView("tree")}
-                    className="rounded-l-lg px-3 py-1.5 text-xs font-semibold"
-                    style={{ background: view === "tree" ? B.blue : "transparent", color: view === "tree" ? "#fff" : B.muted }}
-                  >
-                    Tree
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setView("table")}
-                    className="rounded-r-lg px-3 py-1.5 text-xs font-semibold"
-                    style={{ background: view === "table" ? B.blue : "transparent", color: view === "table" ? "#fff" : B.muted }}
-                  >
-                    Table
-                  </button>
-                </div>
-                {view === "table" && (
+                {isSuperDist ? (
+                  <div className="flex rounded-lg border" style={{ borderColor: B.border }}>
+                    <button
+                      type="button"
+                      onClick={() => setView("tree")}
+                      className="rounded-l-lg px-3 py-1.5 text-xs font-semibold"
+                      style={{ background: effectiveView === "tree" ? B.blue : "transparent", color: effectiveView === "tree" ? "#fff" : B.muted }}
+                    >
+                      Tree
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setView("table")}
+                      className="rounded-r-lg px-3 py-1.5 text-xs font-semibold"
+                      style={{ background: effectiveView === "table" ? B.blue : "transparent", color: effectiveView === "table" ? "#fff" : B.muted }}
+                    >
+                      Table
+                    </button>
+                  </div>
+                ) : null}
+                {effectiveView === "table" && (
                   <div className="relative">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: B.muted }} />
                     <input
@@ -423,7 +434,7 @@ export default function NetworkPage() {
 
             {loading ? (
               <p className="py-10 text-center text-sm" style={{ color: B.muted }}>Loading…</p>
-            ) : view === "tree" ? (
+            ) : effectiveView === "tree" ? (
               (data?.tree ?? []).length === 0 ? (
                 <div className="flex flex-col items-center py-12">
                   <UserCheck size={40} className="mb-3 opacity-30" style={{ color: B.muted }} />
