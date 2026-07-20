@@ -1,6 +1,8 @@
 import { Router } from "express";
-import { getDownline, getNetwork } from "./users.service";
+import { z } from "zod";
+import { getDownline, getNetwork, setDirectChildActive } from "./users.service";
 import { requireAuth } from "../../middleware/auth.middleware";
+import { requireRole } from "../../middleware/rbac.middleware";
 import { sendSuccess } from "../../utils/apiResponse";
 import { HttpError } from "../../utils/httpError";
 
@@ -17,3 +19,15 @@ usersRouter.get("/network", requireAuth, async (req, res) => {
   const network = await getNetwork(req.auth.sub, req.auth.role);
   sendSuccess(res, network);
 });
+
+usersRouter.patch(
+  "/:id/active",
+  requireAuth,
+  requireRole("master_distributor", "distributor"),
+  async (req, res) => {
+    if (!req.auth) throw new HttpError(401, "Authentication required", "UNAUTHENTICATED");
+    const body = z.object({ isActive: z.boolean() }).parse(req.body);
+    const result = await setDirectChildActive(req.auth.sub, req.auth.role, req.params.id, body.isActive);
+    sendSuccess(res, result, body.isActive ? "User activated" : "User deactivated");
+  },
+);

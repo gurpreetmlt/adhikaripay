@@ -9,9 +9,11 @@ import { colors } from "../theme/colors";
 interface Props {
   user: DownlineUser;
   onFund: (user: DownlineUser) => void;
+  onToggleActive?: (user: DownlineUser) => void;
+  toggling?: boolean;
 }
 
-export function DownlineCard({ user, onFund }: Props) {
+export function DownlineCard({ user, onFund, onToggleActive, toggling }: Props) {
   return (
     <View style={styles.card}>
       <View style={styles.top}>
@@ -38,11 +40,24 @@ export function DownlineCard({ user, onFund }: Props) {
           <Text style={styles.balLabel}>Balance</Text>
           <Text style={styles.bal}>{formatINR(user.mainBalance)}</Text>
         </View>
-        <Pressable onPress={() => onFund(user)}>
-          <LinearGradient colors={[...colors.gradient]} style={styles.fundBtn}>
-            <Text style={styles.fundText}>Fund →</Text>
-          </LinearGradient>
-        </Pressable>
+        <View style={styles.actions}>
+          {onToggleActive ? (
+            <Pressable
+              onPress={() => onToggleActive(user)}
+              disabled={toggling}
+              style={[styles.toggleBtn, user.isActive ? styles.toggleOff : styles.toggleOn]}
+            >
+              <Text style={[styles.toggleText, user.isActive ? styles.toggleOffText : styles.toggleOnText]}>
+                {toggling ? "…" : user.isActive ? "Deactivate" : "Activate"}
+              </Text>
+            </Pressable>
+          ) : null}
+          <Pressable onPress={() => onFund(user)}>
+            <LinearGradient colors={[...colors.gradient]} style={styles.fundBtn}>
+              <Text style={styles.fundText}>Fund →</Text>
+            </LinearGradient>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -88,6 +103,18 @@ const styles = StyleSheet.create({
   },
   balLabel: { fontSize: 11, color: colors.textMuted },
   bal: { fontSize: 16, fontWeight: "700", color: colors.text, marginTop: 2 },
+  actions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  toggleBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+  },
+  toggleOn: { borderColor: colors.green, backgroundColor: colors.greenBg },
+  toggleOff: { borderColor: "#fecaca", backgroundColor: "#fef2f2" },
+  toggleText: { fontWeight: "700", fontSize: 12 },
+  toggleOnText: { color: colors.green },
+  toggleOffText: { color: "#b91c1c" },
   fundBtn: { borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10 },
   fundText: { color: "#fff", fontWeight: "700", fontSize: 13 },
 });

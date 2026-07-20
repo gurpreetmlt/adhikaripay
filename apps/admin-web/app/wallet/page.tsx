@@ -67,7 +67,7 @@ export default function WalletPage() {
               Wallet & Fund
             </h1>
             <p className="mt-1 text-sm" style={{ color: B.muted }}>
-              Fund yourself, onboard Super Distributors, transfer to downline
+              Mint float to Super Distributors · reassign parents on agent detail · no admin transfer
             </p>
           </div>
           <div

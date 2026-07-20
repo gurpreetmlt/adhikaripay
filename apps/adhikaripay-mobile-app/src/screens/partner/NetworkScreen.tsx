@@ -33,6 +33,7 @@ export function NetworkScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showOnboard, setShowOnboard] = useState(false);
   const [fundTarget, setFundTarget] = useState<DownlineUser | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const childRole = CHILD_ROLE[user.role];
 
@@ -56,6 +57,21 @@ export function NetworkScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function toggleActive(target: DownlineUser) {
+    setTogglingId(target.id);
+    try {
+      await api.patch(`/users/${target.id}/active`, { isActive: !target.isActive });
+      showAlert("Updated", target.isActive ? "Deactivated" : "Activated");
+      await load(true);
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } }).response?.data?.message ?? "Failed";
+      showAlert("Error", msg);
+    } finally {
+      setTogglingId(null);
+    }
+  }
 
   const initials = user.name
     .split(" ")
@@ -115,7 +131,15 @@ export function NetworkScreen() {
         ) : downline.length === 0 ? (
           <Text style={styles.empty}>No downline yet. Tap Onboard to add.</Text>
         ) : (
-          downline.map((u) => <DownlineCard key={u.id} user={u} onFund={setFundTarget} />)
+          downline.map((u) => (
+            <DownlineCard
+              key={u.id}
+              user={u}
+              onFund={setFundTarget}
+              onToggleActive={(target) => void toggleActive(target)}
+              toggling={togglingId === u.id}
+            />
+          ))
         )}
       </ScrollView>
 

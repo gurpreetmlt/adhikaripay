@@ -20,6 +20,8 @@ export const fundWalletSchema = z
   .object({
     amount: amountSchema,
     description: z.string().trim().max(255).optional(),
+    /** When set, admin mints float into this Super Dist (direct child) instead of self. */
+    targetUserId: z.string().uuid().optional(),
     txnPin: z.string().regex(/^\d{4,6}$/).optional(),
     txnAuth: z.string().min(20).optional(),
     idempotencyKey: z.string().min(8).max(100),

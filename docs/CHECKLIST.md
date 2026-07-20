@@ -36,6 +36,9 @@
 - [x] AEPS dummy↔live switch (`AEPS_PROVIDER_MODE`) + InstantPay adapter skeleton
 - [x] AEPS compliance gates (geofence, bio-mismatch/EDD, dormancy, cash receipt)
 - [ ] Fund request approve flow
+- [x] SD/D direct-child Active/Inactive (`PATCH /users/:id/active`)
+- [x] Admin network tree move (`POST /admin/users/:id/reassign`) + hierarchy rebuild
+- [x] Admin removed from `POST /wallet/transfer` (fund mint only)
 - [ ] KYC CRUD routes
 - [ ] Commission payout report
 - [ ] InstantPay DMT/BBPS rails + merchant outlet onboarding
@@ -60,6 +63,7 @@
 - [ ] History purge for any secrets ever pushed to remote
 
 ## Last updated
+2026-07-20 — Wallet hierarchy gaps: child active toggle (SD/D), admin reassign parent, admin no longer on /wallet/transfer
 2026-07-18 — AEPS dummy/sandbox/live provider mode + InstantPay adapter + compliance gates
 2026-07-17 — Security hardening: Critical+High remediations (auth, wallet, mobile, web storage, release signing, Dependabot)
 2026-07-14 — Wallet pending balance: `GET /api/wallet/me` adds `pendingBalance` per wallet (sum of pending/initiated txns); agent web Wallet + mobile Wallet show Pending

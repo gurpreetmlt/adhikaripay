@@ -20,7 +20,13 @@ export async function fund(req: Request, res: Response): Promise<void> {
   const actor = requireActor(req);
   const input = fundWalletSchema.parse(req.body);
   await assertTxnAuthorization(actor.id, { txnPin: input.txnPin, txnAuth: input.txnAuth });
-  const result = await adminFundOwnWallet(actor, input.amount, input.description, input.idempotencyKey);
+  const result = await adminFundOwnWallet(
+    actor,
+    input.amount,
+    input.description,
+    input.idempotencyKey,
+    input.targetUserId,
+  );
   sendSuccess(res, result, "Wallet funded successfully");
 }
 

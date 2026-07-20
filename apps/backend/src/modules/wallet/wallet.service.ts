@@ -167,14 +167,31 @@ export async function transferToChild(
 
 // Admin-only entry point for money entering the system from outside (bank reconciliation).
 // Capped per call and written to the immutable audit log with the acting admin's identity.
+// Optional targetUserId: mint into a direct Super Dist child (admin has no /transfer role).
 export async function adminFundOwnWallet(
   actor: Actor,
   amount: string,
   description?: string,
   idempotencyKey?: string,
+  targetUserId?: string,
 ): Promise<{ groupId: string }> {
   assertWithinManualFundCap(amount, env.MAX_MANUAL_FUND_RUPEES);
-  const wallet = await getWalletOrThrow(actor.id, "main");
+
+  let walletUserId = actor.id;
+  if (targetUserId) {
+    const [target] = await db.select().from(users).where(eq(users.id, targetUserId)).limit(1);
+    if (!target) throw new HttpError(404, "Target user not found", "USER_NOT_FOUND");
+    if (target.parentId !== actor.id) {
+      throw new HttpError(403, "You can only fund Super Distributors you onboarded", "NOT_YOUR_DOWNLINE");
+    }
+    if (target.role !== "master_distributor") {
+      throw new HttpError(422, "Admin float load only targets Super Distributors", "INVALID_TARGET");
+    }
+    if (!target.isActive) throw new HttpError(422, "Target account is inactive", "ACCOUNT_INACTIVE");
+    walletUserId = target.id;
+  }
+
+  const wallet = await getWalletOrThrow(walletUserId, "main");
 
   const runFund = async (tx?: Tx): Promise<{ groupId: string }> => {
     if (tx) return fundWallet({ walletId: wallet.id, amount, description }, tx);
@@ -215,6 +232,7 @@ export async function adminFundOwnWallet(
       description: description ?? null,
       ledgerGroupId: result.groupId,
       idempotencyKey: idempotencyKey ?? null,
+      targetUserId: targetUserId ?? null,
     },
   });
   return result;

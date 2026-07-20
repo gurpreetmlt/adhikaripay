@@ -61,6 +61,7 @@ export default function AgentDetailPage() {
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [newParentUid, setNewParentUid] = useState("");
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -112,6 +113,29 @@ export default function AgentDetailPage() {
       toast.error(
         (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
           "Decision failed",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reassignParent() {
+    if (!agent) return;
+    const uid = newParentUid.trim().toUpperCase();
+    if (!uid) {
+      toast.error("Enter new parent UID");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.post(`/admin/users/${agent.id}/reassign`, { newParentUid: uid });
+      toast.success("Parent reassigned");
+      setNewParentUid("");
+      await load();
+    } catch (err) {
+      toast.error(
+        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
+          "Reassign failed",
       );
     } finally {
       setBusy(false);
@@ -299,6 +323,30 @@ export default function AgentDetailPage() {
                     No parent (top-level Super Distributor)
                   </p>
                 )}
+                {agent.role !== "admin" ? (
+                  <div className="mt-4 space-y-2 border-t pt-4" style={{ borderColor: B.border }}>
+                    <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: B.muted }}>
+                      Move in tree
+                    </p>
+                    <input
+                      type="text"
+                      value={newParentUid}
+                      onChange={(e) => setNewParentUid(e.target.value)}
+                      placeholder="New parent UID"
+                      className="w-full rounded-xl border px-3 py-2 text-sm outline-none"
+                      style={{ borderColor: B.border, color: B.blue }}
+                    />
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void reassignParent()}
+                      className="w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                      style={{ background: B.blue }}
+                    >
+                      Reassign parent
+                    </button>
+                  </div>
+                ) : null}
               </DetailSection>
 
               <DetailSection title="KYC Documents" icon={Banknote}>

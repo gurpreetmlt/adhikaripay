@@ -1,12 +1,28 @@
-import { and, count, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, notInArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "../../db/postgres";
-import { users, transactions, services, serviceCategories, wallets, userCommissionRates } from "../../db/postgres/schema";
+import {
+  users,
+  transactions,
+  services,
+  serviceCategories,
+  wallets,
+  userCommissionRates,
+  userHierarchy,
+} from "../../db/postgres/schema";
 import { HttpError } from "../../utils/httpError";
 import { decryptPII } from "../../utils/aes";
 import { env } from "../../config/env";
 import { findLatestAuditLog, insertAuditLog } from "../../db/postgres/repositories/auditLog";
 import type { UserRole, KycStatus, TransactionStatus } from "@adhikaripay/shared-types";
+
+/** Parent role required for each child role when admin moves someone in the tree. */
+const REQUIRED_PARENT_ROLE: Record<UserRole, UserRole | null> = {
+  admin: null,
+  master_distributor: "admin",
+  distributor: "master_distributor",
+  retailer: "distributor",
+};
 
 function maskPan(pan: string) {
   if (pan.length < 6) return "••••••••••";
@@ -292,6 +308,153 @@ export async function setUserActive(adminId: string, userId: string, isActive: b
     id: row.id,
     uid: row.uid,
     isActive: row.isActive,
+  };
+}
+
+/**
+ * Admin-only tree move: change a user's parent and rebuild the closure-table edges
+ * for that user and their entire subtree. Wallet balances are unchanged.
+ */
+export async function reassignUserParent(
+  adminId: string,
+  userId: string,
+  opts: { newParentId?: string; newParentUid?: string },
+): Promise<{
+  id: string;
+  uid: string;
+  parentId: string;
+  previousParentId: string | null;
+}> {
+  let newParentId = opts.newParentId;
+  if (!newParentId && opts.newParentUid) {
+    const [byUid] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.uid, opts.newParentUid.toUpperCase()))
+      .limit(1);
+    if (!byUid) throw new HttpError(404, "New parent not found", "PARENT_NOT_FOUND");
+    newParentId = byUid.id;
+  }
+  if (!newParentId) {
+    throw new HttpError(422, "newParentId or newParentUid is required", "PARENT_REQUIRED");
+  }
+
+  if (userId === newParentId) {
+    throw new HttpError(422, "A user cannot be their own parent", "INVALID_PARENT");
+  }
+
+  const [target] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!target) throw new HttpError(404, "User not found", "USER_NOT_FOUND");
+  if (target.role === "admin") {
+    throw new HttpError(403, "Admin accounts cannot be reassigned", "ADMIN_PROTECTED");
+  }
+
+  const requiredParentRole = REQUIRED_PARENT_ROLE[target.role];
+  if (!requiredParentRole) {
+    throw new HttpError(422, "This role cannot be reassigned", "INVALID_TARGET");
+  }
+
+  const [newParent] = await db.select().from(users).where(eq(users.id, newParentId)).limit(1);
+  if (!newParent) throw new HttpError(404, "New parent not found", "PARENT_NOT_FOUND");
+  if (!newParent.isActive) {
+    throw new HttpError(422, "New parent account is inactive", "PARENT_INACTIVE");
+  }
+  if (newParent.role !== requiredParentRole) {
+    throw new HttpError(
+      422,
+      `A ${target.role.replace(/_/g, " ")} must report to a ${requiredParentRole.replace(/_/g, " ")}`,
+      "INVALID_HIERARCHY",
+    );
+  }
+
+  if (target.parentId === newParentId) {
+    throw new HttpError(422, "User already has this parent", "ALREADY_ASSIGNED");
+  }
+
+  // Cycle guard: new parent must not be inside the target's subtree.
+  const [cycle] = await db
+    .select({ depth: userHierarchy.depth })
+    .from(userHierarchy)
+    .where(and(eq(userHierarchy.ancestorId, userId), eq(userHierarchy.descendantId, newParentId)))
+    .limit(1);
+  if (cycle) {
+    throw new HttpError(422, "Cannot move a user under their own downline", "HIERARCHY_CYCLE");
+  }
+
+  const previousParentId = target.parentId;
+
+  await db.transaction(async (tx) => {
+    const subtreeRows = await tx
+      .select({
+        descendantId: userHierarchy.descendantId,
+        depth: userHierarchy.depth,
+      })
+      .from(userHierarchy)
+      .where(eq(userHierarchy.ancestorId, userId));
+
+    const subtreeIds = subtreeRows.map((r) => r.descendantId);
+    if (subtreeIds.length === 0) {
+      throw new HttpError(500, "Hierarchy row missing for user", "HIERARCHY_CORRUPT");
+    }
+
+    // Drop edges from outside ancestors into the moved subtree (keep intra-subtree edges).
+    await tx
+      .delete(userHierarchy)
+      .where(
+        and(inArray(userHierarchy.descendantId, subtreeIds), notInArray(userHierarchy.ancestorId, subtreeIds)),
+      );
+
+    await tx
+      .update(users)
+      .set({ parentId: newParentId, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+
+    const newAncestors = await tx
+      .select({
+        ancestorId: userHierarchy.ancestorId,
+        depth: userHierarchy.depth,
+      })
+      .from(userHierarchy)
+      .where(eq(userHierarchy.descendantId, newParentId));
+
+    if (newAncestors.length === 0) {
+      throw new HttpError(500, "Hierarchy row missing for new parent", "HIERARCHY_CORRUPT");
+    }
+
+    const inserts: { ancestorId: string; descendantId: string; depth: number }[] = [];
+    for (const anc of newAncestors) {
+      for (const node of subtreeRows) {
+        inserts.push({
+          ancestorId: anc.ancestorId,
+          descendantId: node.descendantId,
+          depth: anc.depth + 1 + node.depth,
+        });
+      }
+    }
+
+    if (inserts.length > 0) {
+      await tx.insert(userHierarchy).values(inserts);
+    }
+  });
+
+  await insertAuditLog({
+    userId: adminId,
+    action: "admin.user_reassign_parent",
+    entityType: "user",
+    entityId: userId,
+    metadata: {
+      previousParentId,
+      newParentId,
+      targetUid: target.uid,
+      newParentUid: newParent.uid,
+    },
+  });
+
+  return {
+    id: target.id,
+    uid: target.uid,
+    parentId: newParentId,
+    previousParentId,
   };
 }
 

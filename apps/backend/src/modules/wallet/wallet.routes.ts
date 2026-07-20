@@ -11,4 +11,5 @@ walletRouter.use(requireAuth);
 walletRouter.get("/me", getMyWallets);
 walletRouter.get("/ledger", ledger);
 walletRouter.post("/fund", requireRole("admin"), walletTxnLimiter, fund);
-walletRouter.post("/transfer", requireRole("admin", "master_distributor", "distributor"), walletTxnLimiter, transfer);
+// Admin mints float via POST /fund only — hierarchy transfers are SD→D and D→R.
+walletRouter.post("/transfer", requireRole("master_distributor", "distributor"), walletTxnLimiter, transfer);

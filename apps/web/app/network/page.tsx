@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { AppShell } from "@/components/layout/AppShell";
-import { fetchApi } from "@/lib/api";
+import api, { fetchApi } from "@/lib/api";
 import { B, initials, roleFromUserRole } from "@/lib/brand";
 import { useAuthStore } from "@/lib/store";
 import { extractApiError } from "@/lib/onboarding";
@@ -80,65 +80,97 @@ function countAll(nodes: TreeNode[]): number {
   return c;
 }
 
-function TreeItem({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
+function TreeItem({
+  node,
+  depth = 0,
+  canToggle,
+  togglingId,
+  onToggle,
+}: {
+  node: TreeNode;
+  depth?: number;
+  canToggle: boolean;
+  togglingId: string | null;
+  onToggle: (id: string, next: boolean) => void;
+}) {
   const [open, setOpen] = useState(depth < 1);
   const hasChildren = node.children.length > 0;
   const rc = ROLE_COLORS[node.role] ?? ROLE_COLORS.retailer;
   const Icon = rc.icon;
+  const busy = togglingId === node.id;
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => hasChildren && setOpen(!open)}
+      <div
         className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-blue-50/50"
         style={{ paddingLeft: `${depth * 24 + 12}px` }}
       >
-        {hasChildren ? (
-          open ? (
-            <ChevronDown size={14} style={{ color: B.muted }} className="shrink-0" />
-          ) : (
-            <ChevronRight size={14} style={{ color: B.muted }} className="shrink-0" />
-          )
-        ) : (
-          <span className="w-3.5 shrink-0" />
-        )}
-
-        <div
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-          style={{ background: rc.bg, color: rc.text }}
+        <button
+          type="button"
+          onClick={() => hasChildren && setOpen(!open)}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
         >
-          {initials(node.name)}
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold" style={{ color: B.blue }}>
-              {node.name}
-            </span>
-            <span
-              className="h-2 w-2 shrink-0 rounded-full"
-              style={{ background: node.isActive ? B.green : "#94a3b8" }}
-            />
-          </div>
-          <span className="text-xs" style={{ color: B.muted }}>{node.mobile}</span>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-2">
-          <span
-            className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-            style={{ background: `${rc.bg}18`, color: rc.bg }}
-          >
-            {roleLabel(node.role)}
-          </span>
-          <Icon size={14} style={{ color: rc.bg }} className="hidden sm:block" />
-          {hasChildren && (
-            <span className="rounded-full px-1.5 py-0.5 text-[10px] font-bold" style={{ background: B.secondary, color: B.muted }}>
-              {countAll(node.children)}
-            </span>
+          {hasChildren ? (
+            open ? (
+              <ChevronDown size={14} style={{ color: B.muted }} className="shrink-0" />
+            ) : (
+              <ChevronRight size={14} style={{ color: B.muted }} className="shrink-0" />
+            )
+          ) : (
+            <span className="w-3.5 shrink-0" />
           )}
-        </div>
-      </button>
+
+          <div
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+            style={{ background: rc.bg, color: rc.text }}
+          >
+            {initials(node.name)}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-semibold" style={{ color: B.blue }}>
+                {node.name}
+              </span>
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ background: node.isActive ? B.green : "#94a3b8" }}
+              />
+            </div>
+            <span className="text-xs" style={{ color: B.muted }}>{node.mobile}</span>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <span
+              className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+              style={{ background: `${rc.bg}18`, color: rc.bg }}
+            >
+              {roleLabel(node.role)}
+            </span>
+            <Icon size={14} style={{ color: rc.bg }} className="hidden sm:block" />
+            {hasChildren && (
+              <span className="rounded-full px-1.5 py-0.5 text-[10px] font-bold" style={{ background: B.secondary, color: B.muted }}>
+                {countAll(node.children)}
+              </span>
+            )}
+          </div>
+        </button>
+
+        {canToggle && depth === 0 ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onToggle(node.id, !node.isActive)}
+            className="shrink-0 rounded-lg border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
+            style={{
+              borderColor: node.isActive ? "#fca5a5" : B.green,
+              color: node.isActive ? "#b91c1c" : B.green,
+            }}
+          >
+            {busy ? "…" : node.isActive ? "Deactivate" : "Activate"}
+          </button>
+        ) : null}
+      </div>
 
       {open && hasChildren && (
         <div className="relative">
@@ -147,7 +179,14 @@ function TreeItem({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
             style={{ left: `${depth * 24 + 24}px`, background: B.border }}
           />
           {node.children.map((child) => (
-            <TreeItem key={child.id} node={child} depth={depth + 1} />
+            <TreeItem
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              canToggle={false}
+              togglingId={togglingId}
+              onToggle={onToggle}
+            />
           ))}
         </div>
       )}
@@ -164,6 +203,9 @@ export default function NetworkPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"tree" | "table">("tree");
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const canToggleChildren = user?.role === "master_distributor" || user?.role === "distributor";
 
   useEffect(() => {
     if (hydrated && !accessToken) router.replace("/login");
@@ -185,6 +227,20 @@ export default function NetworkPage() {
     })();
     return () => { alive = false; };
   }, [accessToken, user]);
+
+  async function toggleChild(id: string, next: boolean) {
+    setTogglingId(id);
+    try {
+      await api.patch(`/users/${id}/active`, { isActive: next });
+      toast.success(next ? "Activated" : "Deactivated");
+      const res = await fetchApi<NetworkData>("/users/network");
+      setData(res);
+    } catch (err) {
+      toast.error(extractApiError(err, "Could not update status"));
+    } finally {
+      setTogglingId(null);
+    }
+  }
 
   if (!hydrated || !accessToken || !user) return null;
 
@@ -212,6 +268,7 @@ export default function NetworkPage() {
   const totalDirect = data?.downline.length ?? 0;
   const totalAll = data?.tree ? countAll(data.tree) : 0;
   const activeCount = (data?.downline ?? []).filter((m) => m.isActive).length;
+  const directIds = new Set((data?.downline ?? []).map((d) => d.id));
 
   return (
     <AppShell>
@@ -329,7 +386,14 @@ export default function NetworkPage() {
               ) : (
                 <div className="divide-y" style={{ borderColor: B.border }}>
                   {data!.tree.map((node) => (
-                    <TreeItem key={node.id} node={node} depth={0} />
+                    <TreeItem
+                      key={node.id}
+                      node={node}
+                      depth={0}
+                      canToggle={canToggleChildren}
+                      togglingId={togglingId}
+                      onToggle={(id, next) => void toggleChild(id, next)}
+                    />
                   ))}
                 </div>
               )
@@ -343,7 +407,7 @@ export default function NetworkPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b" style={{ borderColor: B.border }}>
-                      {["Agent", "UID", "Role", "Status", "Joined"].map((h) => (
+                      {["Agent", "UID", "Role", "Status", "Joined", "Action"].map((h) => (
                         <th key={h} className="py-2.5 pb-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
                           {h}
                         </th>
@@ -353,6 +417,7 @@ export default function NetworkPage() {
                   <tbody>
                     {filtered.map((m) => {
                       const rc = ROLE_COLORS[m.role] ?? ROLE_COLORS.retailer;
+                      const isDirect = directIds.has(m.id);
                       return (
                         <tr key={m.id} className="border-b transition-colors hover:bg-blue-50/40" style={{ borderColor: B.border }}>
                           <td className="py-3">
@@ -381,6 +446,24 @@ export default function NetworkPage() {
                             </span>
                           </td>
                           <td className="py-3 text-xs" style={{ color: B.muted }}>{formatDate(m.createdAt)}</td>
+                          <td className="py-3">
+                            {canToggleChildren && isDirect ? (
+                              <button
+                                type="button"
+                                disabled={togglingId === m.id}
+                                onClick={() => void toggleChild(m.id, !m.isActive)}
+                                className="rounded-lg border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
+                                style={{
+                                  borderColor: m.isActive ? "#fca5a5" : B.green,
+                                  color: m.isActive ? "#b91c1c" : B.green,
+                                }}
+                              >
+                                {togglingId === m.id ? "…" : m.isActive ? "Deactivate" : "Activate"}
+                              </button>
+                            ) : (
+                              <span className="text-xs" style={{ color: B.muted }}>—</span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}

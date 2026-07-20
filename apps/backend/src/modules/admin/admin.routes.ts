@@ -12,6 +12,7 @@ import {
   getAdminUserCommissions,
   upsertAdminUserCommissions,
   setUserActive,
+  reassignUserParent,
   listKycQueue,
   decideKyc,
   listAdminTransactions,
@@ -77,6 +78,22 @@ adminRouter.patch("/users/:id/active", async (req, res) => {
   const body = z.object({ isActive: z.boolean() }).parse(req.body);
   const result = await setUserActive(req.auth.sub, req.params.id, body.isActive);
   sendSuccess(res, result, body.isActive ? "User activated" : "User deactivated");
+});
+
+adminRouter.post("/users/:id/reassign", async (req, res) => {
+  if (!req.auth) throw new HttpError(401, "Authentication required", "UNAUTHENTICATED");
+  const body = z
+    .object({
+      newParentId: z.string().uuid().optional(),
+      newParentUid: z.string().min(4).max(20).optional(),
+    })
+    .refine((v) => Boolean(v.newParentId || v.newParentUid), {
+      message: "newParentId or newParentUid is required",
+    })
+    .parse(req.body);
+
+  const result = await reassignUserParent(req.auth.sub, req.params.id, body);
+  sendSuccess(res, result, "Parent reassigned");
 });
 
 adminRouter.get("/kyc", async (req, res) => {

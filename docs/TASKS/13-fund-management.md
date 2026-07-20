@@ -13,8 +13,10 @@ Admin load float; distributor fund request; admin approve.
 | `apps/web/app/dashboard/page.tsx` | Partner fund UI |
 
 ## Roles
-- Admin: `POST /wallet/fund` (admin only)
-- Distributor → retailer: `POST /wallet/transfer`
+- Admin: `POST /wallet/fund` (self or `targetUserId` = direct Super Dist) — no `/wallet/transfer`
+- Super Dist → Distributor / Distributor → Retailer: `POST /wallet/transfer`
+- SD/D: `PATCH /users/:id/active` (direct children only)
+- Admin tree move: `POST /admin/users/:id/reassign` (`newParentId` or `newParentUid`)
 
 ## May need NEW
 - `fund_requests` table + routes (if not exists — check schema first)
