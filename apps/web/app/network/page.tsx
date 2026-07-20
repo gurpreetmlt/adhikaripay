@@ -13,7 +13,6 @@ import {
   Network as NetworkIcon,
   Store,
   ArrowDownToLine,
-  Landmark,
   ArrowUpFromLine,
   History,
 } from "lucide-react";
@@ -460,7 +459,6 @@ export default function NetworkPage() {
                         "Cash-IN Wallet",
                         "Credit",
                         "Top-Up",
-                        "Receiving",
                         "Debit",
                         "History",
                         "Status",
@@ -520,17 +518,7 @@ export default function NetworkPage() {
                           </td>
                           <td className="px-3 py-3">
                             <IconAction
-                              title="Put receiving — collect funds"
-                              disabled={!collectOk}
-                              color="#2563EB"
-                              onClick={() => setPullTarget(toDownlineUser(m))}
-                            >
-                              <Landmark size={16} />
-                            </IconAction>
-                          </td>
-                          <td className="px-3 py-3">
-                            <IconAction
-                              title="Debit — collect funds"
+                              title="Debit — pull funds from partner"
                               disabled={!collectOk}
                               color="#DC2626"
                               onClick={() => setPullTarget(toDownlineUser(m))}
