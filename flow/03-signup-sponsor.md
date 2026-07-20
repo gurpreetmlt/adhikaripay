@@ -2,13 +2,12 @@
 
 Retailer self-signup under a **Distributor** (phone search).
 
-1. Enter name, own mobile, **Distributor 10-digit phone**
-2. `GET /api/auth/sponsor/search?mobile=XXX` (min **3** digits, prefix match) → list of active Distributors
-3. Tap Dist in list to select (exact 10-digit + 1 match auto-selects)
-4. `POST /api/auth/signup/request` → OTP (uses selected `sponsorUid`)
-5. `POST /api/auth/signup/verify` → retailer `parentId` = Dist
+1. Enter name, **own mobile**, then **Distributor 10-digit phone**
+2. Full Dist mobile → auto-select Dist name (no list/tap)
+3. `POST /api/auth/signup/request` → OTP (uses selected `sponsorUid`)
+4. `POST /api/auth/signup/verify` → retailer `parentId` = Dist
 
-Legacy: `GET /api/auth/sponsor/:uid` still works.
+Lookup: `GET /api/auth/sponsor/search?mobile=XXXXXXXXXX` (exact 10 digits).
 
 ## UI
 - Web: [`apps/web/app/signup/page.tsx`](../apps/web/app/signup/page.tsx)

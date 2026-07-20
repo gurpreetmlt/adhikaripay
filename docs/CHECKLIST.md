@@ -40,7 +40,9 @@
 - [x] Admin network tree move (`POST /admin/users/:id/reassign`) + hierarchy rebuild
 - [x] Admin removed from `POST /wallet/transfer` (fund mint only)
 - [x] Transfer role pair (SD→D, D→R) + inactive target blocked
-- [x] Wallet pull/Wapas (`/wallet/pull/request` + `/confirm`) child OTP + parent PIN
+- [x] Wallet pull/Collect (`/wallet/pull/request` + `/confirm`) child OTP + parent PIN
+- [x] Network table: Party + wallets + Top-Up / Receiving / Debit / History icon tooltips (English UI)
+- [x] Product UI English-only rule (`.cursor/rules/ui-english-only.mdc`)
 - [x] Agent flow docs folder [`flow/`](../flow/INDEX.md)
 - [ ] KYC CRUD routes
 - [ ] Commission payout report

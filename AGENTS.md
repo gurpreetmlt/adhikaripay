@@ -19,6 +19,8 @@ AI editor token bachane ke liye **poori repo mat padho**. Sirf is file + relevan
 - **Product name:** Adhikari Pay (use this exact name in UI and agent docs)
 - **npm workspaces:** `@adhikaripay/*` (e.g. `@adhikaripay/backend`, `@adhikaripay/mobile`)
 - **Folder path:** `apps/mobile`
+- **UI language:** English only in all product frontends (web / admin / mobile). Owner may command in Hinglish; never ship Hinglish UI copy. Rule: [`.cursor/rules/ui-english-only.mdc`](.cursor/rules/ui-english-only.mdc)
+- **App flows (AI):** [`flow/INDEX.md`](flow/INDEX.md)
 
 ## Repo layout (cheat sheet)
 

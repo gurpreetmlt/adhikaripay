@@ -21,6 +21,8 @@ export interface DownlineUser {
   kycStatus: KycStatus;
   isActive: boolean;
   mainBalance: string;
+  /** AEPS / cash-in wallet balance when returned by downline/network APIs. */
+  aepsBalance?: string;
   createdAt: string;
 }
 

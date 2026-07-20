@@ -32,7 +32,6 @@ export default function SignupPage() {
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [sponsorMobile, setSponsorMobile] = useState("");
-  const [sponsorList, setSponsorList] = useState<SponsorInfo[]>([]);
   const [sponsor, setSponsor] = useState<SponsorInfo | null>(null);
   const [sponsorStatus, setSponsorStatus] = useState<"idle" | "loading" | "ok" | "empty" | "error">("idle");
   const [password, setPassword] = useState("");
@@ -40,11 +39,11 @@ export default function SignupPage() {
   const [devOtp, setDevOtp] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Only resolve when full 10-digit distributor mobile is entered — auto-select, no list.
   useEffect(() => {
     const phone = sponsorMobile.replace(/\D/g, "").slice(0, 10);
     setSponsor(null);
-    if (phone.length < 3) {
-      setSponsorList([]);
+    if (phone.length !== 10) {
       setSponsorStatus("idle");
       return;
     }
@@ -58,22 +57,18 @@ export default function SignupPage() {
         });
         if (cancelled) return;
         if (!data.success) throw new Error(data.message);
-        const items = data.data.items ?? [];
-        setSponsorList(items);
-        if (items.length === 0) {
+        const match = (data.data.items ?? []).find((i) => i.mobile === phone) ?? data.data.items?.[0];
+        if (!match) {
           setSponsorStatus("empty");
-        } else if (items.length === 1 && phone.length === 10) {
-          setSponsor(items[0]!);
-          setSponsorStatus("ok");
-        } else {
-          setSponsorStatus("ok");
+          return;
         }
+        setSponsor(match);
+        setSponsorStatus("ok");
       } catch {
         if (cancelled) return;
-        setSponsorList([]);
         setSponsorStatus("error");
       }
-    }, 300);
+    }, 250);
 
     return () => {
       cancelled = true;
@@ -85,7 +80,7 @@ export default function SignupPage() {
     e?.preventDefault();
     if (!name || !mobile) return;
     if (!sponsor) {
-      toast.error("Distributor phone se list mein se select karo");
+      toast.error("Distributor ka sahi 10-digit mobile dalo");
       return;
     }
     setLoading(true);
@@ -142,7 +137,7 @@ export default function SignupPage() {
           Create agent account
         </h1>
         <p className="mt-1 text-sm" style={{ color: B.muted }}>
-          Signup with OTP → KYC → set PIN. Distributor ka 10-digit phone dalo.
+          Signup with OTP → KYC → set PIN. Apna mobile, phir Distributor mobile.
         </p>
 
         {step === "form" ? (
@@ -176,51 +171,26 @@ export default function SignupPage() {
                   value={sponsorMobile}
                   onChange={(e) => setSponsorMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
                   className="w-full bg-transparent text-sm outline-none"
-                  placeholder="972… names appear below"
+                  placeholder="10-digit distributor mobile"
                   autoComplete="off"
                 />
               </Field>
               {sponsorStatus === "loading" ? (
                 <p className="mt-1.5 text-xs" style={{ color: B.muted }}>
-                  Searching distributor…
+                  Checking distributor…
                 </p>
               ) : null}
-              {sponsorMobile.length > 0 && sponsorMobile.length < 3 ? (
-                <p className="mt-1.5 text-xs" style={{ color: B.muted }}>
-                  Kam se kam 3 digit type karo
-                </p>
-              ) : null}
-              {sponsorList.length > 0 ? (
-                <ul className="mt-2 space-y-1.5">
-                  {sponsorList.map((item) => {
-                    const selected = sponsor?.uid === item.uid;
-                    return (
-                      <li key={item.uid}>
-                        <button
-                          type="button"
-                          onClick={() => setSponsor(item)}
-                          className="flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition"
-                          style={{
-                            borderColor: selected ? B.green : B.border,
-                            background: selected ? `${B.green}14` : "#fff",
-                            color: B.blue,
-                          }}
-                        >
-                          {selected ? <CheckCircle2 size={16} style={{ color: B.green }} /> : <Phone size={14} style={{ color: B.muted }} />}
-                          <span className="min-w-0 flex-1">
-                            <span className="block font-semibold">{item.name}</span>
-                            <span className="block text-xs font-normal" style={{ color: B.muted }}>
-                              {item.mobile} · {item.uid}
-                            </span>
-                          </span>
-                          <span className="text-[10px] font-semibold uppercase" style={{ color: B.muted }}>
-                            Dist
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+              {sponsorStatus === "ok" && sponsor ? (
+                <div
+                  className="mt-2 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold"
+                  style={{ background: `${B.green}14`, color: B.greenDark ?? B.green }}
+                >
+                  <CheckCircle2 size={16} className="shrink-0" />
+                  <span>
+                    {sponsor.name}
+                    <span className="ml-1 font-normal opacity-80">· Distributor</span>
+                  </span>
+                </div>
               ) : null}
               {sponsorStatus === "empty" ? (
                 <div
@@ -237,7 +207,7 @@ export default function SignupPage() {
                   style={{ background: "#DC262614", color: "#B91C1C" }}
                 >
                   <AlertCircle size={14} className="shrink-0" />
-                  Search failed — dubara try karo
+                  Lookup failed — dubara try karo
                 </div>
               ) : null}
             </div>

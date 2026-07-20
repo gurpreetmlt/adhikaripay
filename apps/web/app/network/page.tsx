@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   Users,
@@ -12,14 +12,23 @@ import {
   Crown,
   Network as NetworkIcon,
   Store,
+  ArrowDownToLine,
+  Landmark,
+  ArrowUpFromLine,
+  History,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { AppShell } from "@/components/layout/AppShell";
+import { FundForm } from "@/components/dashboard/FundForm";
+import { PullForm } from "@/components/dashboard/PullForm";
+import { Modal } from "@/components/ui/Modal";
 import api, { fetchApi } from "@/lib/api";
 import { B, initials, roleFromUserRole } from "@/lib/brand";
 import { useAuthStore } from "@/lib/store";
 import { extractApiError } from "@/lib/onboarding";
 import { useAuthHydrated } from "@/lib/useAuthHydrated";
+import { formatInr } from "@/lib/walletLabels";
+import type { DownlineUser, LedgerEntry } from "@/lib/types";
 import type { UserRole } from "@adhikaripay/shared-types";
 
 interface DownlineItem {
@@ -30,7 +39,9 @@ interface DownlineItem {
   role: string;
   isActive: boolean;
   mainBalance: string;
+  aepsBalance?: string;
   createdAt: string;
+  kycStatus?: string;
 }
 
 interface TreeNode extends DownlineItem {
@@ -56,10 +67,6 @@ const ROLE_UI: Record<string, { downlineLabel: string; emptyMsg: string }> = {
   distributor: { downlineLabel: "Retailers", emptyMsg: "No retailers in your network yet" },
   retailer: { downlineLabel: "", emptyMsg: "" },
 };
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-}
 
 function roleLabel(role: string) {
   if (role === "master_distributor") return "Super Distributor";
@@ -204,8 +211,48 @@ export default function NetworkPage() {
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"tree" | "table">("table");
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [fundTarget, setFundTarget] = useState<DownlineUser | null>(null);
+  const [pullTarget, setPullTarget] = useState<DownlineUser | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<DownlineItem | null>(null);
+  const [historyRows, setHistoryRows] = useState<LedgerEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const canToggleChildren = user?.role === "master_distributor" || user?.role === "distributor";
+  const canMoneyActions = canToggleChildren;
+
+  function toDownlineUser(m: DownlineItem): DownlineUser {
+    return {
+      id: m.id,
+      uid: m.uid,
+      name: m.name,
+      mobile: m.mobile,
+      role: m.role as DownlineUser["role"],
+      kycStatus: (m.kycStatus as DownlineUser["kycStatus"]) ?? "pending",
+      isActive: m.isActive,
+      mainBalance: m.mainBalance,
+      aepsBalance: m.aepsBalance,
+      createdAt: m.createdAt,
+    };
+  }
+
+  async function openHistory(m: DownlineItem) {
+    setHistoryTarget(m);
+    setHistoryLoading(true);
+    setHistoryRows([]);
+    try {
+      const entries = await fetchApi<LedgerEntry[]>("/wallet/ledger", { limit: 100, offset: 0 });
+      setHistoryRows(entries.filter((e) => e.referenceId === m.id));
+    } catch (err) {
+      toast.error(extractApiError(err, "Failed to load history"));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function reloadNetwork() {
+    const res = await fetchApi<NetworkData>("/users/network");
+    setData(res);
+  }
 
   useEffect(() => {
     if (hydrated && !accessToken) router.replace("/login");
@@ -404,49 +451,104 @@ export default function NetworkPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[920px] text-sm">
                   <thead>
-                    <tr className="border-b" style={{ borderColor: B.border }}>
-                      {["Agent", "UID", "Role", "Status", "Joined", "Action"].map((h) => (
-                        <th key={h} className="py-2.5 pb-3 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                    <tr className="border-b" style={{ borderColor: B.border, background: "#334155" }}>
+                      {[
+                        "Party",
+                        "Main Wallet",
+                        "Cash-IN Wallet",
+                        "Credit",
+                        "Top-Up",
+                        "Receiving",
+                        "Debit",
+                        "History",
+                        "Status",
+                      ].map((h) => (
+                        <th
+                          key={h}
+                          className="whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-white"
+                        >
                           {h}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((m) => {
-                      const rc = ROLE_COLORS[m.role] ?? ROLE_COLORS.retailer;
+                    {filtered.map((m, idx) => {
                       const isDirect = directIds.has(m.id);
+                      const moneyOk = canMoneyActions && isDirect && m.isActive;
+                      const collectOk = moneyOk && Number(m.mainBalance) > 0;
                       return (
-                        <tr key={m.id} className="border-b transition-colors hover:bg-blue-50/40" style={{ borderColor: B.border }}>
-                          <td className="py-3">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold" style={{ background: rc.bg, color: rc.text }}>
-                                {initials(m.name)}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold" style={{ color: B.blue }}>{m.name}</p>
-                                <p className="text-xs" style={{ color: B.muted }}>{m.mobile}</p>
-                              </div>
-                            </div>
+                        <tr
+                          key={m.id}
+                          className="border-b transition-colors hover:bg-blue-50/40"
+                          style={{
+                            borderColor: B.border,
+                            background: idx % 2 === 0 ? "#FFFEF8" : "#fff",
+                          }}
+                        >
+                          <td className="px-3 py-3">
+                            <p className="text-sm font-bold uppercase tracking-wide" style={{ color: B.blue }}>
+                              {m.name}
+                            </p>
+                            <p className="text-xs font-medium" style={{ color: B.muted }}>
+                              {m.mobile}
+                            </p>
+                            <p className="font-mono text-[11px]" style={{ color: B.muted }}>
+                              {m.uid} · {roleLabel(m.role)}
+                            </p>
                           </td>
-                          <td className="py-3 font-mono text-xs" style={{ color: B.muted }}>{m.uid}</td>
-                          <td className="py-3">
-                            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: `${rc.bg}18`, color: rc.bg }}>
-                              {roleLabel(m.role)}
-                            </span>
+                          <td className="px-3 py-3 font-semibold tabular-nums" style={{ color: B.blue }}>
+                            {formatInr(m.mainBalance)}
                           </td>
-                          <td className="py-3">
-                            <span className="flex items-center gap-1.5">
-                              <span className="h-2 w-2 rounded-full" style={{ background: m.isActive ? B.green : "#94a3b8" }} />
-                              <span className="text-xs" style={{ color: m.isActive ? B.green : B.muted }}>
-                                {m.isActive ? "Active" : "Inactive"}
-                              </span>
-                            </span>
+                          <td className="px-3 py-3 font-semibold tabular-nums" style={{ color: B.blue }}>
+                            {formatInr(m.aepsBalance ?? "0")}
                           </td>
-                          <td className="py-3 text-xs" style={{ color: B.muted }}>{formatDate(m.createdAt)}</td>
-                          <td className="py-3">
+                          <td className="px-3 py-3 text-xs" style={{ color: B.muted }}>
+                            —
+                          </td>
+                          <td className="px-3 py-3">
+                            <IconAction
+                              title="Top up — send funds"
+                              disabled={!moneyOk}
+                              color="#DC2626"
+                              onClick={() => setFundTarget(toDownlineUser(m))}
+                            >
+                              <ArrowDownToLine size={16} />
+                            </IconAction>
+                          </td>
+                          <td className="px-3 py-3">
+                            <IconAction
+                              title="Put receiving — collect funds"
+                              disabled={!collectOk}
+                              color="#2563EB"
+                              onClick={() => setPullTarget(toDownlineUser(m))}
+                            >
+                              <Landmark size={16} />
+                            </IconAction>
+                          </td>
+                          <td className="px-3 py-3">
+                            <IconAction
+                              title="Debit — collect funds"
+                              disabled={!collectOk}
+                              color="#DC2626"
+                              onClick={() => setPullTarget(toDownlineUser(m))}
+                            >
+                              <ArrowUpFromLine size={16} />
+                            </IconAction>
+                          </td>
+                          <td className="px-3 py-3">
+                            <IconAction
+                              title="History"
+                              disabled={false}
+                              color="#F59E0B"
+                              onClick={() => void openHistory(m)}
+                            >
+                              <History size={16} />
+                            </IconAction>
+                          </td>
+                          <td className="px-3 py-3">
                             {canToggleChildren && isDirect ? (
                               <button
                                 type="button"
@@ -461,7 +563,9 @@ export default function NetworkPage() {
                                 {togglingId === m.id ? "…" : m.isActive ? "Inactive" : "Active"}
                               </button>
                             ) : (
-                              <span className="text-xs" style={{ color: B.muted }}>—</span>
+                              <span className="text-xs" style={{ color: m.isActive ? B.green : B.muted }}>
+                                {m.isActive ? "Active" : "Inactive"}
+                              </span>
                             )}
                           </td>
                         </tr>
@@ -483,6 +587,77 @@ export default function NetworkPage() {
           </div>
         )}
       </div>
+
+      {fundTarget && (
+        <FundForm
+          target={fundTarget}
+          onClose={() => setFundTarget(null)}
+          onSuccess={() => void reloadNetwork()}
+        />
+      )}
+      {pullTarget && (
+        <PullForm
+          target={pullTarget}
+          onClose={() => setPullTarget(null)}
+          onSuccess={() => void reloadNetwork()}
+        />
+      )}
+      {historyTarget && (
+        <Modal title={`History — ${historyTarget.name}`} onClose={() => setHistoryTarget(null)}>
+          {historyLoading ? (
+            <p className="text-sm text-gray-500">Loading…</p>
+          ) : historyRows.length === 0 ? (
+            <p className="text-sm text-gray-500">No transfers with this partner in your ledger yet.</p>
+          ) : (
+            <ul className="max-h-72 space-y-2 overflow-y-auto text-sm">
+              {historyRows.map((e) => (
+                <li key={e.id} className="rounded-lg border border-border-subtle px-3 py-2">
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-gray-900">
+                      {e.description || e.referenceType}
+                    </span>
+                    <span className={e.entryType === "credit" ? "font-semibold text-green-600" : "font-semibold text-red-600"}>
+                      {e.entryType === "credit" ? "+" : "−"}
+                      {formatInr(e.amount)}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    {new Date(e.createdAt).toLocaleString("en-IN")}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Modal>
+      )}
     </AppShell>
+  );
+}
+
+function IconAction({
+  title,
+  disabled,
+  color,
+  onClick,
+  children,
+}: {
+  title: string;
+  disabled: boolean;
+  color: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+      className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
+      style={{ background: color }}
+    >
+      {children}
+    </button>
   );
 }

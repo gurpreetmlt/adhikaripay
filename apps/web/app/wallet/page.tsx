@@ -208,10 +208,10 @@ export default function WalletPage() {
           <div className="overflow-hidden rounded-2xl border bg-white" style={{ borderColor: B.border }}>
             <div className="border-b px-5 py-4" style={{ borderColor: B.border }}>
               <h2 className="font-bold" style={{ color: B.blue }}>
-                Downline — Fund / Wapas
+                Downline — Fund / Collect
               </h2>
               <p className="mt-0.5 text-xs" style={{ color: B.muted }}>
-                Send needs your PIN. Wapas sends OTP to partner phone, then you enter OTP + PIN.
+                Fund needs your PIN. Collect sends OTP to partner phone, then you enter OTP + PIN.
               </p>
             </div>
             {downline.length === 0 ? (
@@ -290,7 +290,7 @@ export default function WalletPage() {
                             style={{ borderColor: B.blue, color: B.blue }}
                             onClick={() => setPullTarget(d)}
                           >
-                            Wapas
+                            Collect
                           </button>
                         </div>
                       </td>

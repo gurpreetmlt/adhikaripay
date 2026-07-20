@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { db } from "../../db/postgres";
 import { users, wallets } from "../../db/postgres/schema";
 import { insertAuditLog } from "../../db/postgres/repositories/auditLog";
@@ -17,6 +17,8 @@ export interface DownlineUserView {
   kycStatus: string;
   isActive: boolean;
   mainBalance: string;
+  /** AEPS / cash-in wallet; "0" if the user has no aeps wallet row yet. */
+  aepsBalance: string;
   createdAt: Date;
 }
 
@@ -50,7 +52,18 @@ export async function getDownline(actorId: string): Promise<DownlineUserView[]> 
     .innerJoin(wallets, and(eq(wallets.userId, users.id), eq(wallets.walletType, "main")))
     .where(eq(users.parentId, actorId));
 
-  return rows;
+  if (rows.length === 0) return [];
+
+  const aepsRows = await db
+    .select({ userId: wallets.userId, balance: wallets.balance })
+    .from(wallets)
+    .where(and(inArray(wallets.userId, rows.map((r) => r.id)), eq(wallets.walletType, "aeps")));
+  const aepsByUser = new Map(aepsRows.map((r) => [r.userId, r.balance]));
+
+  return rows.map((r) => ({
+    ...r,
+    aepsBalance: aepsByUser.get(r.id) ?? "0",
+  }));
 }
 
 export interface DownlineTreeNode extends DownlineUserView {

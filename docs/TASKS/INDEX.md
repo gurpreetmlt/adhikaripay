@@ -18,6 +18,7 @@
 | 12 | Wallet & ledger | M | [12-wallet-ledger.md](12-wallet-ledger.md) |
 | 13 | Fund management | M | [13-fund-management.md](13-fund-management.md) |
 | — | Wallet hierarchy | M | [wallet-hierarchy.md](wallet-hierarchy.md) |
+| — | Network table actions | M | [network-table-actions.md](network-table-actions.md) |
 
 ## Web UI
 | # | Task | Size | File |
