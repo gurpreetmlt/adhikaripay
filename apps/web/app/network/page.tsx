@@ -459,7 +459,7 @@ export default function NetworkPage() {
                         "Cash-IN Wallet",
                         "Credit",
                         "Top-Up",
-                        "Debit",
+                        "Reverse",
                         "History",
                         "Status",
                       ].map((h) => (
@@ -518,7 +518,7 @@ export default function NetworkPage() {
                           </td>
                           <td className="px-3 py-3">
                             <IconAction
-                              title="Debit — pull funds from partner"
+                              title="Reverse — pull funds from partner"
                               disabled={!collectOk}
                               color="#DC2626"
                               onClick={() => setPullTarget(toDownlineUser(m))}

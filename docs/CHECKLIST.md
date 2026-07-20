@@ -43,6 +43,7 @@
 - [x] Wallet pull/Collect (`/wallet/pull/request` + `/confirm`) child OTP + parent PIN
 - [x] Network table: Party + wallets + Top-Up / Receiving / Debit / History icon tooltips (English UI)
 - [x] Product UI English-only rule (`.cursor/rules/ui-english-only.mdc`)
+- [x] Distributor retailer activity: txn-based Transacted/No Activity + 6-month history; Quick Actions raised; wallet **Reverse** label
 - [x] Agent flow docs folder [`flow/`](../flow/INDEX.md)
 - [ ] KYC CRUD routes
 - [ ] Commission payout report
@@ -68,6 +69,7 @@
 - [ ] History purge for any secrets ever pushed to remote
 
 ## Last updated
+2026-07-20 — Distributor activity metric (success txns) + monthly history; Quick Actions up; Collect/Debit → Reverse
 2026-07-20 — Wallet pull (Wapas): child OTP + parent PIN; `flow/` agent docs; migration `0015_wallet_pull_otp`
 2026-07-20 — Signup: `GET /auth/sponsor/:uid` shows Distributor name; retailer maps under that Dist
 2026-07-20 — Wallet hierarchy: transfer enforces SD→D / D→R + active target; task doc `wallet-hierarchy.md`

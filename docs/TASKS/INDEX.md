@@ -19,6 +19,7 @@
 | 13 | Fund management | M | [13-fund-management.md](13-fund-management.md) |
 | — | Wallet hierarchy | M | [wallet-hierarchy.md](wallet-hierarchy.md) |
 | — | Network table actions | M | [network-table-actions.md](network-table-actions.md) |
+| — | Retailer activity metric | M | [retailer-activity-metric.md](retailer-activity-metric.md) |
 
 ## Web UI
 | # | Task | Size | File |

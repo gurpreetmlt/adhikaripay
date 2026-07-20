@@ -23,7 +23,7 @@ interface PullRequestResult {
 }
 
 /**
- * Debit funds from a direct child: OTP → child's phone, parent enters OTP + txn PIN.
+ * Reverse (pull) funds from a direct child: OTP → child's phone, parent enters OTP + txn PIN.
  */
 export function PullForm({ target, onClose, onSuccess }: PullFormProps) {
   const [step, setStep] = useState<"amount" | "otp">("amount");
@@ -73,18 +73,18 @@ export function PullForm({ target, onClose, onSuccess }: PullFormProps) {
         ...(description ? { description } : {}),
       });
       attemptKey.current.clear();
-      toast.success(`₹${amount} debited from ${target.name}`);
+      toast.success(`₹${amount} reversed from ${target.name}`);
       onSuccess();
       onClose();
     } catch (err) {
-      toast.error(extractApiError(err, "Debit failed"));
+      toast.error(extractApiError(err, "Reverse failed"));
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <Modal title={`Debit · ${target.name}`} onClose={onClose}>
+    <Modal title={`Reverse · ${target.name}`} onClose={onClose}>
       {step === "amount" ? (
         <form onSubmit={requestOtp} className="space-y-3">
           <p className="text-xs text-gray-500">
@@ -127,7 +127,7 @@ export function PullForm({ target, onClose, onSuccess }: PullFormProps) {
       ) : (
         <form onSubmit={confirm} className="space-y-3">
           <p className="text-xs text-gray-500">
-            Debiting ₹{amount} from {target.name}
+            Reversing ₹{amount} from {target.name}
             {maskedMobile ? ` · OTP sent to ${maskedMobile}` : ""}
           </p>
           {devOtp ? (
@@ -167,7 +167,7 @@ export function PullForm({ target, onClose, onSuccess }: PullFormProps) {
             disabled={loading || otp.length !== 6 || txnPin.length !== 4}
             className="w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60"
           >
-            {loading ? "Debiting…" : "Confirm debit"}
+            {loading ? "Reversing…" : "Confirm reverse"}
           </button>
           <button
             type="button"

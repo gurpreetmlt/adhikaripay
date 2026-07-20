@@ -62,16 +62,38 @@ async function getRetailerStats(userId: string) {
 
 async function getDistributorStats(userId: string) {
   const today = todayStart();
+  const monthStart = (() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  })();
 
-  // Get all retailers under this distributor
+  // Direct retailers under this distributor
   const retailers = await db
-    .select({ id: users.id, isActive: users.isActive })
+    .select({ id: users.id, createdAt: users.createdAt })
     .from(users)
     .where(and(eq(users.parentId, userId), eq(users.role, "retailer")));
 
   const retailerIds = retailers.map((r) => r.id);
-  const activeToday = retailers.filter((r) => r.isActive).length;
-  const inactive = retailers.length - activeToday;
+
+  /** Distinct retailers with ≥1 successful txn in the current calendar month. */
+  let transactedThisMonth = 0;
+  if (retailerIds.length > 0) {
+    const activeRows = await db
+      .select({ userId: transactions.userId })
+      .from(transactions)
+      .where(
+        and(
+          inArray(transactions.userId, retailerIds),
+          eq(transactions.status, "success"),
+          gte(transactions.createdAt, monthStart),
+        ),
+      )
+      .groupBy(transactions.userId);
+    transactedThisMonth = activeRows.length;
+  }
+  const noActivityThisMonth = Math.max(0, retailers.length - transactedThisMonth);
 
   let todayVolume = "0";
   let todayCommission = "0";
@@ -82,7 +104,13 @@ async function getDistributorStats(userId: string) {
     const [vol] = await db
       .select({ total: sql<string>`coalesce(sum(${transactions.amount}), '0')` })
       .from(transactions)
-      .where(and(inArray(transactions.userId, retailerIds), gte(transactions.createdAt, today)));
+      .where(
+        and(
+          inArray(transactions.userId, retailerIds),
+          eq(transactions.status, "success"),
+          gte(transactions.createdAt, today),
+        ),
+      );
     todayVolume = vol?.total ?? "0";
 
     const [comm] = await db
@@ -97,7 +125,13 @@ async function getDistributorStats(userId: string) {
         volume: sql<string>`coalesce(sum(${transactions.amount}), '0')`,
       })
       .from(transactions)
-      .where(and(inArray(transactions.userId, retailerIds), gte(transactions.createdAt, today)))
+      .where(
+        and(
+          inArray(transactions.userId, retailerIds),
+          eq(transactions.status, "success"),
+          gte(transactions.createdAt, today),
+        ),
+      )
       .groupBy(transactions.userId)
       .orderBy(sql`sum(${transactions.amount}) desc`)
       .limit(5);
@@ -117,12 +151,78 @@ async function getDistributorStats(userId: string) {
     }
   }
 
+  const activityHistory = await buildRetailerActivityHistory(retailers, retailerIds);
+
   return {
     role: "distributor" as const,
-    retailers: { total: retailers.length, active: activeToday, inactive },
+    retailers: {
+      total: retailers.length,
+      /** ≥1 successful txn this calendar month */
+      active: transactedThisMonth,
+      /** Zero successful txns this calendar month */
+      inactive: noActivityThisMonth,
+    },
     today: { volume: todayVolume, commission: todayCommission },
     topRetailers,
+    activityHistory,
   };
+}
+
+type RetailerRow = { id: string; createdAt: Date };
+
+/** Last 6 calendar months (oldest → newest): total / transacted / no-activity. */
+async function buildRetailerActivityHistory(
+  retailers: RetailerRow[],
+  retailerIds: string[],
+): Promise<
+  { month: string; monthLabel: string; total: number; transacted: number; noActivity: number }[]
+> {
+  const months: { key: string; start: Date; end: Date; label: string }[] = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const start = new Date(now.getFullYear(), now.getMonth() - i, 1, 0, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1, 0, 0, 0, 0);
+    const key = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`;
+    const label = start.toLocaleString("en-IN", { month: "short", year: "numeric" });
+    months.push({ key, start, end, label });
+  }
+
+  const historyStart = months[0]!.start;
+  const transactedByMonth = new Map<string, number>();
+
+  if (retailerIds.length > 0) {
+    const rows = await db
+      .select({
+        monthKey: sql<string>`to_char(date_trunc('month', ${transactions.createdAt}), 'YYYY-MM')`,
+        cnt: sql<number>`count(distinct ${transactions.userId})::int`,
+      })
+      .from(transactions)
+      .where(
+        and(
+          inArray(transactions.userId, retailerIds),
+          eq(transactions.status, "success"),
+          gte(transactions.createdAt, historyStart),
+        ),
+      )
+      .groupBy(sql`date_trunc('month', ${transactions.createdAt})`);
+
+    for (const r of rows) {
+      transactedByMonth.set(r.monthKey, Number(r.cnt));
+    }
+  }
+
+  return months.map((m) => {
+    // Retailers onboarded on or before this month ends
+    const total = retailers.filter((r) => r.createdAt < m.end).length;
+    const transacted = Math.min(transactedByMonth.get(m.key) ?? 0, total);
+    return {
+      month: m.key,
+      monthLabel: m.label,
+      total,
+      transacted,
+      noActivity: Math.max(0, total - transacted),
+    };
+  });
 }
 
 async function getSuperDistributorStats(userId: string) {
