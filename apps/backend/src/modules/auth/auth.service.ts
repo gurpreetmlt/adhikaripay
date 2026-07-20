@@ -41,7 +41,16 @@ import type {
   SetLoginMpinInput,
   SignupRequestInput,
   SignupVerifyInput,
+  SignupChildRole,
+  SponsorSearchRole,
 } from "./auth.validators";
+
+/** Public signup: child role → required sponsor (parent) role. */
+const SIGNUP_SPONSOR_ROLE: Record<SignupChildRole, SponsorSearchRole> = {
+  master_distributor: "admin",
+  distributor: "master_distributor",
+  retailer: "distributor",
+};
 
 // Who is allowed to onboard whom — one level down the hierarchy at a time.
 const ALLOWED_CHILD_ROLE: Record<UserRole, UserRole | null> = {
@@ -79,6 +88,7 @@ function toAuthUser(row: typeof users.$inferSelect): AuthUser {
     kycStatus: row.kycStatus,
     isActive: row.isActive,
     hasKycDocs: Boolean(row.panNumberEncrypted && row.aadhaarNumberEncrypted),
+    hasInstantpayOutlet: Boolean(row.instantpayOutletId),
     hasTxnPin: Boolean(row.txnPinHash),
     hasLoginMpin: Boolean(row.loginMpinHash),
   };
@@ -353,7 +363,8 @@ export async function loginUser(
   return issueSession(row, context, "password");
 }
 
-const OTP_TTL_MS = 5 * 60 * 1000;
+/** Signup can span KYC steps on mobile — keep OTP valid long enough. Login OTP uses the same window. */
+const OTP_TTL_MS = 15 * 60 * 1000;
 
 // No SMS provider is wired yet (that's a provider-wrapper integration, same shape as the
 // Eko/Paysprint slots already modeled in the service catalog) — in dev we log + echo the OTP
@@ -436,7 +447,13 @@ export async function verifyLoginOtp(
 
   const record = await findLatestActiveOtp({ mobile: input.mobile, purpose: "login" });
 
-  if (!record) throw new HttpError(401, "OTP has expired or was not requested", "OTP_EXPIRED");
+  if (!record) {
+    throw new HttpError(
+      401,
+      "OTP has expired or was not requested. Please request a new OTP.",
+      "OTP_EXPIRED",
+    );
+  }
 
   if (record.attempts >= MAX_OTP_ATTEMPTS) {
     throw new HttpError(401, "Too many incorrect attempts — request a new OTP", "OTP_LOCKED");
@@ -730,12 +747,12 @@ export async function logoutUser(opts: {
   }
 }
 
-/** Public lookup: active Distributor by UID — name only (for signup confirmation). */
+/** Public lookup: active upline by UID — name only (for signup confirmation). */
 export async function lookupSponsorByUid(uidRaw: string): Promise<{
   uid: string;
   name: string;
   mobile: string;
-  role: "distributor";
+  role: SponsorSearchRole;
 }> {
   const uid = uidRaw.trim().toUpperCase();
   const [sponsor] = await db
@@ -750,22 +767,24 @@ export async function lookupSponsorByUid(uidRaw: string): Promise<{
     .where(eq(users.uid, uid))
     .limit(1);
 
-  if (!sponsor || !sponsor.isActive || sponsor.role !== "distributor") {
-    throw new HttpError(404, "Distributor not found", "SPONSOR_NOT_FOUND");
+  const allowed: ReadonlySet<string> = new Set(["admin", "master_distributor", "distributor"]);
+  if (!sponsor || !sponsor.isActive || !allowed.has(sponsor.role)) {
+    throw new HttpError(404, "Upline not found", "SPONSOR_NOT_FOUND");
   }
 
   return {
     uid: sponsor.uid,
     name: sponsor.name,
     mobile: sponsor.mobile,
-    role: "distributor",
+    role: sponsor.role as SponsorSearchRole,
   };
 }
 
-/** Public search: active Distributors by mobile prefix (3–10 digits). */
-export async function searchSponsorsByMobile(mobileRaw: string): Promise<
-  Array<{ uid: string; name: string; mobile: string; role: "distributor" }>
-> {
+/** Public search: active upline by mobile prefix + expected parent role. */
+export async function searchSponsorsByMobile(
+  mobileRaw: string,
+  sponsorRole: SponsorSearchRole,
+): Promise<Array<{ uid: string; name: string; mobile: string; role: SponsorSearchRole }>> {
   const mobile = mobileRaw.replace(/\D/g, "").slice(0, 10);
   if (mobile.length < 3) {
     throw new HttpError(422, "Enter at least 3 digits", "INVALID_MOBILE");
@@ -782,7 +801,7 @@ export async function searchSponsorsByMobile(mobileRaw: string): Promise<
     .where(
       and(
         like(users.mobile, `${mobile}%`),
-        eq(users.role, "distributor"),
+        eq(users.role, sponsorRole),
         eq(users.isActive, true),
       ),
     )
@@ -792,11 +811,11 @@ export async function searchSponsorsByMobile(mobileRaw: string): Promise<
     uid: r.uid,
     name: r.name,
     mobile: r.mobile,
-    role: "distributor" as const,
+    role: r.role as SponsorSearchRole,
   }));
 }
 
-/** Self-signup: retailer under a distributor identified by UID. */
+/** Self-signup: create child under upline identified by UID. */
 export async function requestSignupOtp(
   input: SignupRequestInput,
   context: AuthContext,
@@ -810,8 +829,9 @@ export async function requestSignupOtp(
     throw new HttpError(422, "Unable to complete signup request", "SIGNUP_REJECTED");
   }
 
+  const expectedSponsorRole = SIGNUP_SPONSOR_ROLE[input.role];
   const [sponsor] = await db.select().from(users).where(eq(users.uid, input.sponsorUid.trim().toUpperCase()));
-  if (!sponsor || !sponsor.isActive || sponsor.role !== "distributor") {
+  if (!sponsor || !sponsor.isActive || sponsor.role !== expectedSponsorRole) {
     throw new HttpError(422, "Unable to complete signup request", "SIGNUP_REJECTED");
   }
 
@@ -821,7 +841,11 @@ export async function requestSignupOtp(
     otpHash: hashToken(otp),
     purpose: "signup",
     expiresAt: new Date(Date.now() + OTP_TTL_MS),
-    meta: { name: input.name.trim(), sponsorUid: sponsor.uid },
+    meta: {
+      name: input.name.trim(),
+      sponsorUid: sponsor.uid,
+      childRole: input.role,
+    },
   });
 
   await insertAuditLog({
@@ -831,7 +855,7 @@ export async function requestSignupOtp(
     entityId: sponsor.id,
     ipAddress: context.ipAddress,
     userAgent: context.userAgent,
-    metadata: { mobile: input.mobile },
+    metadata: { mobile: input.mobile, childRole: input.role },
   });
 
   const exposeOtp = shouldExposeOtpInResponse();
@@ -856,7 +880,13 @@ export async function verifySignupOtp(
 
   const record = await findLatestActiveOtp({ mobile: input.mobile, purpose: "signup" });
 
-  if (!record) throw new HttpError(401, "OTP has expired or was not requested", "OTP_EXPIRED");
+  if (!record) {
+    throw new HttpError(
+      401,
+      "OTP has expired or was not requested. Please request a new OTP.",
+      "OTP_EXPIRED",
+    );
+  }
   if (record.attempts >= MAX_OTP_ATTEMPTS) {
     throw new HttpError(401, "Too many incorrect attempts — request a new OTP", "OTP_LOCKED");
   }
@@ -867,14 +897,19 @@ export async function verifySignupOtp(
 
   const sponsorUid = (record.meta?.sponsorUid ?? input.sponsorUid).trim().toUpperCase();
   const name = record.meta?.name ?? input.name.trim();
+  const childRole = (record.meta?.childRole ?? input.role) as SignupChildRole;
   if (sponsorUid !== input.sponsorUid.trim().toUpperCase()) {
     throw new HttpError(422, "Sponsor UID does not match OTP request", "SPONSOR_MISMATCH");
+  }
+  if (childRole !== input.role) {
+    throw new HttpError(422, "Role does not match OTP request", "ROLE_MISMATCH");
   }
 
   await markOtpConsumed(record.id);
 
+  const expectedSponsorRole = SIGNUP_SPONSOR_ROLE[childRole];
   const [sponsor] = await db.select().from(users).where(eq(users.uid, sponsorUid));
-  if (!sponsor || !sponsor.isActive || sponsor.role !== "distributor") {
+  if (!sponsor || !sponsor.isActive || sponsor.role !== expectedSponsorRole) {
     throw new HttpError(422, "Invalid sponsor UID", "INVALID_SPONSOR");
   }
 
@@ -888,7 +923,7 @@ export async function verifySignupOtp(
       name,
       mobile: input.mobile,
       password,
-      role: "retailer",
+      role: childRole,
     },
   );
 
@@ -902,7 +937,7 @@ export async function verifySignupOtp(
     entityId: row.id,
     ipAddress: context.ipAddress,
     userAgent: context.userAgent,
-    metadata: { sponsorUid, method: "otp" },
+    metadata: { sponsorUid, method: "otp", childRole },
   });
 
   return issueSession(row, context, "otp");

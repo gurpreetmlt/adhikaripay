@@ -36,6 +36,8 @@ export interface OtpMeta {
   /** Signup OTP */
   name?: string;
   sponsorUid?: string;
+  /** Child role being created via public signup */
+  childRole?: "master_distributor" | "distributor" | "retailer";
   /** Wallet pull OTP — parent collects from direct child */
   actorId?: string;
   targetUserId?: string;

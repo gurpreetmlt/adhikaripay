@@ -108,27 +108,36 @@ export const setLoginMpinSchema = z.object({
 });
 export type SetLoginMpinInput = z.infer<typeof setLoginMpinSchema>;
 
-/** Public retailer self-signup under a distributor (sponsor UID). */
+/** Public self-signup under an upline (sponsor UID). Role = account being created. */
+export const SIGNUP_CHILD_ROLES = ["master_distributor", "distributor", "retailer"] as const;
+export type SignupChildRole = (typeof SIGNUP_CHILD_ROLES)[number];
+
+/** Sponsor roles that may appear in public signup search. */
+export const SPONSOR_SEARCH_ROLES = ["admin", "master_distributor", "distributor"] as const;
+export type SponsorSearchRole = (typeof SPONSOR_SEARCH_ROLES)[number];
+
 export const signupRequestSchema = z.object({
   name: z.string().trim().min(2).max(120),
   mobile: mobileSchema,
   sponsorUid: z.string().trim().min(6).max(20),
+  role: z.enum(SIGNUP_CHILD_ROLES),
   portal: z.enum(AUTH_PORTALS).default("agent"),
 });
 export type SignupRequestInput = z.infer<typeof signupRequestSchema>;
 
-/** Public sponsor name lookup (Distributor UID on signup). */
+/** Public sponsor name lookup by UID. */
 export const sponsorUidParamSchema = z.object({
   uid: z.string().trim().min(6).max(20),
 });
 export type SponsorUidParam = z.infer<typeof sponsorUidParamSchema>;
 
-/** Public sponsor search by Distributor mobile (signup). Min 3 digits = prefix list. */
+/** Public sponsor search by upline mobile + expected parent role. */
 export const sponsorMobileQuerySchema = z.object({
   mobile: z
     .string()
     .trim()
     .regex(/^\d{3,10}$/, "Enter at least 3 digits of mobile"),
+  role: z.enum(SPONSOR_SEARCH_ROLES),
 });
 export type SponsorMobileQuery = z.infer<typeof sponsorMobileQuerySchema>;
 
@@ -137,6 +146,7 @@ export const signupVerifySchema = z.object({
   mobile: mobileSchema,
   otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
   sponsorUid: z.string().trim().min(6).max(20),
+  role: z.enum(SIGNUP_CHILD_ROLES),
   /** Optional login password; if omitted a strong random one is generated (OTP/PIN login). */
   password: passwordSchema.optional(),
   portal: z.enum(AUTH_PORTALS).default("agent"),

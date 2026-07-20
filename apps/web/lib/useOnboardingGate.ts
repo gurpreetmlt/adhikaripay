@@ -12,7 +12,7 @@ import type { ApiResponse, AuthUser } from "@adhikaripay/shared-types";
 const SKIP = new Set(["/login", "/signup"]);
 
 /**
- * Refresh /auth/me and send new retailers through KYC → PIN.
+ * Refresh /auth/me and send retailers through InstantPay Register Outlet → PIN.
  */
 export function useOnboardingGate() {
   const router = useRouter();
@@ -39,19 +39,19 @@ export function useOnboardingGate() {
         if (cancelled || !data.success) return;
         setUser(data.data.user);
         const next = nextOnboardingPath(data.data.user);
-        const onKyc = pathname.startsWith("/kyc");
+        const onOutlet = pathname.startsWith("/onboarding/outlet");
         const onPin = pathname.startsWith("/onboarding/pin");
-        if (next === "/kyc?onboarding=1" && !onKyc) {
+        if (next === "/onboarding/outlet" && !onOutlet) {
           toast.dismiss();
           router.replace(next);
-        } else if (next === "/onboarding/pin" && !onPin && !onKyc) {
+        } else if (next === "/onboarding/pin" && !onPin && !onOutlet) {
           toast.dismiss();
           router.replace(next);
         }
       } catch {
         const cached = useAuthStore.getState().user;
         const next = nextOnboardingPath(cached);
-        if (next && !pathname.startsWith("/kyc") && !pathname.startsWith("/onboarding")) {
+        if (next && !pathname.startsWith("/onboarding") && !pathname.startsWith("/kyc")) {
           toast.dismiss();
           router.replace(next);
         }

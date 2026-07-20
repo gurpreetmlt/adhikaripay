@@ -13,6 +13,33 @@ import { useTheme } from "../../theme/ThemeContext";
 import { colors, gradientDirection } from "../../theme/colors";
 import { showAlert } from "../../components/AppAlert";
 
+type SignupRole = "master_distributor" | "distributor" | "retailer";
+type SponsorRole = "admin" | "master_distributor" | "distributor";
+
+const SIGNUP_ROLES: { value: SignupRole; label: string }[] = [
+  { value: "master_distributor", label: "Super Distributor" },
+  { value: "distributor", label: "Distributor" },
+  { value: "retailer", label: "Retailer" },
+];
+
+const SPONSOR_ROLE: Record<SignupRole, SponsorRole> = {
+  master_distributor: "admin",
+  distributor: "master_distributor",
+  retailer: "distributor",
+};
+
+const UPLINE_LABEL: Record<SignupRole, string> = {
+  master_distributor: "ADMIN MOBILE NO.",
+  distributor: "SUPER DISTRIBUTOR MOBILE NO.",
+  retailer: "DISTRIBUTOR MOBILE NO.",
+};
+
+const UPLINE_ROLE_LABEL: Record<SponsorRole, string> = {
+  admin: "Admin",
+  master_distributor: "Super Distributor",
+  distributor: "Distributor",
+};
+
 const STEP_TITLES = ["Your Details", "KYC Documents", "Live Photo", "Outlet Details", "Review & Submit"];
 
 interface SignupScreenProps {
@@ -39,10 +66,12 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
   // Step 0 — the backend's signup/request already requires name + sponsorUid alongside
   // mobile, so those are collected up front (design mockup only asks for mobile here).
   const [name, setName] = useState("");
+  const [signupRole, setSignupRole] = useState<SignupRole>("retailer");
   const [sponsorMobile, setSponsorMobile] = useState("");
-  const [sponsorList, setSponsorList] = useState<Array<{ uid: string; name: string; mobile: string }>>([]);
+  const [sponsorList, setSponsorList] = useState<Array<{ uid: string; name: string; mobile: string; role?: string }>>([]);
   const [sponsorUid, setSponsorUid] = useState("");
   const [sponsorName, setSponsorName] = useState<string | null>(null);
+  const [sponsorRoleLabel, setSponsorRoleLabel] = useState<string>("Distributor");
   const [sponsorOk, setSponsorOk] = useState(false);
   const [sponsorSearching, setSponsorSearching] = useState(false);
   const [mobile, setMobile] = useState("");
@@ -50,6 +79,17 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
   const [otpLoading, setOtpLoading] = useState(false);
   const [otp, setOtp] = useState("");
   const [devOtp, setDevOtp] = useState("");
+
+  const sponsorRole = SPONSOR_ROLE[signupRole];
+
+  useEffect(() => {
+    setSponsorUid("");
+    setSponsorName(null);
+    setSponsorOk(false);
+    setSponsorList([]);
+    setSponsorMobile("");
+    setOtpSent(false);
+  }, [signupRole]);
 
   useEffect(() => {
     const phone = sponsorMobile.replace(/\D/g, "").slice(0, 10);
@@ -65,10 +105,11 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
     setSponsorSearching(true);
     const timer = setTimeout(async () => {
       try {
-        const { data } = await api.get<ApiResponse<{ items: Array<{ uid: string; name: string; mobile: string }> }>>(
-          "/auth/sponsor/search",
-          { params: { mobile: phone } },
-        );
+        const { data } = await api.get<
+          ApiResponse<{ items: Array<{ uid: string; name: string; mobile: string; role: SponsorRole }> }>
+        >("/auth/sponsor/search", {
+          params: { mobile: phone, role: sponsorRole },
+        });
         if (cancelled) return;
         if (!data.success) throw new Error("not found");
         const items = data.data.items ?? [];
@@ -77,6 +118,7 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
           setSponsorList([match]);
           setSponsorUid(match.uid);
           setSponsorName(match.name);
+          setSponsorRoleLabel(UPLINE_ROLE_LABEL[match.role] ?? UPLINE_ROLE_LABEL[sponsorRole]);
           setSponsorOk(true);
         }
       } catch {
@@ -90,11 +132,14 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [sponsorMobile]);
+  }, [sponsorMobile, sponsorRole]);
 
-  function selectSponsor(item: { uid: string; name: string; mobile: string }) {
+  function selectSponsor(item: { uid: string; name: string; mobile: string; role?: string }) {
     setSponsorUid(item.uid);
     setSponsorName(item.name);
+    if (item.role && item.role in UPLINE_ROLE_LABEL) {
+      setSponsorRoleLabel(UPLINE_ROLE_LABEL[item.role as SponsorRole]);
+    }
     setSponsorOk(true);
   }
 
@@ -124,7 +169,7 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
       return;
     }
     if (!sponsorOk || !sponsorUid) {
-      showAlert("Distributor select karo", "Distributor ka phone dalo aur list se select karo.");
+      showAlert("Upline required", "Enter your upline's 10-digit mobile number.");
       return;
     }
     if (mobile.length !== 10) {
@@ -135,7 +180,7 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
     try {
       const { data } = await api.post<ApiResponse<{ message: string; otp?: string }>>(
         "/auth/signup/request",
-        { name: name.trim(), mobile, sponsorUid: sponsorUid.trim(), portal: "agent" },
+        { name: name.trim(), mobile, sponsorUid: sponsorUid.trim(), role: signupRole, portal: "agent" },
       );
       if (!data.success) throw new Error(data.message);
       setOtpSent(true);
@@ -158,9 +203,41 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
     return true;
   }
 
+  async function verifySignupOtp(): Promise<void> {
+    const { data } = await api.post<ApiResponse<LoginResponse>>("/auth/signup/verify", {
+      name: name.trim(),
+      mobile,
+      otp,
+      sponsorUid: sponsorUid.trim(),
+      role: signupRole,
+      portal: "agent",
+    });
+    if (!data.success) throw new Error(data.message);
+    // Hold session locally — setAuth() would unmount this screen before KYC/success.
+    setAuthHeader(data.data.accessToken);
+    setSessionResult(data.data);
+  }
+
   async function handleNext() {
     if (!canAdvance()) {
       showAlert("Incomplete", "Please fill in all required fields to continue.");
+      return;
+    }
+    // Verify OTP right after step 0 — KYC steps often exceed OTP TTL.
+    if (step === 0) {
+      if (sessionResult) {
+        setStep(1);
+        return;
+      }
+      setSubmitting(true);
+      try {
+        await verifySignupOtp();
+        setStep(1);
+      } catch (err) {
+        showAlert("OTP failed", apiError(err, "Invalid or expired OTP. Request a new one."));
+      } finally {
+        setSubmitting(false);
+      }
       return;
     }
     if (step < 4) {
@@ -173,19 +250,9 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
   async function submit() {
     setSubmitting(true);
     try {
-      const { data } = await api.post<ApiResponse<LoginResponse>>("/auth/signup/verify", {
-        name: name.trim(),
-        mobile,
-        otp,
-        sponsorUid: sponsorUid.trim(),
-        portal: "agent",
-      });
-      if (!data.success) throw new Error(data.message);
-      // Hold the session locally instead of calling setAuth() yet — RootNavigator
-      // switches to the tab navigator the instant auth state is set, which would
-      // unmount this screen before the success confirmation could ever be seen.
-      setAuthHeader(data.data.accessToken);
-      setSessionResult(data.data);
+      if (!sessionResult) {
+        await verifySignupOtp();
+      }
 
       // KYC number submission — real endpoint, but only accepts PAN/Aadhaar numbers,
       // not the document images/selfie captured above (no upload endpoint exists yet).
@@ -270,6 +337,8 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {step === 0 ? (
             <StepDetails
+              signupRole={signupRole}
+              setSignupRole={setSignupRole}
               name={name}
               setName={setName}
               sponsorMobile={sponsorMobile}
@@ -277,6 +346,7 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
               sponsorList={sponsorList}
               sponsorUid={sponsorUid}
               sponsorName={sponsorName}
+              sponsorRoleLabel={sponsorRoleLabel}
               sponsorOk={sponsorOk}
               sponsorSearching={sponsorSearching}
               onSelectSponsor={selectSponsor}
@@ -308,6 +378,7 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
             <StepReview
               name={name}
               mobile={mobile}
+              signupRole={signupRole}
               sponsorUid={sponsorUid}
               sponsorName={sponsorName}
               pan={pan}
@@ -335,16 +406,19 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
 }
 
 function StepDetails(props: {
+  signupRole: SignupRole;
+  setSignupRole: (v: SignupRole) => void;
   name: string;
   setName: (v: string) => void;
   sponsorMobile: string;
   setSponsorMobile: (v: string) => void;
-  sponsorList: Array<{ uid: string; name: string; mobile: string }>;
+  sponsorList: Array<{ uid: string; name: string; mobile: string; role?: string }>;
   sponsorUid: string;
   sponsorName: string | null;
+  sponsorRoleLabel: string;
   sponsorOk: boolean;
   sponsorSearching: boolean;
-  onSelectSponsor: (item: { uid: string; name: string; mobile: string }) => void;
+  onSelectSponsor: (item: { uid: string; name: string; mobile: string; role?: string }) => void;
   mobile: string;
   setMobile: (v: string) => void;
   otpSent: boolean;
@@ -363,8 +437,55 @@ function StepDetails(props: {
         </View>
         <Text style={[styles.stepTitle, { color: tokens.txt }]}>Let's get started</Text>
         <Text style={[styles.stepSub, { color: tokens.sub }]}>
-          We'll send a 6-digit OTP to confirm it's you
+          Select your role, then map under your upline
         </Text>
+      </View>
+
+      <View
+        style={[
+          styles.rolePanel,
+          {
+            backgroundColor: tokens.softBlue,
+            borderColor: `${colors.blueFlat}40`,
+          },
+        ]}
+      >
+        <Text style={[styles.rolePanelEyebrow, { color: colors.blueFlat }]}>STEP 1 · CHOOSE ROLE</Text>
+        <Text style={[styles.rolePanelTitle, { color: tokens.txt }]}>Register as</Text>
+        <Text style={[styles.rolePanelHint, { color: tokens.sub }]}>
+          Tap one option below — this decides your upline
+        </Text>
+        <View style={styles.roleGrid}>
+          {SIGNUP_ROLES.map((opt) => {
+            const active = props.signupRole === opt.value;
+            return (
+              <Pressable
+                key={opt.value}
+                onPress={() => props.setSignupRole(opt.value)}
+                style={[
+                  styles.roleOption,
+                  {
+                    borderColor: active ? colors.blueFlat : tokens.cardBorder,
+                    backgroundColor: active ? colors.blueFlat : tokens.card,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.roleOptionText,
+                    { color: active ? "#fff" : tokens.txt2 },
+                  ]}
+                  numberOfLines={2}
+                >
+                  {opt.label}
+                </Text>
+                {active ? (
+                  <Text style={styles.roleOptionCheck}>Selected</Text>
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       <Field label="FULL NAME" tokens={tokens}>
@@ -377,7 +498,7 @@ function StepDetails(props: {
         />
       </Field>
 
-      <Field label="MOBILE" tokens={tokens}>
+      <Field label="YOUR MOBILE" tokens={tokens}>
         <View style={[fieldStyles.row, { backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}>
           <Text style={[fieldStyles.prefix, { color: tokens.txt2 }]}>+91</Text>
           <View style={[fieldStyles.divider, { backgroundColor: tokens.inputBorder }]} />
@@ -394,14 +515,14 @@ function StepDetails(props: {
         </View>
       </Field>
 
-      <Field label="DISTRIBUTOR MOBILE NO." tokens={tokens}>
+      <Field label={UPLINE_LABEL[props.signupRole]} tokens={tokens}>
         <View style={[fieldStyles.row, { backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}>
           <Text style={[fieldStyles.prefix, { color: tokens.txt2 }]}>+91</Text>
           <View style={[fieldStyles.divider, { backgroundColor: tokens.inputBorder }]} />
           <TextInput
             value={props.sponsorMobile}
             onChangeText={(t) => props.setSponsorMobile(t.replace(/\D/g, "").slice(0, 10))}
-            placeholder="10-digit distributor mobile"
+            placeholder="10-digit upline mobile"
             keyboardType="number-pad"
             maxLength={10}
             placeholderTextColor={tokens.mute}
@@ -410,18 +531,20 @@ function StepDetails(props: {
         </View>
       </Field>
       {props.sponsorSearching ? (
-        <Text style={{ fontSize: 12, color: tokens.mute, marginBottom: 8 }}>Checking distributor…</Text>
+        <Text style={{ fontSize: 12, color: tokens.mute, marginBottom: 8 }}>Checking upline…</Text>
       ) : null}
       {props.sponsorOk && props.sponsorName ? (
         <View style={[styles.sponsorOk, { backgroundColor: `${colors.green}22`, marginBottom: 8 }]}>
           <CheckCircle2 size={16} color={colors.green} strokeWidth={2.5} />
           <Text style={[styles.sponsorOkText, { color: colors.green, fontSize: 14 }]}>
-            {props.sponsorName} · Distributor
+            {props.sponsorName} · {props.sponsorRoleLabel}
           </Text>
         </View>
       ) : null}
       {props.sponsorMobile.length === 10 && !props.sponsorSearching && !props.sponsorOk ? (
-        <Text style={styles.sponsorErr}>Is number pe koi active Distributor nahi mila</Text>
+        <Text style={styles.sponsorErr}>
+          No active {UPLINE_ROLE_LABEL[SPONSOR_ROLE[props.signupRole]].toLowerCase()} found for this number
+        </Text>
       ) : null}
 
       {!props.otpSent ? (
@@ -626,6 +749,7 @@ function StepOutlet(props: {
 function StepReview(props: {
   name: string;
   mobile: string;
+  signupRole: SignupRole;
   sponsorUid: string;
   sponsorName: string | null;
   pan: string;
@@ -634,18 +758,19 @@ function StepReview(props: {
   pincode: string;
 }) {
   const { tokens } = useTheme();
+  const roleLabel = SIGNUP_ROLES.find((r) => r.value === props.signupRole)?.label ?? props.signupRole;
   const rows = [
     { k: "Full Name", v: props.name },
     { k: "Mobile", v: `+91 ${props.mobile}` },
     {
-      k: "Sponsor",
+      k: "Upline",
       v: props.sponsorName ? `${props.sponsorName} (${props.sponsorUid})` : props.sponsorUid,
     },
     { k: "PAN", v: props.pan },
     { k: "Aadhaar", v: `XXXX XXXX ${props.aadhaar.slice(-4)}` },
     { k: "Outlet Name", v: props.shop },
     { k: "Pincode", v: props.pincode },
-    { k: "Register As", v: "Retailer" },
+    { k: "Register As", v: roleLabel },
   ];
   return (
     <View>
@@ -715,6 +840,60 @@ const styles = StyleSheet.create({
   stepTitle: { fontFamily: "System", fontWeight: "800", fontSize: 19, marginTop: 12 },
   stepSub: { fontSize: 13, fontWeight: "500", marginTop: 4 },
   label: { fontSize: 11.5, fontWeight: "700", letterSpacing: 0.3 },
+  rolePanel: {
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 18,
+  },
+  rolePanelEyebrow: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  rolePanelTitle: {
+    fontFamily: "System",
+    fontWeight: "800",
+    fontSize: 16,
+  },
+  rolePanelHint: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 2,
+    marginBottom: 12,
+    lineHeight: 16,
+  },
+  roleGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  roleOption: {
+    flexGrow: 1,
+    flexBasis: "30%",
+    minWidth: "30%",
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 52,
+  },
+  roleOptionText: {
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 15,
+  },
+  roleOptionCheck: {
+    marginTop: 4,
+    fontSize: 9.5,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.85)",
+    letterSpacing: 0.2,
+  },
   sendOtpBtnPress: { marginTop: 6, borderRadius: 14 },
   sponsorOk: {
     marginTop: 8,

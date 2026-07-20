@@ -1,15 +1,15 @@
 import type { AuthUser } from "@adhikaripay/shared-types";
 
 /**
- * Post-auth funnel:
- * - Retailer self-signup: KYC → PIN
- * - Anyone without txn PIN: set PIN (used by OTP+PIN login)
+ * Post-auth funnel (retailer):
+ * InstantPay Register Outlet → txn PIN
+ * (Adhikari /kyc is optional / admin path — not the primary onboarding gate.)
  */
 export function nextOnboardingPath(user: AuthUser | null | undefined): string | null {
   if (!user) return "/login";
 
-  if (user.role === "retailer" && user.hasKycDocs !== true && user.kycStatus !== "verified") {
-    return "/kyc?onboarding=1";
+  if (user.role === "retailer" && user.hasInstantpayOutlet !== true) {
+    return "/onboarding/outlet";
   }
   if (user.hasTxnPin !== true) {
     return "/onboarding/pin";

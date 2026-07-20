@@ -20,6 +20,7 @@
 | — | Wallet hierarchy | M | [wallet-hierarchy.md](wallet-hierarchy.md) |
 | — | Network table actions | M | [network-table-actions.md](network-table-actions.md) |
 | — | Retailer activity metric | M | [retailer-activity-metric.md](retailer-activity-metric.md) |
+| — | InstantPay outlet onboarding | L ⚠️ split | [instantpay-outlet-onboarding.md](instantpay-outlet-onboarding.md) |
 
 ## Web UI
 | # | Task | Size | File |

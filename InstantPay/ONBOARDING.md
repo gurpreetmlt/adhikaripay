@@ -3,8 +3,8 @@
 > Ek jagah full picture: merchant (retailer outlet) InstantPay pe kaise onboard hota hai, kya done hai, kya pending hai, aur provider se kya-kya chahiye. Kisi bhi agent/chat me onboarding pe kaam shuru karne se pehle YE padho. AEPS rails ke liye alag doc: [`AEPS.md`](AEPS.md).
 
 **Provider:** InstantPay (Customer/Outlet Onboarding — eKYC)
-**Status:** Backend fully wired (dummy + InstantPay dono). Onboarding UI (mobile/web) abhi baaki.
-**Last updated:** 2026-07-19
+**Status:** Backend wired. **Product decision (2026-07-20):** retailer primary onboarding = InstantPay Register Outlet (not Adhikari `/kyc`). Web Min-KYC UI: `/onboarding/outlet`. Bio-KYC UI + mobile still pending.
+**Last updated:** 2026-07-20
 
 ---
 
@@ -157,11 +157,14 @@ Onboarding ke liye DB me pehle se kuch chahiye nahi — signup hi `instantpay_ou
 
 ## 7. Pending (next chats)
 
-- [ ] **Onboarding UI** (mobile + web) — abhi sirf backend API. Screen: signup form → bio-KYC status → wadh fingerprint capture → poll till APPROVED.
-- [ ] **Client-side `wadh` capture** — `rdServiceFingerprint.ts` (mobile + web) me PidOptions `wadh` attribute add karna (bio-KYC submit ke liye).
+- [x] **Onboarding UI — Min-KYC (web)** — `/onboarding/outlet` + gate replaces Adhikari `/kyc` as primary retailer funnel.
+- [ ] **Bio-KYC UI** (web + mobile) — status → wadh fingerprint → submit → poll till APPROVED.
+- [ ] **Client-side `wadh` capture** — `rdServiceFingerprint.ts` (mobile + web) me PidOptions `wadh` attribute.
+- [ ] **Mobile Register Outlet** — same Min-KYC funnel as web.
 - [ ] **Admin merchant list UI** — `wapStatus` ke saath onboarded outlets dikhana.
-- [ ] **Auto-onboard hook** — retailer KYC approve hote hi signup min-KYC trigger karna (optional automation).
 - [ ] **Bank account onboarding** API (agar InstantPay expose karta hai).
+
+> Adhikari `/kyc` page may remain for optional docs / admin queue — it is **not** the InstantPay outlet gate.
 
 ---
 

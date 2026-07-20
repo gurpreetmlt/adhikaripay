@@ -1,0 +1,338 @@
+"use client";
+
+import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "react-hot-toast";
+import { MapPin, Store } from "lucide-react";
+import type { ApiResponse, AuthUser } from "@adhikaripay/shared-types";
+import { AppShell } from "@/components/layout/AppShell";
+import api from "@/lib/api";
+import { B } from "@/lib/brand";
+import { extractApiError, nextOnboardingPath } from "@/lib/onboarding";
+import { useAuthStore } from "@/lib/store";
+import { useAuthHydrated } from "@/lib/useAuthHydrated";
+
+type Gender = "M" | "F" | "T";
+
+export default function RegisterOutletPage() {
+  const router = useRouter();
+  const hydrated = useAuthHydrated();
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+
+  const [loading, setLoading] = useState(false);
+  const [geoBusy, setGeoBusy] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    gender: "M" as Gender,
+    pan: "",
+    email: "",
+    addressFull: "",
+    city: "",
+    pincode: "",
+    aadhaarNumber: "",
+    dateOfBirth: "",
+    latitude: "",
+    longitude: "",
+  });
+
+  useEffect(() => {
+    if (hydrated && !accessToken) router.replace("/login");
+  }, [hydrated, accessToken, router]);
+
+  useEffect(() => {
+    if (user?.name) {
+      setForm((f) => ({ ...f, name: f.name || user.name }));
+    }
+  }, [user?.name]);
+
+  useEffect(() => {
+    if (!hydrated || !accessToken || !user) return;
+    if (user.role !== "retailer") {
+      router.replace("/dashboard");
+      return;
+    }
+    if (user.hasInstantpayOutlet) {
+      const next = nextOnboardingPath(user);
+      router.replace(next ?? "/dashboard");
+    }
+  }, [hydrated, accessToken, user, router]);
+
+  if (!hydrated || !accessToken || !user) return null;
+
+  function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function captureLocation() {
+    if (!navigator.geolocation) {
+      toast.error("Location not supported on this browser");
+      return;
+    }
+    setGeoBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        set("latitude", pos.coords.latitude.toFixed(4));
+        set("longitude", pos.coords.longitude.toFixed(4));
+        setGeoBusy(false);
+        toast.success("Location captured");
+      },
+      () => {
+        setGeoBusy(false);
+        toast.error("Could not get location — allow location access");
+      },
+      { enableHighAccuracy: true, timeout: 15000 },
+    );
+  }
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (loading) return;
+
+    const lat = Number(form.latitude);
+    const lng = Number(form.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      toast.error("Capture outlet location first");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await api.post("/onboarding/instantpay", {
+        name: form.name.trim(),
+        gender: form.gender,
+        pan: form.pan.toUpperCase(),
+        email: form.email.trim(),
+        address: {
+          full: form.addressFull.trim(),
+          city: form.city.trim(),
+          pincode: form.pincode,
+        },
+        aadhaarNumber: form.aadhaarNumber.replace(/\s/g, ""),
+        dateOfBirth: form.dateOfBirth,
+        latitude: lat,
+        longitude: lng,
+      });
+
+      const { data } = await api.get<ApiResponse<{ user: AuthUser }>>("/auth/me");
+      if (data.success) setUser(data.data.user);
+
+      toast.success("Outlet registered on InstantPay");
+      const next = nextOnboardingPath(data.success ? data.data.user : { ...user, hasInstantpayOutlet: true });
+      router.replace(next ?? "/dashboard");
+    } catch (err) {
+      toast.error(extractApiError(err, "Outlet registration failed"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const inputCls =
+    "w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-1";
+  const inputStyle = { borderColor: B.border, color: B.blue } as const;
+
+  return (
+    <AppShell>
+      <div className="mx-auto max-w-2xl space-y-5 p-6">
+        <div>
+          <div className="mb-1 flex items-center gap-2">
+            <Store size={20} style={{ color: B.blue }} />
+            <h1 className="text-2xl font-bold" style={{ color: B.blue }}>
+              Register Outlet
+            </h1>
+          </div>
+          <p className="text-sm" style={{ color: B.muted }}>
+            InstantPay onboarding — name and DOB must match PAN; mobile and address must match Aadhaar.
+          </p>
+        </div>
+
+        <form
+          onSubmit={submit}
+          className="space-y-4 rounded-2xl border bg-white p-5"
+          style={{ borderColor: B.border }}
+        >
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                Full name (as on PAN)
+              </label>
+              <input
+                required
+                value={form.name}
+                onChange={(e) => set("name", e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                Gender
+              </label>
+              <select
+                value={form.gender}
+                onChange={(e) => set("gender", e.target.value as Gender)}
+                className={inputCls}
+                style={inputStyle}
+              >
+                <option value="M">Male</option>
+                <option value="F">Female</option>
+                <option value="T">Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                Date of birth
+              </label>
+              <input
+                required
+                type="date"
+                value={form.dateOfBirth}
+                onChange={(e) => set("dateOfBirth", e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                PAN
+              </label>
+              <input
+                required
+                value={form.pan}
+                onChange={(e) => set("pan", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10))}
+                placeholder="ABCDE1234F"
+                className={`${inputCls} font-mono`}
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                Aadhaar
+              </label>
+              <input
+                required
+                inputMode="numeric"
+                value={form.aadhaarNumber}
+                onChange={(e) => set("aadhaarNumber", e.target.value.replace(/\D/g, "").slice(0, 12))}
+                placeholder="12 digits"
+                className={`${inputCls} font-mono`}
+                style={inputStyle}
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                Email
+              </label>
+              <input
+                required
+                type="email"
+                value={form.email}
+                onChange={(e) => set("email", e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                Address (as on Aadhaar)
+              </label>
+              <input
+                required
+                value={form.addressFull}
+                onChange={(e) => set("addressFull", e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                City
+              </label>
+              <input
+                required
+                value={form.city}
+                onChange={(e) => set("city", e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                Pincode
+              </label>
+              <input
+                required
+                inputMode="numeric"
+                value={form.pincode}
+                onChange={(e) => set("pincode", e.target.value.replace(/\D/g, "").slice(0, 6))}
+                className={inputCls}
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                Latitude
+              </label>
+              <input
+                required
+                readOnly
+                value={form.latitude}
+                placeholder="Capture location"
+                className={inputCls}
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                Longitude
+              </label>
+              <input
+                required
+                readOnly
+                value={form.longitude}
+                placeholder="Capture location"
+                className={inputCls}
+                style={inputStyle}
+              />
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={captureLocation}
+            disabled={geoBusy}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-semibold disabled:opacity-50"
+            style={{ borderColor: B.blue, color: B.blue }}
+          >
+            <MapPin size={16} />
+            {geoBusy ? "Getting location…" : "Capture outlet location"}
+          </button>
+
+          <p className="text-xs" style={{ color: B.muted }}>
+            Mobile used: <span className="font-semibold">{user.mobile}</span> (must be Aadhaar-linked)
+          </p>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-xl py-3 text-sm font-bold text-white disabled:opacity-50"
+            style={{ background: B.blue }}
+          >
+            {loading ? "Registering…" : "Register outlet"}
+          </button>
+        </form>
+      </div>
+    </AppShell>
+  );
+}

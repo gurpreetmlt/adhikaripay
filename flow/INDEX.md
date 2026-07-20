@@ -17,7 +17,7 @@ Parent can also Collect (Wapas) ← child OTP + parent txn PIN
 |------|--------|
 | [01-roles-hierarchy.md](01-roles-hierarchy.md) | Role features matrix |
 | [02-auth-login.md](02-auth-login.md) | Login / OTP / MPIN / portals |
-| [03-signup-sponsor.md](03-signup-sponsor.md) | Retailer signup + Dist UID |
+| [03-signup-sponsor.md](03-signup-sponsor.md) | Signup role + upline mobile mapping |
 | [04-wallet-fund-transfer.md](04-wallet-fund-transfer.md) | Mint + downline fund |
 | [05-wallet-pull-otp.md](05-wallet-pull-otp.md) | Wapas / collect with child OTP |
 | [06-network-active.md](06-network-active.md) | Network tree, active, reassign |

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
@@ -12,6 +12,9 @@ import { B } from "@/lib/brand";
 import { useAuthStore } from "@/lib/store";
 import { extractApiError, nextOnboardingPath } from "@/lib/onboarding";
 
+type SignupRole = "master_distributor" | "distributor" | "retailer";
+type SponsorRole = "admin" | "master_distributor" | "distributor";
+
 interface SessionData {
   user: AuthUser;
   accessToken: string;
@@ -22,13 +25,38 @@ interface SponsorInfo {
   uid: string;
   name: string;
   mobile: string;
-  role: "distributor";
+  role: SponsorRole;
 }
+
+const ROLE_OPTIONS: { value: SignupRole; label: string }[] = [
+  { value: "master_distributor", label: "Super Distributor" },
+  { value: "distributor", label: "Distributor" },
+  { value: "retailer", label: "Retailer" },
+];
+
+const SPONSOR_ROLE: Record<SignupRole, SponsorRole> = {
+  master_distributor: "admin",
+  distributor: "master_distributor",
+  retailer: "distributor",
+};
+
+const UPLINE_LABEL: Record<SignupRole, string> = {
+  master_distributor: "Admin mobile no.",
+  distributor: "Super Distributor mobile no.",
+  retailer: "Distributor mobile no.",
+};
+
+const UPLINE_ROLE_LABEL: Record<SponsorRole, string> = {
+  admin: "Admin",
+  master_distributor: "Super Distributor",
+  distributor: "Distributor",
+};
 
 export default function SignupPage() {
   const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
   const [step, setStep] = useState<"form" | "otp">("form");
+  const [signupRole, setSignupRole] = useState<SignupRole>("retailer");
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [sponsorMobile, setSponsorMobile] = useState("");
@@ -39,7 +67,14 @@ export default function SignupPage() {
   const [devOtp, setDevOtp] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Only resolve when full 10-digit distributor mobile is entered — auto-select, no list.
+  const sponsorRole = SPONSOR_ROLE[signupRole];
+
+  useEffect(() => {
+    setSponsor(null);
+    setSponsorMobile("");
+    setSponsorStatus("idle");
+  }, [signupRole]);
+
   useEffect(() => {
     const phone = sponsorMobile.replace(/\D/g, "").slice(0, 10);
     setSponsor(null);
@@ -53,7 +88,7 @@ export default function SignupPage() {
     const timer = setTimeout(async () => {
       try {
         const { data } = await api.get<ApiResponse<{ items: SponsorInfo[] }>>("/auth/sponsor/search", {
-          params: { mobile: phone },
+          params: { mobile: phone, role: sponsorRole },
         });
         if (cancelled) return;
         if (!data.success) throw new Error(data.message);
@@ -74,13 +109,13 @@ export default function SignupPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [sponsorMobile]);
+  }, [sponsorMobile, sponsorRole]);
 
   async function requestOtp(e?: FormEvent) {
     e?.preventDefault();
     if (!name || !mobile) return;
     if (!sponsor) {
-      toast.error("Distributor ka sahi 10-digit mobile dalo");
+      toast.error(`Enter a valid 10-digit ${UPLINE_ROLE_LABEL[sponsorRole].toLowerCase()} mobile`);
       return;
     }
     setLoading(true);
@@ -89,6 +124,7 @@ export default function SignupPage() {
         name,
         mobile,
         sponsorUid: sponsor.uid,
+        role: signupRole,
         portal: "agent",
       });
       if (!data.success) throw new Error(data.message);
@@ -112,6 +148,7 @@ export default function SignupPage() {
         mobile,
         otp,
         sponsorUid: sponsor.uid,
+        role: signupRole,
         portal: "agent",
         ...(password ? { password } : {}),
       });
@@ -120,8 +157,8 @@ export default function SignupPage() {
         accessToken: data.data.accessToken,
         refreshToken: data.data.refreshToken,
       });
-      toast.success(`Account created under ${sponsor.name} — complete KYC next`);
-      router.replace(nextOnboardingPath(data.data.user) ?? "/kyc?onboarding=1");
+      toast.success(`Account created under ${sponsor.name}`);
+      router.replace(nextOnboardingPath(data.data.user) ?? "/dashboard");
     } catch (err) {
       toast.error(extractApiError(err, "Signup failed"));
     } finally {
@@ -137,11 +174,49 @@ export default function SignupPage() {
           Create agent account
         </h1>
         <p className="mt-1 text-sm" style={{ color: B.muted }}>
-          Signup with OTP → KYC → set PIN. Apna mobile, phir Distributor mobile.
+          Select your role, then map under your upline with their mobile number.
         </p>
 
         {step === "form" ? (
           <form onSubmit={requestOtp} className="mt-6 space-y-4">
+            <div
+              className="rounded-2xl border-2 p-3.5"
+              style={{ borderColor: `${B.blue}40`, background: `${B.blue}0F` }}
+            >
+              <div className="text-[10px] font-extrabold uppercase tracking-wider" style={{ color: B.blue }}>
+                Step 1 · Choose role
+              </div>
+              <div className="mt-0.5 text-sm font-extrabold" style={{ color: B.blue }}>
+                Register as
+              </div>
+              <p className="mt-0.5 mb-3 text-xs font-medium" style={{ color: B.muted }}>
+                Tap one option — this decides your upline
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {ROLE_OPTIONS.map((opt) => {
+                  const active = signupRole === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setSignupRole(opt.value)}
+                      className="rounded-xl border-2 px-2 py-3 text-center text-xs font-extrabold transition"
+                      style={{
+                        borderColor: active ? B.blue : B.border,
+                        background: active ? B.blue : "#fff",
+                        color: active ? "#fff" : B.muted,
+                      }}
+                    >
+                      {opt.label}
+                      {active ? (
+                        <span className="mt-1 block text-[9px] font-bold opacity-85">Selected</span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <Field label="Full name" icon={UserPlus}>
               <input
                 required
@@ -151,7 +226,7 @@ export default function SignupPage() {
                 placeholder="Your name"
               />
             </Field>
-            <Field label="Mobile" icon={Phone}>
+            <Field label="Your mobile" icon={Phone}>
               <input
                 required
                 inputMode="numeric"
@@ -163,7 +238,7 @@ export default function SignupPage() {
               />
             </Field>
             <div>
-              <Field label="Distributor mobile no." icon={Phone}>
+              <Field label={UPLINE_LABEL[signupRole]} icon={Phone}>
                 <input
                   required
                   inputMode="numeric"
@@ -171,13 +246,13 @@ export default function SignupPage() {
                   value={sponsorMobile}
                   onChange={(e) => setSponsorMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
                   className="w-full bg-transparent text-sm outline-none"
-                  placeholder="10-digit distributor mobile"
+                  placeholder="10-digit upline mobile"
                   autoComplete="off"
                 />
               </Field>
               {sponsorStatus === "loading" ? (
                 <p className="mt-1.5 text-xs" style={{ color: B.muted }}>
-                  Checking distributor…
+                  Checking upline…
                 </p>
               ) : null}
               {sponsorStatus === "ok" && sponsor ? (
@@ -188,7 +263,7 @@ export default function SignupPage() {
                   <CheckCircle2 size={16} className="shrink-0" />
                   <span>
                     {sponsor.name}
-                    <span className="ml-1 font-normal opacity-80">· Distributor</span>
+                    <span className="ml-1 font-normal opacity-80">· {UPLINE_ROLE_LABEL[sponsor.role]}</span>
                   </span>
                 </div>
               ) : null}
@@ -198,7 +273,7 @@ export default function SignupPage() {
                   style={{ background: "#DC262614", color: "#B91C1C" }}
                 >
                   <AlertCircle size={14} className="shrink-0" />
-                  Is number pe koi active Distributor nahi mila
+                  No active {UPLINE_ROLE_LABEL[sponsorRole].toLowerCase()} found for this number
                 </div>
               ) : null}
               {sponsorStatus === "error" ? (
@@ -207,7 +282,7 @@ export default function SignupPage() {
                   style={{ background: "#DC262614", color: "#B91C1C" }}
                 >
                   <AlertCircle size={14} className="shrink-0" />
-                  Lookup failed — dubara try karo
+                  Lookup failed — try again
                 </div>
               ) : null}
             </div>
@@ -236,11 +311,15 @@ export default function SignupPage() {
                 className="rounded-xl px-3 py-2 text-xs font-semibold"
                 style={{ background: `${B.green}14`, color: B.greenDark ?? B.green }}
               >
-                Mapping under {sponsor.name} ({sponsor.mobile})
+                Mapping under {sponsor.name} ({sponsor.mobile}) as{" "}
+                {ROLE_OPTIONS.find((r) => r.value === signupRole)?.label}
               </div>
             ) : null}
             {devOtp && (
-              <div className="rounded-xl px-3 py-2 text-xs font-semibold" style={{ background: `${B.green}18`, color: B.greenDark }}>
+              <div
+                className="rounded-xl px-3 py-2 text-xs font-semibold"
+                style={{ background: `${B.green}18`, color: B.greenDark }}
+              >
                 Dev OTP: {devOtp}
               </div>
             )}
@@ -263,7 +342,12 @@ export default function SignupPage() {
             >
               {loading ? "Creating…" : "Verify & continue"} <ArrowRight size={16} />
             </button>
-            <button type="button" className="w-full text-sm font-medium" style={{ color: B.muted }} onClick={() => setStep("form")}>
+            <button
+              type="button"
+              className="w-full text-sm font-medium"
+              style={{ color: B.muted }}
+              onClick={() => setStep("form")}
+            >
               Edit details
             </button>
           </form>
@@ -280,7 +364,7 @@ export default function SignupPage() {
   );
 }
 
-function Field({ label, icon: Icon, children }: { label: string; icon: typeof Phone; children: React.ReactNode }) {
+function Field({ label, icon: Icon, children }: { label: string; icon: typeof Phone; children: ReactNode }) {
   return (
     <div>
       <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>

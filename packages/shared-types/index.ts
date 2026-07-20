@@ -57,6 +57,8 @@ export interface AuthUser {
   isActive: boolean;
   /** True once PAN/Aadhaar docs have been submitted (admin may still verify). */
   hasKycDocs: boolean;
+  /** True once InstantPay Register Outlet (min-KYC) saved an outlet id. */
+  hasInstantpayOutlet: boolean;
   /** True once transaction PIN is set. */
   hasTxnPin: boolean;
   /** True once login MPIN is set (mobile quick unlock). */

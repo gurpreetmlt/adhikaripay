@@ -143,8 +143,8 @@ export async function lookupSponsor(req: Request, res: Response): Promise<void> 
 }
 
 export async function searchSponsors(req: Request, res: Response): Promise<void> {
-  const { mobile } = sponsorMobileQuerySchema.parse(req.query);
-  const items = await searchSponsorsByMobile(mobile);
+  const { mobile, role } = sponsorMobileQuerySchema.parse(req.query);
+  const items = await searchSponsorsByMobile(mobile, role);
   sendSuccess(res, { items });
 }
 
