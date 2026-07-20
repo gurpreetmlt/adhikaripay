@@ -73,6 +73,10 @@ export function ServiceTile({
       router.push("/dmt");
       return;
     }
+    if (code === "NEPAL" || code === "NEPAL_REMITTANCE") {
+      router.push("/nepal");
+      return;
+    }
     toast(`${name} — coming soon`, { icon: "🚧" });
   }
 

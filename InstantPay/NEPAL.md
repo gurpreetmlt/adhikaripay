@@ -3,7 +3,7 @@
 > Nepal Money Transfer (cross-border remittance) InstantPay pe kaise banega. Architecture DMT/AEPS jaisi. Onboarding: [`ONBOARDING.md`](ONBOARDING.md). Domestic DMT: [`DMT.md`](DMT.md).
 
 **Provider:** InstantPay (Remittance — Nepal)
-**Status:** ✅ Backend APIs done (InstantPay Nepal sidebar complete). Remaining: remitter count limits + Agent Web UI.
+**Status:** ✅ Backend APIs done · ✅ Agent Web portal (`/nepal`). Remaining: remitter count limits + mobile.
 **Last updated:** 2026-07-20
 
 ### Service overview (InstantPay)
@@ -358,7 +358,8 @@ Reference: `INSTANTPAY_CLIENT_ID/SECRET/AES_KEY/AUTH_CODE`, `AEPS_PROVIDER_MODE`
 - [x] Routes `/api/txn/nepal/*` + validators + controllers
 - [x] Service gate skipped + `AEPS_PROVIDER_MODE` routing
 - [x] Limit enforcement (txn amount ₹50k) — validator; day/month/year counts pending
-- [ ] Agent Web portal (DMT-style) + later mobile
+- [x] Agent Web portal (`apps/web/app/nepal/page.tsx` — Outlet / Transfer / Status tabs, daily 2FA)
+- [ ] Mobile Nepal remittance screen
 - [ ] Coolify redeploy (backend/web) — no new env unless confirmed
 
 ---
@@ -366,5 +367,5 @@ Reference: `INSTANTPAY_CLIENT_ID/SECRET/AES_KEY/AUTH_CODE`, `AEPS_PROVIDER_MODE`
 ## 8. Next step (user)
 
 1. **Remitter count caps** — 3/day, 5/month, 6/year (backend enforce + UX from `transactionCount`)
-2. **Agent Web `/nepal` portal** (DMT-style flow)
-3. Coolify backend redeploy + live smoke test
+2. **Mobile Nepal remittance screen**
+3. Coolify backend + web redeploy + live smoke test
