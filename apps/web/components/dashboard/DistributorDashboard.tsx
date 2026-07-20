@@ -45,6 +45,8 @@ export function DistributorDashboard() {
   const [wallets, setWallets] = useState<WalletBalance[]>([]);
   const [stats, setStats] = useState<DistributorStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [monthPickerOpen, setMonthPickerOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -58,6 +60,10 @@ export function DistributorDashboard() {
         if (!alive) return;
         setWallets(walletRows);
         setStats(dashStats);
+        const hist = dashStats.activityHistory ?? [];
+        if (hist.length > 0) {
+          setSelectedMonth(hist[hist.length - 1]!.month);
+        }
       } catch {
         if (alive) toast.error("Failed to load dashboard");
       } finally {
@@ -75,6 +81,8 @@ export function DistributorDashboard() {
     0,
   );
   const history = stats?.activityHistory ?? [];
+  const selected =
+    history.find((h) => h.month === selectedMonth) ?? history[history.length - 1] ?? null;
 
   return (
     <div className="space-y-5">
@@ -99,38 +107,135 @@ export function DistributorDashboard() {
         </div>
 
         <div className="rounded-2xl border bg-white p-5 lg:col-span-2" style={{ borderColor: B.border }}>
-          <div className="mb-1 flex items-center gap-2">
-            <Store size={18} style={{ color: B.blue }} />
-            <h3 className="font-bold" style={{ color: B.blue }}>
-              Retailer Activity (This Month)
-            </h3>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <Store size={18} style={{ color: B.blue }} />
+              <h3 className="truncate font-bold" style={{ color: B.blue }}>
+                Retailer Activity
+                {selected ? (
+                  <span className="font-semibold" style={{ color: B.muted }}>
+                    {" "}
+                    · {selected.monthLabel}
+                  </span>
+                ) : null}
+              </h3>
+            </div>
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                title="Select month"
+                aria-label="Select month"
+                onClick={() => setMonthPickerOpen((o) => !o)}
+                className="flex h-9 w-9 items-center justify-center rounded-xl border transition hover:bg-slate-50"
+                style={{ borderColor: B.border, color: B.blue }}
+              >
+                <CalendarDays size={18} />
+              </button>
+              {monthPickerOpen && history.length > 0 ? (
+                <div
+                  className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border bg-white shadow-lg"
+                  style={{ borderColor: B.border }}
+                >
+                  {history.map((m) => {
+                    const active = m.month === (selected?.month ?? selectedMonth);
+                    return (
+                      <button
+                        key={m.month}
+                        type="button"
+                        onClick={() => {
+                          setSelectedMonth(m.month);
+                          setMonthPickerOpen(false);
+                        }}
+                        className="flex w-full px-3 py-2.5 text-left text-sm font-medium transition hover:bg-slate-50"
+                        style={{
+                          color: active ? B.blue : B.muted,
+                          background: active ? `${B.blue}10` : undefined,
+                        }}
+                      >
+                        {m.monthLabel}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           </div>
-          <p className="mb-4 text-xs" style={{ color: B.muted }}>
-            Active = ≥1 successful transaction · Inactive = no successful transactions
-          </p>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="rounded-xl p-4 text-center" style={{ background: B.secondary }}>
+
+          {history.length > 0 ? (
+            <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1">
+              {history.map((m) => {
+                const active = m.month === (selected?.month ?? selectedMonth);
+                return (
+                  <button
+                    key={`tab-${m.month}`}
+                    type="button"
+                    onClick={() => setSelectedMonth(m.month)}
+                    className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition"
+                    style={{
+                      background: active ? B.blue : B.secondary,
+                      color: active ? "#fff" : B.muted,
+                    }}
+                  >
+                    {m.monthLabel.split(" ")[0]}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-3 gap-3 sm:gap-4">
+            <div className="rounded-xl p-3 text-center sm:p-4" style={{ background: B.secondary }}>
               <div className="text-2xl font-bold" style={{ color: B.blue }}>
-                {loading ? "…" : (stats?.retailers.total ?? 0)}
+                {loading ? "…" : (selected?.total ?? stats?.retailers.total ?? 0)}
               </div>
               <div className="mt-1 text-xs font-medium" style={{ color: B.muted }}>
                 Total Retailers
               </div>
             </div>
-            <div className="rounded-xl p-4 text-center" style={{ background: `${B.green}10` }}>
+            <div className="rounded-xl p-3 text-center sm:p-4" style={{ background: `${B.green}10` }}>
               <div className="text-2xl font-bold" style={{ color: B.green }}>
-                {loading ? "…" : (stats?.retailers.active ?? 0)}
+                {loading ? "…" : (selected?.transacted ?? stats?.retailers.active ?? 0)}
               </div>
               <div className="mt-1 text-xs font-medium" style={{ color: B.muted }}>
                 Transacted
               </div>
             </div>
-            <div className="rounded-xl p-4 text-center" style={{ background: "#FEF2F2" }}>
+            <div className="rounded-xl p-3 text-center sm:p-4" style={{ background: "#FEF2F2" }}>
               <div className="text-2xl font-bold" style={{ color: "#DC2626" }}>
-                {loading ? "…" : (stats?.retailers.inactive ?? 0)}
+                {loading ? "…" : (selected?.noActivity ?? stats?.retailers.inactive ?? 0)}
               </div>
               <div className="mt-1 text-xs font-medium" style={{ color: B.muted }}>
                 No Activity
+              </div>
+            </div>
+          </div>
+
+          <div
+            className="mt-4 grid grid-cols-1 gap-3 border-t pt-4 sm:grid-cols-2"
+            style={{ borderColor: B.border }}
+          >
+            <div className="rounded-xl px-4 py-3" style={{ background: B.secondary }}>
+              <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                <BarChart3 size={13} style={{ color: B.blue }} />
+                Today&apos;s Volume
+              </div>
+              <div className="text-xl font-bold" style={{ color: B.blue }}>
+                {loading ? "…" : formatInr(stats?.today.volume ?? "0")}
+              </div>
+              <div className="mt-1 flex items-center gap-1 text-[11px]" style={{ color: B.green }}>
+                <TrendingUp size={11} /> All retailers
+              </div>
+            </div>
+            <div className="rounded-xl px-4 py-3" style={{ background: `${B.green}10` }}>
+              <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
+                <IndianRupee size={13} style={{ color: B.green }} />
+                Commission Today
+              </div>
+              <div className="text-xl font-bold" style={{ color: B.green }}>
+                {loading ? "…" : formatInr(stats?.today.commission ?? "0")}
+              </div>
+              <div className="mt-1 text-[11px]" style={{ color: B.muted }}>
+                Your share
               </div>
             </div>
           </div>
@@ -164,38 +269,6 @@ export function DistributorDashboard() {
         </div>
       </div>
 
-      {/* Business Summary */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border bg-white p-5" style={{ borderColor: B.border }}>
-          <div className="mb-2 flex items-center gap-2">
-            <BarChart3 size={16} style={{ color: B.blue }} />
-            <span className="text-xs font-medium uppercase tracking-wider" style={{ color: B.muted }}>
-              Today&apos;s Volume (All Retailers)
-            </span>
-          </div>
-          <div className="text-3xl font-bold" style={{ color: B.blue }}>
-            {loading ? "…" : formatInr(stats?.today.volume ?? "0")}
-          </div>
-          <div className="mt-2 flex items-center gap-1 text-xs" style={{ color: B.green }}>
-            <TrendingUp size={12} /> Successful transactions only
-          </div>
-        </div>
-        <div className="rounded-2xl border bg-white p-5" style={{ borderColor: B.border }}>
-          <div className="mb-2 flex items-center gap-2">
-            <IndianRupee size={16} style={{ color: B.green }} />
-            <span className="text-xs font-medium uppercase tracking-wider" style={{ color: B.muted }}>
-              Commission Earned Today
-            </span>
-          </div>
-          <div className="text-3xl font-bold" style={{ color: B.green }}>
-            {loading ? "…" : formatInr(stats?.today.commission ?? "0")}
-          </div>
-          <div className="mt-2 text-xs" style={{ color: B.muted }}>
-            Your share from retailer transactions
-          </div>
-        </div>
-      </div>
-
       {/* Monthly Activity History */}
       <div className="rounded-2xl border bg-white p-5" style={{ borderColor: B.border }}>
         <div className="mb-4 flex items-center gap-2">
@@ -204,9 +277,6 @@ export function DistributorDashboard() {
             Monthly Activity History
           </h3>
         </div>
-        <p className="mb-3 text-xs" style={{ color: B.muted }}>
-          Last 6 months · Transacted = ≥1 successful txn that month
-        </p>
         {loading ? (
           <p className="py-6 text-center text-sm" style={{ color: B.muted }}>
             Loading…
