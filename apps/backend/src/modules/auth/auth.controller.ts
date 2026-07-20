@@ -167,9 +167,15 @@ export async function signupVerify(req: Request, res: Response): Promise<void> {
 }
 
 const setTxnPinSchema = z.object({
-  /** Required when changing an existing PIN; optional on first set (session is enough). */
-  password: z.string().min(1).optional(),
-  pin: z.string().regex(/^\d{4}$/, "PIN must be 4 digits"),
+  /** Required when changing PIN; optional on first set (OTP users may have no known password). */
+  password: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? undefined : v),
+    z.string().min(1).optional(),
+  ),
+  pin: z.preprocess(
+    (v) => String(v ?? "").replace(/\D/g, "").slice(0, 4),
+    z.string().regex(/^\d{4}$/, "PIN must be 4 digits"),
+  ),
 });
 
 export async function setTransactionPin(req: Request, res: Response): Promise<void> {

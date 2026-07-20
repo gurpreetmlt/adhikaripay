@@ -25,7 +25,7 @@ export default function SetPinPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [offerBio, setOfferBio] = useState(false);
-  const firstSet = !user?.hasTxnPin;
+  const firstSet = user?.hasTxnPin !== true;
 
   useEffect(() => {
     if (hydrated && !accessToken) router.replace("/login");
@@ -39,11 +39,15 @@ export default function SetPinPage() {
       toast.error("PINs must match (exactly 4 digits)");
       return;
     }
+    if (!password.trim()) {
+      toast.error("Login password required to set PIN");
+      return;
+    }
     setLoading(true);
     try {
       const { data } = await api.post<ApiResponse<{ user: AuthUser }>>("/auth/txn-pin", {
-        pin,
-        ...(!firstSet && password ? { password } : {}),
+        pin: String(pin),
+        password: password.trim(),
       });
       if (!data.success) throw new Error(data.message);
       setUser(data.data.user);
@@ -88,29 +92,29 @@ export default function SetPinPage() {
             {firstSet ? "Set your PIN" : "Change PIN"}
           </h1>
           <p className="mt-1 text-sm" style={{ color: B.muted }}>
-            4-digit PIN for wallet transfers and money services. Avoid 1234 / 0000 / repeats.
+            4-digit PIN for wallet transfers. Avoid 1234 / 0000 / repeats. Login password confirm karein.
           </p>
         </div>
 
         {!offerBio ? (
           <form onSubmit={submit} className="space-y-4 rounded-2xl border bg-white p-6" style={{ borderColor: B.border }}>
-            {!firstSet && (
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase" style={{ color: B.muted }}>
-                  Login password
-                </label>
-                <div className="flex items-center gap-2 rounded-xl border px-3 py-3" style={{ borderColor: B.border }}>
-                  <Lock size={15} style={{ color: B.muted }} />
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full text-sm outline-none"
-                  />
-                </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase" style={{ color: B.muted }}>
+                Login password
+              </label>
+              <div className="flex items-center gap-2 rounded-xl border px-3 py-3" style={{ borderColor: B.border }}>
+                <Lock size={15} style={{ color: B.muted }} />
+                <input
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Account login password"
+                  className="w-full text-sm outline-none"
+                />
               </div>
-            )}
+            </div>
             <div>
               <label className="mb-1.5 block text-xs font-semibold uppercase" style={{ color: B.muted }}>
                 New PIN
