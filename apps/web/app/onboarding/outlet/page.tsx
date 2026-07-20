@@ -77,16 +77,22 @@ export default function RegisterOutletPage() {
     setGeoBusy(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        set("latitude", pos.coords.latitude.toFixed(4));
-        set("longitude", pos.coords.longitude.toFixed(4));
+        const latitude = pos.coords.latitude.toFixed(4);
+        const longitude = pos.coords.longitude.toFixed(4);
+        setForm((f) => ({ ...f, latitude, longitude }));
         setGeoBusy(false);
-        toast.success("Location captured");
+        toast.success("Current location selected");
       },
-      () => {
+      (err) => {
         setGeoBusy(false);
-        toast.error("Could not get location — allow location access");
+        const denied = err.code === err.PERMISSION_DENIED;
+        toast.error(
+          denied
+            ? "Location permission denied — allow location in browser settings"
+            : "Could not get location — try again near a window / with GPS on",
+        );
       },
-      { enableHighAccuracy: true, timeout: 15000 },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
     );
   }
 
@@ -97,7 +103,7 @@ export default function RegisterOutletPage() {
     const lat = Number(form.latitude);
     const lng = Number(form.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      toast.error("Capture outlet location first");
+      toast.error("Select current location first");
       return;
     }
 
@@ -124,8 +130,10 @@ export default function RegisterOutletPage() {
       if (data.success) setUser(data.data.user);
 
       toast.success("Outlet registered on InstantPay");
-      const next = nextOnboardingPath(data.success ? data.data.user : { ...user, hasInstantpayOutlet: true });
-      router.replace(next ?? "/dashboard");
+      const nextUser = data.success
+        ? data.data.user
+        : ({ ...user, hasInstantpayOutlet: true } as AuthUser);
+      router.replace(nextOnboardingPath(nextUser) ?? "/dashboard");
     } catch (err) {
       toast.error(extractApiError(err, "Outlet registration failed"));
     } finally {
@@ -144,11 +152,11 @@ export default function RegisterOutletPage() {
           <div className="mb-1 flex items-center gap-2">
             <Store size={20} style={{ color: B.blue }} />
             <h1 className="text-2xl font-bold" style={{ color: B.blue }}>
-              Register Outlet
+              Register Now
             </h1>
           </div>
           <p className="text-sm" style={{ color: B.muted }}>
-            InstantPay onboarding — name and DOB must match PAN; mobile and address must match Aadhaar.
+            Go live in minutes — verify once, start serving customers.
           </p>
         </div>
 
@@ -302,49 +310,29 @@ export default function RegisterOutletPage() {
                 style={inputStyle}
               />
             </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
-                Latitude
-              </label>
-              <input
-                required
-                readOnly
-                value={form.latitude}
-                placeholder="Capture location"
-                className={inputCls}
-                style={inputStyle}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
-                Longitude
-              </label>
-              <input
-                required
-                readOnly
-                value={form.longitude}
-                placeholder="Capture location"
-                className={inputCls}
-                style={inputStyle}
-              />
-            </div>
           </div>
 
           <button
             type="button"
             onClick={captureLocation}
             disabled={geoBusy}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-semibold disabled:opacity-50"
-            style={{ borderColor: B.blue, color: B.blue }}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 py-3 text-sm font-bold disabled:opacity-50"
+            style={{
+              borderColor: form.latitude && form.longitude ? B.green : B.blue,
+              background: form.latitude && form.longitude ? `${B.green}12` : `${B.blue}08`,
+              color: form.latitude && form.longitude ? B.green : B.blue,
+            }}
           >
             <MapPin size={16} />
-            {geoBusy ? "Getting location…" : "Capture outlet location"}
+            {geoBusy
+              ? "Detecting location…"
+              : form.latitude && form.longitude
+                ? "Location set — tap to refresh"
+                : "Use current location"}
           </button>
 
           <p className="text-xs" style={{ color: B.muted }}>
-            All fields are sent to InstantPay Min-KYC. Mobile must be Aadhaar-linked.
+            Location is captured automatically (hidden). Must match InstantPay outlet geo requirements.
           </p>
 
           <button
@@ -353,7 +341,7 @@ export default function RegisterOutletPage() {
             className="w-full rounded-xl py-3 text-sm font-bold text-white disabled:opacity-50"
             style={{ background: B.blue }}
           >
-            {loading ? "Registering…" : "Register outlet"}
+            {loading ? "Registering…" : "Register Now"}
           </button>
         </form>
       </div>
