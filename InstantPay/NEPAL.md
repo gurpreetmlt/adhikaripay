@@ -359,8 +359,8 @@ Reference: `INSTANTPAY_CLIENT_ID/SECRET/AES_KEY/AUTH_CODE`, `AEPS_PROVIDER_MODE`
 - [x] Service gate skipped + `AEPS_PROVIDER_MODE` routing
 - [x] Limit enforcement (txn amount ₹50k) — validator; day/month/year counts pending
 - [x] Agent Web portal (`apps/web/app/nepal/page.tsx` — Outlet / Transfer / Status tabs, daily 2FA)
+- [x] Mobile Nepal remittance screen (`apps/adhikaripay-mobile-app/src/screens/retailer/NepalScreen.tsx` — Outlet / Transfer / Status, OTP, quote, txn status)
 - [x] Dashboard card `NEPAL_REMITTANCE` (Nepal Transfer) + AppShell sidebar link
-- [ ] Mobile Nepal remittance screen
 - [ ] Coolify redeploy (backend/web) — no new env unless confirmed; run `seed:catalog` after deploy
 
 ---
@@ -368,5 +368,5 @@ Reference: `INSTANTPAY_CLIENT_ID/SECRET/AES_KEY/AUTH_CODE`, `AEPS_PROVIDER_MODE`
 ## 8. Next step (user)
 
 1. **Remitter count caps** — 3/day, 5/month, 6/year (backend enforce + UX from `transactionCount`)
-2. **Mobile Nepal remittance screen**
-3. Coolify backend + web redeploy + live smoke test
+2. Coolify backend + web redeploy + live smoke test
+3. Merchant onboarding `spKey` confirm for Nepal rail

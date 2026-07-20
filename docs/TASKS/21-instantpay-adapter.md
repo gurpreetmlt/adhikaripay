@@ -34,6 +34,15 @@ Real InstantPay adapter behind the existing `ProviderAdapter` contract so AEPS /
 - [ ] Customer photo / CCTV object storage for cash evidence
 - [ ] Seed `provider_services` for non-mode-routed rails
 
+## Cross-platform rule
+
+- InstantPay feature ko **done** tab hi mark karo jab:
+  - backend contract wired ho,
+  - `apps/web` entrypoint + usable flow ho,
+  - `apps/mobile` entrypoint + usable flow ho,
+  - ya missing platform doc mein explicit exception ke saath marked ho.
+- Audit source of truth: `InstantPay/PARITY.md`
+
 ## Deploy env
 
 ### Testing (current)
