@@ -42,6 +42,7 @@ const CATALOG: SeedCategory[] = [
       { code: "BALANCE_ENQUIRY", name: "Balance Enquiry", icon: "Balance-Enquiry.svg" },
       { code: "UPI_CASH_POINT", name: "UPI Cash Point", badge: "NEW", icon: "UPI-Cash-Point.svg" },
       { code: "MONEY_TRANSFER", name: "Money Transfer", icon: "Money-Transfer.svg" },
+      { code: "NEPAL_REMITTANCE", name: "Nepal Transfer", badge: "NEW", icon: "Money-Transfer.svg" },
     ],
   },
   {

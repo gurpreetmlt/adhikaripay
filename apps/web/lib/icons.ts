@@ -33,6 +33,8 @@ const SERVICE_ICON: Record<string, LucideIcon> = {
   BALANCE_ENQUIRY: Wallet,
   UPI_CASH_POINT: Smartphone,
   MONEY_TRANSFER: Send,
+  NEPAL_REMITTANCE: Send,
+  NEPAL: Send,
   CASH_COLLECTION: Coins,
   LOANS: Building2,
   INSURANCE: ShieldCheck,

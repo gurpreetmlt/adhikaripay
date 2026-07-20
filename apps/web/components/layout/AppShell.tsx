@@ -20,6 +20,7 @@ import {
   Search,
   Star,
   RefreshCw,
+  Globe2,
 } from "lucide-react";
 import { AdhikariPayLogo, AdhikariIcon } from "@/components/brand/Logo";
 import { fetchApi } from "@/lib/api";
@@ -33,6 +34,7 @@ const NAV = [
   { icon: LayoutDashboard, label: "Dashboard", to: "/dashboard" },
   { icon: ArrowLeftRight, label: "Transactions", to: "/transactions" },
   { icon: Wallet, label: "Wallet", to: "/wallet" },
+  { icon: Globe2, label: "Nepal", to: "/nepal" },
   { icon: Network, label: "Network", to: "/network" },
   { icon: Users, label: "Customers", to: "/customers" },
   { icon: BarChart3, label: "Reports", to: "/reports" },
