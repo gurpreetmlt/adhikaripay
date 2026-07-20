@@ -53,11 +53,11 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
 
   useEffect(() => {
     const phone = sponsorMobile.replace(/\D/g, "").slice(0, 10);
-    setSponsorUid("");
-    setSponsorName(null);
-    setSponsorOk(false);
     if (phone.length < 3) {
       setSponsorList([]);
+      setSponsorUid("");
+      setSponsorName(null);
+      setSponsorOk(false);
       setSponsorSearching(false);
       return;
     }
@@ -73,18 +73,33 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
         if (!data.success) throw new Error("not found");
         const items = data.data.items ?? [];
         setSponsorList(items);
-        if (items.length === 1 && phone.length === 10) {
-          setSponsorUid(items[0]!.uid);
-          setSponsorName(items[0]!.name);
-          setSponsorOk(true);
-        }
+        // Keep selection if still in results; else auto-pick single match; else clear.
+        setSponsorUid((prev) => {
+          if (prev && items.some((i) => i.uid === prev)) {
+            const keep = items.find((i) => i.uid === prev)!;
+            setSponsorName(keep.name);
+            setSponsorOk(true);
+            return prev;
+          }
+          if (items.length === 1) {
+            setSponsorName(items[0]!.name);
+            setSponsorOk(true);
+            return items[0]!.uid;
+          }
+          setSponsorName(null);
+          setSponsorOk(false);
+          return "";
+        });
       } catch {
         if (cancelled) return;
         setSponsorList([]);
+        setSponsorUid("");
+        setSponsorName(null);
+        setSponsorOk(false);
       } finally {
         if (!cancelled) setSponsorSearching(false);
       }
-    }, 300);
+    }, 250);
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -376,58 +391,75 @@ function StepDetails(props: {
         />
       </Field>
 
-      <Field label="DISTRIBUTOR PHONE" tokens={tokens}>
-        <TextInput
-          value={props.sponsorMobile}
-          onChangeText={(t) => props.setSponsorMobile(t.replace(/\D/g, "").slice(0, 10))}
-          placeholder="Type Dist mobile (min 3 digits)"
-          keyboardType="number-pad"
-          maxLength={10}
-          placeholderTextColor={tokens.mute}
-          style={[fieldStyles.input, { color: tokens.txt2, backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}
-        />
+      <Field label="DISTRIBUTOR MOBILE NO." tokens={tokens}>
+        <View style={[fieldStyles.row, { backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}>
+          <Text style={[fieldStyles.prefix, { color: tokens.txt2 }]}>+91</Text>
+          <View style={[fieldStyles.divider, { backgroundColor: tokens.inputBorder }]} />
+          <TextInput
+            value={props.sponsorMobile}
+            onChangeText={(t) => props.setSponsorMobile(t.replace(/\D/g, "").slice(0, 10))}
+            placeholder="972… type — names appear below"
+            keyboardType="number-pad"
+            maxLength={10}
+            placeholderTextColor={tokens.mute}
+            style={[fieldStyles.rowInput, { color: tokens.txt2 }]}
+          />
+        </View>
       </Field>
       {props.sponsorSearching ? (
-        <Text style={{ fontSize: 12, color: tokens.mute, marginBottom: 8 }}>Searching distributors…</Text>
+        <Text style={{ fontSize: 12, color: tokens.mute, marginBottom: 8 }}>Searching…</Text>
       ) : null}
-      {props.sponsorList.map((item) => {
-        const selected = props.sponsorUid === item.uid;
-        return (
-          <Pressable
-            key={item.uid}
-            onPress={() => props.onSelectSponsor(item)}
-            style={[
-              styles.sponsorOk,
-              {
-                backgroundColor: selected ? `${colors.green}18` : tokens.inputBg,
-                borderWidth: 1,
-                borderColor: selected ? colors.green : tokens.inputBorder,
-                marginBottom: 6,
-              },
-            ]}
-          >
-            {selected ? (
-              <CheckCircle2 size={14} color={colors.green} strokeWidth={2.5} />
-            ) : (
-              <Phone size={14} color={tokens.mute} strokeWidth={2} />
-            )}
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.sponsorOkText, { color: selected ? colors.green : tokens.txt }]}>
-                {item.name}
-              </Text>
-              <Text style={{ fontSize: 11, color: tokens.mute, marginTop: 2 }}>
-                {item.mobile} · {item.uid}
-              </Text>
-            </View>
-          </Pressable>
-        );
-      })}
+      {props.sponsorOk && props.sponsorName ? (
+        <View style={[styles.sponsorOk, { backgroundColor: `${colors.green}22`, marginBottom: 8 }]}>
+          <CheckCircle2 size={16} color={colors.green} strokeWidth={2.5} />
+          <Text style={[styles.sponsorOkText, { color: colors.green, fontSize: 14 }]}>
+            Selected: {props.sponsorName}
+          </Text>
+        </View>
+      ) : null}
+      {props.sponsorList.length > 0 ? (
+        <View style={{ marginBottom: 10 }}>
+          <Text style={{ fontSize: 11, fontWeight: "700", color: tokens.mute, marginBottom: 6, letterSpacing: 0.6 }}>
+            MATCHING DISTRIBUTORS — TAP TO SELECT
+          </Text>
+          {props.sponsorList.map((item) => {
+            const selected = props.sponsorUid === item.uid;
+            return (
+              <Pressable
+                key={item.uid}
+                onPress={() => props.onSelectSponsor(item)}
+                style={[
+                  styles.sponsorOk,
+                  {
+                    backgroundColor: selected ? `${colors.green}18` : tokens.inputBg,
+                    borderWidth: 1,
+                    borderColor: selected ? colors.green : tokens.inputBorder,
+                    marginBottom: 6,
+                  },
+                ]}
+              >
+                {selected ? (
+                  <CheckCircle2 size={14} color={colors.green} strokeWidth={2.5} />
+                ) : (
+                  <Phone size={14} color={tokens.mute} strokeWidth={2} />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.sponsorOkText, { color: selected ? colors.green : tokens.txt, fontSize: 15 }]}>
+                    {item.name}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: tokens.mute, marginTop: 2 }}>{item.mobile}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
       {props.sponsorMobile.length >= 3 && !props.sponsorSearching && props.sponsorList.length === 0 ? (
         <Text style={styles.sponsorErr}>Koi active Distributor nahi mila — number check karo</Text>
       ) : null}
       {props.sponsorMobile.length > 0 && props.sponsorMobile.length < 3 ? (
         <Text style={{ fontSize: 12, color: tokens.mute, marginBottom: 8 }}>
-          Kam se kam 3 digit type karo — list yahan aayegi
+          3 digit type karo (jaise 972) — naam neeche aayenge
         </Text>
       ) : null}
 

@@ -167,7 +167,7 @@ function TreeItem({
               color: node.isActive ? "#b91c1c" : B.green,
             }}
           >
-            {busy ? "…" : node.isActive ? "Deactivate" : "Activate"}
+            {busy ? "…" : node.isActive ? "Inactive" : "Active"}
           </button>
         ) : null}
       </div>
@@ -202,7 +202,7 @@ export default function NetworkPage() {
   const [data, setData] = useState<NetworkData | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [view, setView] = useState<"tree" | "table">("tree");
+  const [view, setView] = useState<"tree" | "table">("table");
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const canToggleChildren = user?.role === "master_distributor" || user?.role === "distributor";
@@ -232,7 +232,7 @@ export default function NetworkPage() {
     setTogglingId(id);
     try {
       await api.patch(`/users/${id}/active`, { isActive: next });
-      toast.success(next ? "Activated" : "Deactivated");
+      toast.success(next ? "Marked Active" : "Marked Inactive");
       const res = await fetchApi<NetworkData>("/users/network");
       setData(res);
     } catch (err) {
@@ -458,7 +458,7 @@ export default function NetworkPage() {
                                   color: m.isActive ? "#b91c1c" : B.green,
                                 }}
                               >
-                                {togglingId === m.id ? "…" : m.isActive ? "Deactivate" : "Activate"}
+                                {togglingId === m.id ? "…" : m.isActive ? "Inactive" : "Active"}
                               </button>
                             ) : (
                               <span className="text-xs" style={{ color: B.muted }}>—</span>

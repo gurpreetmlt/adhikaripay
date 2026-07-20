@@ -168,7 +168,7 @@ export default function SignupPage() {
               />
             </Field>
             <div>
-              <Field label="Distributor phone (sponsor)" icon={Phone}>
+              <Field label="Distributor mobile no." icon={Phone}>
                 <input
                   required
                   inputMode="numeric"
@@ -176,7 +176,7 @@ export default function SignupPage() {
                   value={sponsorMobile}
                   onChange={(e) => setSponsorMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
                   className="w-full bg-transparent text-sm outline-none"
-                  placeholder="Min 3 digits — list below"
+                  placeholder="972… names appear below"
                   autoComplete="off"
                 />
               </Field>
