@@ -18,6 +18,7 @@ import { useTheme } from "../../theme/ThemeContext";
 import { colors } from "../../theme/colors";
 import { AepsScreen } from "./AepsScreen";
 import { DmtScreen } from "./DmtScreen";
+import { NepalScreen } from "./NepalScreen";
 import { UpiCashPointScreen } from "./UpiCashPointScreen";
 import { showAlert } from "../../components/AppAlert";
 
@@ -28,6 +29,7 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 /** Service codes that route to dedicated full-screen flows instead of the generic "coming soon" tile press. */
 const AEPS_CODES = new Set(["AADHAAR_PAY", "CASH_WITHDRAW", "BALANCE_ENQUIRY", "MINI_STATEMENT", "CASH_DEPOSIT"]);
 const DMT_CODES = new Set(["MONEY_TRANSFER"]);
+const NEPAL_CODES = new Set(["NEPAL", "NEPAL_REMITTANCE"]);
 const UPI_CP_CODES = new Set(["UPI_CASH_POINT"]);
 
 function greetingName(name: string): string {
@@ -46,7 +48,7 @@ export function ServicesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [homeEditMode, setHomeEditMode] = useState(false);
-  const [activeScreen, setActiveScreen] = useState<"home" | "aeps" | "dmt" | "upi_cp">("home");
+  const [activeScreen, setActiveScreen] = useState<"home" | "aeps" | "dmt" | "nepal" | "upi_cp">("home");
   const [aepsServiceCode, setAepsServiceCode] = useState<string | undefined>();
 
   const { entries: recent, loading: recentLoading, reload: reloadRecent } = useRecentLedger(6);
@@ -92,6 +94,8 @@ export function ServicesScreen() {
       setActiveScreen("aeps");
     } else if (DMT_CODES.has(code)) {
       setActiveScreen("dmt");
+    } else if (NEPAL_CODES.has(code)) {
+      setActiveScreen("nepal");
     } else if (UPI_CP_CODES.has(code)) {
       setActiveScreen("upi_cp");
     }
@@ -106,6 +110,7 @@ export function ServicesScreen() {
 
   if (activeScreen === "aeps") return <AepsScreen onBack={backToHome} serviceCode={aepsServiceCode} />;
   if (activeScreen === "dmt") return <DmtScreen onBack={backToHome} />;
+  if (activeScreen === "nepal") return <NepalScreen onBack={backToHome} />;
   if (activeScreen === "upi_cp") return <UpiCashPointScreen onBack={backToHome} />;
 
   const firstName = user.name.split(" ")[0] ?? user.name;

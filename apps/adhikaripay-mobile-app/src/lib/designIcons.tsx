@@ -32,6 +32,8 @@ export function serviceCodeToDesignKey(code: string): DesignIconName {
     BALANCE_ENQUIRY: "balenq",
     UPI_CASH_POINT: "upi",
     MONEY_TRANSFER: "dmt",
+    NEPAL_REMITTANCE: "dmt",
+    NEPAL: "dmt",
     MINI_ATM: "miniatm",
     MICRO_ATM: "microatm",
     MOBILE_PREPAID: "recharge",
