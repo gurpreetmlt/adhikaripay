@@ -84,12 +84,18 @@ export async function instantPayPost(
 export async function instantPayGet(
   path: string,
   headers: InstantPayHeaders,
+  /** InstantPay Nepal staticData uses GET with a JSON body (`type`). */
+  body?: Record<string, unknown>,
 ): Promise<InstantPayApiResponse> {
   const url = `${instantPayBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
   const started = Date.now();
   let res: Response;
   try {
-    res = await fetch(url, { method: "GET", headers: buildInstantPayHeaders(headers) });
+    res = await fetch(url, {
+      method: "GET",
+      headers: buildInstantPayHeaders(headers),
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
   } catch (err) {
     logger.error({ err, path }, "InstantPay network error");
     throw err;

@@ -83,7 +83,26 @@ async function resolveAepsProvider(serviceCode: string): Promise<RoutedProvider[
     serviceCode === "dmt_delete_beneficiary_verify" ||
     serviceCode === "dmt_txn_otp" ||
     serviceCode === "dmt_refund_otp" ||
-    serviceCode === "dmt_refund";
+    serviceCode === "dmt_refund" ||
+    serviceCode === "nepal_static_data" ||
+    serviceCode === "nepal_payment_locations" ||
+    serviceCode === "nepal_state_district" ||
+    serviceCode === "nepal_outlet_status" ||
+    serviceCode === "nepal_outlet_registration" ||
+    serviceCode === "nepal_outlet_ekyc_initiate" ||
+    serviceCode === "nepal_outlet_ekyc_status" ||
+    serviceCode === "nepal_outlet_ekyc_process" ||
+    serviceCode === "nepal_remitter_profile" ||
+    serviceCode === "nepal_otp_request" ||
+    serviceCode === "nepal_remitter_registration" ||
+    serviceCode === "nepal_remitter_ekyc_initiate" ||
+    serviceCode === "nepal_remitter_ekyc_status" ||
+    serviceCode === "nepal_remitter_ekyc_process" ||
+    serviceCode === "nepal_remitter_update" ||
+    serviceCode === "nepal_beneficiary_registration" ||
+    serviceCode === "nepal_service_charge" ||
+    serviceCode === "nepal_fund_transfer" ||
+    serviceCode === "nepal_fetch_txn_status";
   if (!skipServiceGate) {
     const [svc] = await db
       .select({ id: services.id, isActive: services.isActive })
@@ -175,6 +194,7 @@ export async function callProvider<T extends Record<string, unknown>>(
   if ("aadhaarNumber" in redactedRequest) redactedRequest.aadhaarNumber = "[REDACTED]";
   if ("accountNumber" in redactedRequest) redactedRequest.accountNumber = "[REDACTED]";
   if ("panNumber" in redactedRequest) redactedRequest.panNumber = "[REDACTED]";
+  if ("otp" in redactedRequest) redactedRequest.otp = "[REDACTED]";
 
   let result: ProviderResult<T>;
   try {

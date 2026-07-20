@@ -21,6 +21,27 @@ export const AEPS_ROUTED_SERVICE_CODES = new Set([
   "dmt_txn_otp",
   "dmt_refund_otp",
   "dmt_refund",
+  "nepal_static_data",
+  "nepal_payment_locations",
+  "nepal_state_district",
+  "nepal_outlet_status",
+  "nepal_outlet_registration",
+  "nepal_outlet_ekyc_initiate",
+  "nepal_outlet_ekyc_status",
+  "nepal_outlet_ekyc_process",
+  "nepal_remitter_profile",
+  "nepal_otp_request",
+  "nepal_remitter_registration",
+  "nepal_remitter_ekyc_initiate",
+  "nepal_remitter_ekyc_status",
+  "nepal_remitter_ekyc_process",
+  "nepal_remitter_update",
+  "nepal_beneficiary_registration",
+  "nepal_service_charge",
+  "nepal_fund_transfer",
+  "nepal_fetch_txn_status",
+  /** Nepal fund transfer settles against catalog service `MONEY_TRANSFER`. */
+  "MONEY_TRANSFER",
 ]);
 
 export function isAepsRoutedService(serviceCode: string): boolean {

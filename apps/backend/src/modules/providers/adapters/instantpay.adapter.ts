@@ -30,6 +30,44 @@ import type {
   DmtRefundParams,
   DmtTransactionOtpParams,
   DmtTransferParams,
+  NepalStaticDataParams,
+  NepalStaticDataType,
+  NepalStaticOption,
+  NepalPaymentLocation,
+  NepalPaymentLocationListParams,
+  NepalStateDistrict,
+  NepalStateDistrictParams,
+  NepalOutletStatus,
+  NepalOutletStatusParams,
+  NepalOutletRegistrationParams,
+  NepalOutletRegistrationResult,
+  NepalOutletEkycInitiateParams,
+  NepalOutletEkycInitiateResult,
+  NepalOutletEkycInitiateStatusParams,
+  NepalOutletEkycInitiateStatusResult,
+  NepalOutletEkycBiometricData,
+  NepalOutletEkycProcessParams,
+  NepalOutletEkycProcessResult,
+  NepalRemitterIdDoc,
+  NepalRemitterProfile,
+  NepalRemitterProfileParams,
+  NepalRemitterTxnCount,
+  NepalBeneficiary,
+  NepalOtpRequestParams,
+  NepalRemitterRegistrationParams,
+  NepalRemitterEkycInitiateParams,
+  NepalRemitterEkycInitiateResult,
+  NepalRemitterEkycInitiateStatusParams,
+  NepalRemitterEkycInitiateStatusResult,
+  NepalRemitterEkycProcessParams,
+  NepalRemitterUpdateParams,
+  NepalRemitterUpdateResult,
+  NepalBeneficiaryRegistrationParams,
+  NepalServiceChargeParams,
+  NepalServiceChargeQuote,
+  NepalFundTransferParams,
+  NepalFetchTransactionStatusParams,
+  NepalFetchTransactionStatusResult,
   ProviderAdapter,
   ProviderResult,
   RechargeParams,
@@ -401,9 +439,848 @@ export class InstantPayAdapter implements ProviderAdapter {
     return { ...mapped, data: { banks } };
   }
 
+  async nepalStaticData(
+    params: NepalStaticDataParams,
+  ): Promise<ProviderResult<{ items: NepalStaticOption[]; type: NepalStaticDataType }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    // InstantPay docs: GET with JSON body `{ type }`.
+    const res = await instantPayGet(
+      "/fi/remit/out/nepal/staticData",
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+      { type: params.type },
+    );
+    const rows = Array.isArray(res.data) ? (res.data as Record<string, unknown>[]) : [];
+    const items: NepalStaticOption[] = rows.map((r) => ({
+      label: String(r.label ?? r.value ?? ""),
+      value: String(r.value ?? r.label ?? ""),
+    }));
+    const data = { items, type: params.type };
+    const mapped = this.toResult(res, null, data);
+    return { ...mapped, data };
+  }
+
+  async nepalPaymentLocationList(
+    params: NepalPaymentLocationListParams,
+  ): Promise<ProviderResult<{ locations: NepalPaymentLocation[] }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayGet(
+      "/fi/remit/out/nepal/paymentLocationList",
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+      {
+        type: params.type,
+        country: params.country || "NEPAL",
+        state: params.state ?? "",
+        district: params.district ?? "",
+      },
+    );
+    const rows = Array.isArray(res.data) ? (res.data as Record<string, unknown>[]) : [];
+    const locations: NepalPaymentLocation[] = rows.map((r) => ({
+      locationId: (r.locationId as number | string) ?? "",
+      locationName: String(r.locationName ?? ""),
+      bankBranchId: (r.bankBranchId as number | string) ?? "",
+      bankName: String(r.bankName ?? ""),
+      branchName: String(r.branchName ?? ""),
+      branchCode: String(r.branchCode ?? ""),
+      routingCode: String(r.routingCode ?? ""),
+      country: String(r.country ?? ""),
+      address: String(r.address ?? ""),
+      state: String(r.state ?? ""),
+      district: String(r.district ?? ""),
+      city: String(r.city ?? ""),
+      phoneNumber: String(r.phoneNumber ?? ""),
+    }));
+    const mapped = this.toResult(res, null, { locations });
+    return { ...mapped, data: { locations } };
+  }
+
+  async nepalStateDistrict(
+    params: NepalStateDistrictParams,
+  ): Promise<ProviderResult<{ items: NepalStateDistrict[] }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayGet(
+      "/fi/remit/out/nepal/stateDistrict",
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+      { country: params.country },
+    );
+    const rows = Array.isArray(res.data) ? (res.data as Record<string, unknown>[]) : [];
+    const items: NepalStateDistrict[] = rows.map((r) => ({
+      state: String(r.state ?? ""),
+      district: String(r.district ?? ""),
+      stateCode: String(r.stateCode ?? ""),
+    }));
+    const mapped = this.toResult(res, null, { items });
+    return { ...mapped, data: { items } };
+  }
+
+  async nepalOutletStatus(
+    params: NepalOutletStatusParams,
+  ): Promise<ProviderResult<{ outlet: NepalOutletStatus }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const body: Record<string, unknown> = {};
+    if (params.checkOtpStatus) body.checkOtpStatus = 1;
+
+    const res = await instantPayGet(
+      "/fi/remit/out/nepal/outletStatus",
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+      Object.keys(body).length > 0 ? body : undefined,
+    );
+
+    const statuscode = String(res.statuscode ?? "").toUpperCase();
+    const actcodeRaw = res.actcode == null || res.actcode === "" ? null : String(res.actcode);
+    const actcode = actcodeRaw ? actcodeRaw.toUpperCase() : null;
+    const raw =
+      res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const cspStatus = raw?.cspStatus != null ? String(raw.cspStatus) : null;
+    const cspCode = raw?.cspCode != null ? String(raw.cspCode) : null;
+
+    // TXN + APPROVED (or no blocking actcode) = ready to remittance.
+    // TUP + OUTLETREGISTER / OUTLETEKYC / OTPVERFCTN = actionable onboarding steps (not a hard fail).
+    const blocking = actcode === "OUTLETREGISTER" || actcode === "OUTLETEKYC" || actcode === "OTPVERFCTN";
+    const ready =
+      statuscode === "TXN" &&
+      !blocking &&
+      (cspStatus == null || cspStatus.toUpperCase() === "APPROVED");
+
+    const outlet: NepalOutletStatus = {
+      statuscode,
+      actcode,
+      message: String(res.status ?? ""),
+      cspStatus,
+      cspCode,
+      ready,
+    };
+
+    return {
+      success: true,
+      status: ready ? "success" : blocking ? "pending" : mapInstantPayStatus(res),
+      providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+      amount: null,
+      message: outlet.message || (ready ? "Outlet ready" : "Outlet action required"),
+      data: { outlet },
+      raw: res as Record<string, unknown>,
+    };
+  }
+
+  async nepalOutletRegistration(
+    params: NepalOutletRegistrationParams,
+  ): Promise<ProviderResult<{ registration: NepalOutletRegistrationResult }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/nepal/outletRegistration",
+      {
+        otpReference: params.otpReference,
+        otp: params.otp,
+        gender: params.gender,
+        category: params.category,
+        fatherOrSpouseName: params.fatherOrSpouseName,
+        physicallyHandicapped: params.physicallyHandicapped,
+        alternateOccupationType: params.alternateOccupationType,
+        alternateOccupationDescription: params.alternateOccupationDescription ?? "",
+        highestEducation: params.highestEducation,
+        operatingHoursFrom: params.operatingHoursFrom,
+        operatingHoursTo: params.operatingHoursTo,
+        course: params.course,
+        courseCompletionDate: params.courseCompletionDate ?? "",
+        instituteName: params.instituteName ?? "",
+        deviceName: params.deviceName,
+        connectivityType: params.connectivityType,
+        connectionProvider: params.connectionProvider,
+        weeklyOff: params.weeklyOff,
+        expectedAnnualTurnover: params.expectedAnnualTurnover,
+        expectedAnnualIncome: params.expectedAnnualIncome,
+        bankAccountNo: params.bankAccountNo,
+        bankIfsc: params.bankIfsc,
+        accountName: params.accountName,
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    const statuscode = String(res.statuscode ?? "").toUpperCase();
+    const actcodeRaw = res.actcode == null || res.actcode === "" ? null : String(res.actcode);
+    const actcode = actcodeRaw ? actcodeRaw.toUpperCase() : null;
+    const needsEkyc = actcode === "OUTLETEKYC";
+    // Sample success is TUP + OUTLETEKYC — treat as pending next-step, not hard fail.
+    const ok = statuscode === "TXN" || needsEkyc || statuscode === "TUP";
+
+    const registration: NepalOutletRegistrationResult = {
+      statuscode,
+      actcode,
+      message: String(res.status ?? ""),
+      needsEkyc,
+    };
+
+    return {
+      success: ok,
+      status: needsEkyc ? "pending" : mapInstantPayStatus(res),
+      providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+      amount: null,
+      message: registration.message || (needsEkyc ? "Outlet registered — initiate eKYC" : "Outlet registration failed"),
+      data: { registration },
+      raw: res as Record<string, unknown>,
+    };
+  }
+
+  async nepalOutletEkycInitiate(
+    params: NepalOutletEkycInitiateParams,
+  ): Promise<ProviderResult<{ ekyc: NepalOutletEkycInitiateResult }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayGet("/fi/remit/out/nepal/outletEkycInitiate", {
+      outletId,
+      endpointIp: params.endpointIp || "127.0.0.1",
+    });
+
+    const raw =
+      res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const redirectUrl = String(raw?.redirectUrl ?? "");
+    const statuscode = String(res.statuscode ?? "").toUpperCase();
+    const actcodeRaw = res.actcode == null || res.actcode === "" ? null : String(res.actcode);
+    const actcode = actcodeRaw ? actcodeRaw.toUpperCase() : null;
+    const ok = statuscode === "TXN" && redirectUrl.length > 0;
+
+    const ekyc: NepalOutletEkycInitiateResult = {
+      statuscode,
+      actcode,
+      message: String(res.status ?? ""),
+      redirectUrl,
+    };
+
+    return {
+      success: ok,
+      status: ok ? "success" : mapInstantPayStatus(res),
+      providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+      amount: null,
+      message: ekyc.message || (ok ? "eKYC redirect ready" : "eKYC initiate failed"),
+      data: { ekyc },
+      raw: res as Record<string, unknown>,
+    };
+  }
+
+  async nepalOutletEkycInitiateStatus(
+    params: NepalOutletEkycInitiateStatusParams,
+  ): Promise<ProviderResult<{ ekycStatus: NepalOutletEkycInitiateStatusResult }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const qs =
+      params.referenceKey && params.referenceKey.length > 0
+        ? `?referenceKey=${encodeURIComponent(params.referenceKey)}`
+        : "";
+    const res = await instantPayGet(`/fi/remit/out/nepal/outletEkycInitiateStatus${qs}`, {
+      outletId,
+      endpointIp: params.endpointIp || "127.0.0.1",
+    });
+
+    const statuscode = String(res.statuscode ?? "").toUpperCase();
+    const actcodeRaw = res.actcode == null || res.actcode === "" ? null : String(res.actcode);
+    const actcode = actcodeRaw ? actcodeRaw.toUpperCase() : null;
+    const data =
+      res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const ready = statuscode === "TXN";
+
+    const ekycStatus: NepalOutletEkycInitiateStatusResult = {
+      statuscode,
+      actcode,
+      message: String(res.status ?? ""),
+      ready,
+      data,
+    };
+
+    return {
+      success: true,
+      status: ready ? "success" : mapInstantPayStatus(res),
+      providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+      amount: null,
+      message: ekycStatus.message || (ready ? "eKYC status OK" : "eKYC status pending"),
+      data: { ekycStatus },
+      raw: res as Record<string, unknown>,
+    };
+  }
+
+  async nepalOutletEkycProcess(
+    params: NepalOutletEkycProcessParams,
+  ): Promise<ProviderResult<{ process: NepalOutletEkycProcessResult }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const biometricData = this.buildNepalOutletEkycBiometric(params);
+    const res = await instantPayPost(
+      "/fi/remit/out/nepal/outletEkycProcess",
+      { biometricData },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    const statuscode = String(res.statuscode ?? "").toUpperCase();
+    const actcodeRaw = res.actcode == null || res.actcode === "" ? null : String(res.actcode);
+    const actcode = actcodeRaw ? actcodeRaw.toUpperCase() : null;
+    const ok = statuscode === "TXN";
+
+    const process: NepalOutletEkycProcessResult = {
+      statuscode,
+      actcode,
+      message: String(res.status ?? ""),
+      success: ok,
+    };
+
+    return {
+      success: ok,
+      status: mapInstantPayStatus(res),
+      providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+      amount: null,
+      message: process.message || (ok ? "Outlet eKYC submitted" : "Outlet eKYC process failed"),
+      data: { process },
+      raw: res as Record<string, unknown>,
+    };
+  }
+
+  /** Map PidData XML (or structured body) → Nepal InstantPay biometricData (`sessionKey`, not `Skey`). */
+  private buildNepalOutletEkycBiometric(
+    params: NepalOutletEkycProcessParams,
+  ): NepalOutletEkycBiometricData {
+    if (params.biometricData) {
+      return {
+        rdsId: params.biometricData.rdsId,
+        rdsVer: params.biometricData.rdsVer,
+        ci: params.biometricData.ci,
+        dc: params.biometricData.dc,
+        dpId: params.biometricData.dpId,
+        hmac: params.biometricData.hmac,
+        mc: params.biometricData.mc ?? "",
+        mi: params.biometricData.mi,
+        pidData: params.biometricData.pidData,
+        sessionKey: params.biometricData.sessionKey,
+      };
+    }
+    if (!params.biometricPayload?.trim()) {
+      throw new HttpError(400, "biometricPayload or biometricData is required", "VALIDATION_ERROR");
+    }
+    const bio = parsePidDataXml(params.biometricPayload, "");
+    return {
+      rdsId: bio.rdsId,
+      rdsVer: bio.rdsVer,
+      ci: bio.ci,
+      dc: bio.dc,
+      dpId: bio.dpId,
+      hmac: bio.hmac,
+      mc: bio.mc,
+      mi: bio.mi,
+      pidData: bio.pidData,
+      sessionKey: bio.sessionKey,
+    };
+  }
+
+  async nepalRemitterProfile(
+    params: NepalRemitterProfileParams,
+  ): Promise<ProviderResult<{ profile: NepalRemitterProfile | null }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    // InstantPay docs: GET with JSON body `{ mobile }`.
+    const res = await instantPayGet(
+      "/fi/remit/out/nepal/remitterProfile",
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+      { mobile: params.customerMobile },
+    );
+
+    const code = String(res.statuscode ?? "").toUpperCase();
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const hasProfile =
+      code === "TXN" && raw != null && String(raw.mobile ?? raw.id ?? "").length > 0;
+
+    if (!hasProfile) {
+      const notFound =
+        code === "RNF" ||
+        code === "SNR" ||
+        /not\s*(found|register)/i.test(String(res.status ?? ""));
+      if (notFound) {
+        return {
+          success: true,
+          status: "success",
+          providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+          amount: null,
+          message: String(res.status ?? "Remitter not found"),
+          data: { profile: null },
+          raw: res as Record<string, unknown>,
+        };
+      }
+      const mapped = this.toResult(res, null, { profile: null });
+      return { ...mapped, data: { profile: null } };
+    }
+
+    const profile = this.mapNepalRemitterProfile(raw, params.customerMobile);
+    const mapped = this.toResult(res, null, { profile });
+    return { ...mapped, data: { profile } };
+  }
+
+  async nepalOtpRequest(
+    params: NepalOtpRequestParams,
+  ): Promise<ProviderResult<{ otpReference: string }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/nepal/otpRequest",
+      {
+        operation: params.operation,
+        mobile: params.mobile ?? "",
+        paymentMode: params.paymentMode ?? "",
+        bankBranchId: params.bankBranchId ?? "",
+        accountNumber: params.accountNumber ?? "",
+        beneficiaryId: params.beneficiaryId ?? "",
+        ...(params.transferAmount != null && params.transferAmount !== ""
+          ? { transferAmount: params.transferAmount }
+          : {}),
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const otpReference = String(raw?.otpReference ?? "");
+    const ok = String(res.statuscode ?? "").toUpperCase() === "TXN" && otpReference.length > 0;
+
+    return {
+      success: ok,
+      status: ok ? "success" : mapInstantPayStatus(res),
+      providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+      amount: null,
+      message: String(res.status ?? (ok ? "OTP sent" : "OTP request failed")),
+      data: { otpReference },
+      raw: res as Record<string, unknown>,
+    };
+  }
+
+  async nepalRemitterRegistration(
+    params: NepalRemitterRegistrationParams,
+  ): Promise<ProviderResult<{ profile: NepalRemitterProfile }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/nepal/remitterRegistration",
+      {
+        name: params.name,
+        gender: params.gender,
+        dob: params.dob,
+        address: params.address,
+        mobile: params.mobile,
+        state: params.state,
+        district: params.district,
+        city: params.city,
+        nationality: params.nationality,
+        email: params.email ?? "",
+        employer: params.employer,
+        idType: params.idType,
+        idNumber: params.idNumber,
+        idExpiryDate: params.idExpiryDate ?? "",
+        idIssuedPlace: params.idIssuedPlace ?? "",
+        incomeSource: params.incomeSource,
+        remitterType: params.remitterType,
+        incomeSourceType: params.incomeSourceType,
+        annualIncome: params.annualIncome,
+        otpReference: params.otpReference,
+        otp: params.otp,
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    const code = String(res.statuscode ?? "").toUpperCase();
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const ok = code === "TXN" && raw != null && String(raw.id ?? raw.mobile ?? "").length > 0;
+
+    if (!ok || !raw) {
+      return {
+        success: false,
+        status: mapInstantPayStatus(res),
+        providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+        amount: null,
+        message: String(res.status ?? "Remitter registration failed"),
+        data: {
+          profile: this.mapNepalRemitterProfile(raw ?? {}, params.mobile),
+        },
+        raw: res as Record<string, unknown>,
+      };
+    }
+
+    const profile = this.mapNepalRemitterProfile(raw, params.mobile);
+    const mapped = this.toResult(res, null, { profile });
+    return { ...mapped, success: true, data: { profile } };
+  }
+
+  async nepalRemitterEkycInitiate(
+    params: NepalRemitterEkycInitiateParams,
+  ): Promise<ProviderResult<{ ekyc: NepalRemitterEkycInitiateResult }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const qs = `?remitterId=${encodeURIComponent(params.remitterId)}`;
+    const res = await instantPayGet(`/fi/remit/out/nepal/remitterEkycInitiate${qs}`, {
+      outletId,
+      endpointIp: params.endpointIp || "127.0.0.1",
+    });
+
+    const raw =
+      res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    // InstantPay uses `url` (outlet eKYC used `redirectUrl`) — normalize both.
+    const redirectUrl = String(raw?.url ?? raw?.redirectUrl ?? "");
+    const referenceKey = String(raw?.referenceKey ?? "");
+    const statuscode = String(res.statuscode ?? "").toUpperCase();
+    const actcodeRaw = res.actcode == null || res.actcode === "" ? null : String(res.actcode);
+    const actcode = actcodeRaw ? actcodeRaw.toUpperCase() : null;
+    const ok = statuscode === "TXN" && redirectUrl.length > 0;
+
+    const ekyc: NepalRemitterEkycInitiateResult = {
+      statuscode,
+      actcode,
+      message: String(res.status ?? ""),
+      referenceKey,
+      redirectUrl,
+    };
+
+    return {
+      success: ok,
+      status: ok ? "success" : mapInstantPayStatus(res),
+      providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+      amount: null,
+      message: ekyc.message || (ok ? "Remitter eKYC redirect ready" : "Remitter eKYC initiate failed"),
+      data: { ekyc },
+      raw: res as Record<string, unknown>,
+    };
+  }
+
+  async nepalRemitterEkycInitiateStatus(
+    params: NepalRemitterEkycInitiateStatusParams,
+  ): Promise<ProviderResult<{ ekycStatus: NepalRemitterEkycInitiateStatusResult }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const qs = `?remitterId=${encodeURIComponent(params.remitterId)}&referenceKey=${encodeURIComponent(params.referenceKey)}`;
+    const res = await instantPayGet(`/fi/remit/out/nepal/remitterEkycInitiateStatus${qs}`, {
+      outletId,
+      endpointIp: params.endpointIp || "127.0.0.1",
+    });
+
+    const statuscode = String(res.statuscode ?? "").toUpperCase();
+    const actcodeRaw = res.actcode == null || res.actcode === "" ? null : String(res.actcode);
+    const actcode = actcodeRaw ? actcodeRaw.toUpperCase() : null;
+    const data =
+      res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const ready = statuscode === "TXN";
+
+    const ekycStatus: NepalRemitterEkycInitiateStatusResult = {
+      statuscode,
+      actcode,
+      message: String(res.status ?? ""),
+      ready,
+      data,
+    };
+
+    return {
+      success: true,
+      status: ready ? "success" : mapInstantPayStatus(res),
+      providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+      amount: null,
+      message: ekycStatus.message || (ready ? "Remitter eKYC status OK" : "Remitter eKYC status pending"),
+      data: { ekycStatus },
+      raw: res as Record<string, unknown>,
+    };
+  }
+
+  async nepalRemitterEkycProcess(
+    params: NepalRemitterEkycProcessParams,
+  ): Promise<ProviderResult<{ process: NepalOutletEkycProcessResult }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const biometricData = this.buildNepalOutletEkycBiometric({
+      retailerUserId: params.retailerUserId,
+      biometricPayload: params.biometricPayload,
+      biometricData: params.biometricData,
+    });
+    const res = await instantPayPost(
+      "/fi/remit/out/nepal/remitterEkycProcess",
+      {
+        referenceKey: params.referenceKey,
+        remitterId: params.remitterId,
+        biometricData,
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    const statuscode = String(res.statuscode ?? "").toUpperCase();
+    const actcodeRaw = res.actcode == null || res.actcode === "" ? null : String(res.actcode);
+    const actcode = actcodeRaw ? actcodeRaw.toUpperCase() : null;
+    const ok = statuscode === "TXN";
+
+    const process: NepalOutletEkycProcessResult = {
+      statuscode,
+      actcode,
+      message: String(res.status ?? ""),
+      success: ok,
+    };
+
+    return {
+      success: ok,
+      status: mapInstantPayStatus(res),
+      providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+      amount: null,
+      message: process.message || (ok ? "Remitter eKYC submitted" : "Remitter eKYC process failed"),
+      data: { process },
+      raw: res as Record<string, unknown>,
+    };
+  }
+
+  async nepalRemitterUpdate(
+    params: NepalRemitterUpdateParams,
+  ): Promise<ProviderResult<{ update: NepalRemitterUpdateResult }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/nepal/remitterUpdate",
+      {
+        remitterType: params.remitterType,
+        incomeSourceType: params.incomeSourceType,
+        annualIncome: params.annualIncome,
+        remitterId: params.remitterId,
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    const statuscode = String(res.statuscode ?? "").toUpperCase();
+    const actcodeRaw = res.actcode == null || res.actcode === "" ? null : String(res.actcode);
+    const actcode = actcodeRaw ? actcodeRaw.toUpperCase() : null;
+    const ok = statuscode === "TXN";
+
+    const update: NepalRemitterUpdateResult = {
+      statuscode,
+      actcode,
+      message: String(res.status ?? ""),
+      success: ok,
+    };
+
+    return {
+      success: ok,
+      status: mapInstantPayStatus(res),
+      providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+      amount: null,
+      message: update.message || (ok ? "Remitter updated" : "Remitter update failed"),
+      data: { update },
+      raw: res as Record<string, unknown>,
+    };
+  }
+
+  async nepalBeneficiaryRegistration(
+    params: NepalBeneficiaryRegistrationParams,
+  ): Promise<ProviderResult<{ profile: NepalRemitterProfile; beneficiaryId: string }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayPost(
+      "/fi/remit/out/nepal/beneficiaryRegistration",
+      {
+        remitterMobile: params.remitterMobile,
+        name: params.name,
+        gender: params.gender,
+        mobile: params.mobile,
+        relationship: params.relationship,
+        address: params.address,
+        paymentMode: params.paymentMode,
+        bankBranchId: params.bankBranchId ?? "",
+        accountNumber: params.accountNumber ?? "",
+      },
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+    );
+
+    const code = String(res.statuscode ?? "").toUpperCase();
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const profile = this.mapNepalRemitterProfile(raw ?? {}, params.remitterMobile);
+
+    // Prefer beneficiary matching request mobile/name; else last in list.
+    const matched =
+      profile.beneficiaries.find(
+        (b) => b.mobile === params.mobile && b.name === params.name,
+      ) ??
+      profile.beneficiaries.find((b) => b.mobile === params.mobile) ??
+      profile.beneficiaries[profile.beneficiaries.length - 1];
+    const beneficiaryId = matched?.id ?? "";
+    const ok = code === "TXN" && beneficiaryId.length > 0;
+
+    return {
+      success: ok,
+      status: ok ? "success" : mapInstantPayStatus(res),
+      providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+      amount: null,
+      message: String(
+        res.status ?? (ok ? "Beneficiary registered" : "Beneficiary registration failed"),
+      ),
+      data: { profile, beneficiaryId },
+      raw: res as Record<string, unknown>,
+    };
+  }
+
+  async nepalServiceCharge(
+    params: NepalServiceChargeParams,
+  ): Promise<ProviderResult<{ quote: NepalServiceChargeQuote }>> {
+    const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
+    const res = await instantPayGet(
+      "/fi/remit/out/nepal/serviceCharge",
+      { outletId, endpointIp: params.endpointIp || "127.0.0.1" },
+      {
+        country: params.country || "Nepal",
+        paymentMode: params.paymentMode,
+        transferAmount: params.transferAmount ?? "",
+        payoutAmount: params.payoutAmount ?? "",
+        bankBranchId: params.bankBranchId ?? "",
+        remitterMobile: params.remitterMobile,
+        beneficiaryId: params.beneficiaryId ?? "",
+      },
+    );
+
+    const code = String(res.statuscode ?? "").toUpperCase();
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const quote: NepalServiceChargeQuote = {
+      transferAmount: String(raw?.transferAmount ?? ""),
+      serviceCharge: String(raw?.serviceCharge ?? ""),
+      collectionAmount: String(raw?.collectionAmount ?? ""),
+      collectionCurrency: String(raw?.collectionCurrency ?? "INR"),
+      exchangeRate: String(raw?.exchangeRate ?? ""),
+      payoutAmount: String(raw?.payoutAmount ?? ""),
+      payoutCurrency: String(raw?.payoutCurrency ?? "NPR"),
+    };
+    const ok = code === "TXN" && (quote.collectionAmount.length > 0 || quote.transferAmount.length > 0);
+
+    return {
+      success: ok,
+      status: ok ? "success" : mapInstantPayStatus(res),
+      providerTxnId: (res.orderid as string | null) ?? (res.ipay_uuid as string | null) ?? null,
+      amount: quote.collectionAmount || quote.transferAmount || null,
+      message: String(res.status ?? (ok ? "Service charge quote ready" : "Service charge failed")),
+      data: { quote },
+      raw: res as Record<string, unknown>,
+    };
+  }
+
+  async nepalFundTransfer(params: NepalFundTransferParams): Promise<ProviderResult> {
+    const ctx = await this.resolveOutletContext(params);
+    const externalRef = params.externalRef || `NP-${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+    const res = await instantPayPost(
+      "/fi/remit/out/nepal/fundTransfer",
+      {
+        externalRef,
+        remitterMobile: params.remitterMobile,
+        beneficiaryId: params.beneficiaryId,
+        transferAmount: params.transferAmount,
+        remittanceReason: params.remittanceReason,
+        otpReference: params.otpReference,
+        otp: params.otp,
+        latitude: ctx.latitude,
+        longitude: ctx.longitude,
+      },
+      { outletId: ctx.outletId, endpointIp: params.endpointIp || ctx.endpointIp },
+    );
+
+    const raw = res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : {};
+    return this.toResult(res, params.transferAmount, {
+      externalRef: String(raw.externalRef ?? externalRef),
+      poolReferenceId: String(raw.poolReferenceId ?? ""),
+      txnReferenceId: String(raw.txnReferenceId ?? ""),
+      beneficiaryName: String(raw.beneficiaryName ?? ""),
+      exchangeRate: String(raw.exchangeRate ?? ""),
+      payoutAmount: String(raw.payoutAmount ?? ""),
+      payoutCurrency: String(raw.payoutCurrency ?? "NPR"),
+      orderid: String(res.orderid ?? raw.poolReferenceId ?? ""),
+    });
+  }
+
+  async nepalFetchTransactionStatus(
+    params: NepalFetchTransactionStatusParams,
+  ): Promise<ProviderResult<{ txnStatus: NepalFetchTransactionStatusResult }>> {
+    const ctx = await this.resolveOutletContext(params);
+    // Docs OpenAPI says GET; HTTP/curl samples use POST with JSON body — InstantPay accepts POST.
+    const res = await instantPayPost(
+      "/fi/remit/out/nepal/fetchTransactionStatus",
+      {
+        ipayId: params.ipayId,
+        latitude: ctx.latitude,
+        longitude: ctx.longitude,
+      },
+      { outletId: ctx.outletId, endpointIp: params.endpointIp || ctx.endpointIp },
+    );
+
+    const statuscode = String(res.statuscode ?? "").toUpperCase();
+    const actcodeRaw = res.actcode == null || res.actcode === "" ? null : String(res.actcode);
+    const actcode = actcodeRaw ? actcodeRaw.toUpperCase() : null;
+    const data =
+      res.data && !Array.isArray(res.data) ? (res.data as Record<string, unknown>) : null;
+    const ready = statuscode === "TXN";
+    const pending = statuscode === "TUP";
+
+    const txnStatus: NepalFetchTransactionStatusResult = {
+      statuscode,
+      actcode,
+      message: String(res.status ?? ""),
+      ready,
+      data,
+    };
+
+    return {
+      success: ready || pending,
+      status: ready ? "success" : pending ? "pending" : mapInstantPayStatus(res),
+      providerTxnId: (res.orderid as string | null) ?? params.ipayId,
+      amount: null,
+      message: txnStatus.message || (ready ? "Transaction successful" : "Transaction status"),
+      data: { txnStatus },
+      raw: res as Record<string, unknown>,
+    };
+  }
+
+  private mapNepalRemitterProfile(
+    raw: Record<string, unknown>,
+    fallbackMobile: string,
+  ): NepalRemitterProfile {
+    const idsRaw = Array.isArray(raw.ids) ? (raw.ids as Record<string, unknown>[]) : [];
+    const ids: NepalRemitterIdDoc[] = idsRaw.map((row) => ({
+      idType: String(row.idType ?? ""),
+      idNumber: String(row.idNumber ?? ""),
+    }));
+    const tc =
+      raw.transactionCount && !Array.isArray(raw.transactionCount)
+        ? (raw.transactionCount as Record<string, unknown>)
+        : {};
+    const transactionCount: NepalRemitterTxnCount = {
+      day: String(tc.day ?? "0"),
+      month: String(tc.month ?? "0"),
+      year: String(tc.year ?? "0"),
+    };
+    const beneficiariesRaw = Array.isArray(raw.beneficiaries)
+      ? (raw.beneficiaries as Record<string, unknown>[])
+      : [];
+    const beneficiaries: NepalBeneficiary[] = beneficiariesRaw.map((row) => ({
+      id: String(row.id ?? ""),
+      name: String(row.name ?? ""),
+      gender: String(row.gender ?? ""),
+      relationship: String(row.relationship ?? ""),
+      address: String(row.address ?? ""),
+      mobile: String(row.mobile ?? ""),
+      paymentMode: String(row.paymentMode ?? ""),
+      bankBranchId: String(row.bankBranchId ?? ""),
+      bankName: String(row.bankName ?? ""),
+      bankBranchName: String(row.bankBranchName ?? ""),
+      acNumber: String(row.acNumber ?? row.accountNumber ?? ""),
+    }));
+
+    return {
+      id: String(raw.id ?? ""),
+      mobile: String(raw.mobile ?? fallbackMobile),
+      firstName: String(raw.firstName ?? ""),
+      gender: String(raw.gender ?? ""),
+      dob: String(raw.dob ?? ""),
+      address: String(raw.address ?? ""),
+      city: String(raw.city ?? ""),
+      state: String(raw.state ?? ""),
+      district: String(raw.district ?? ""),
+      nationality: String(raw.nationality ?? ""),
+      employer: String(raw.employer ?? ""),
+      incomeSource: String(raw.incomeSource ?? ""),
+      status: String(raw.status ?? ""),
+      eKycStatus: String(raw.eKycStatus ?? ""),
+      onboardingStatus: String(raw.onboardingStatus ?? ""),
+      approveStatus: String(raw.approveStatus ?? ""),
+      approveComment: String(raw.approveComment ?? ""),
+      ids,
+      transactionCount,
+      beneficiaries,
+    };
+  }
+
   async dmtRemitterProfile(
     params: DmtRemitterProfileParams,
-  ): Promise<ProviderResult<{ profile: DmtRemitterProfile | null }>> {
+  ): Promise<
+    ProviderResult<{
+      profile: DmtRemitterProfile | null;
+      referenceKey?: string;
+      validity?: string;
+    }>
+  > {
     const outletId = await this.resolveOutletId(params.retailerUserId, params.outletId);
     const res = await instantPayPost(
       "/fi/remit/out/domestic/v2/remitterProfile",
