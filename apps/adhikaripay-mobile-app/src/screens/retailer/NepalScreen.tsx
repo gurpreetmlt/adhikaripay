@@ -319,11 +319,15 @@ export function NepalScreen({ onBack }: NepalScreenProps) {
     void loadStatic("Relationship", setStaticRelationship);
     void loadStatic("PaymentMode", setStaticPaymentMode);
     void loadStatic("RemittanceReason", setStaticRemitReason);
-    void refreshOutletStatus();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (agentAuthReady !== true) return;
+    void refreshOutletStatus();
+  }, [agentAuthReady]);
 
   useEffect(() => {
     if (!staticGender.length) return;
