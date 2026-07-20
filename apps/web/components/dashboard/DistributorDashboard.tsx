@@ -61,9 +61,7 @@ export function DistributorDashboard() {
         setWallets(walletRows);
         setStats(dashStats);
         const hist = dashStats.activityHistory ?? [];
-        if (hist.length > 0) {
-          setSelectedMonth(hist[hist.length - 1]!.month);
-        }
+        if (hist.length > 0) setSelectedMonth(hist[hist.length - 1]!.month);
       } catch {
         if (alive) toast.error("Failed to load dashboard");
       } finally {
@@ -83,202 +81,175 @@ export function DistributorDashboard() {
   const history = stats?.activityHistory ?? [];
   const selected =
     history.find((h) => h.month === selectedMonth) ?? history[history.length - 1] ?? null;
+  const recentMonths = history.slice(-4);
 
   return (
-    <div className="space-y-5">
-      {/* Top Row: Wallet + Retailer Overview */}
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
-        <div
-          className="relative overflow-hidden rounded-2xl p-4 text-white lg:col-span-1"
-          style={{ background: role.gradient, boxShadow: `0 8px 32px ${role.color}40` }}
-        >
-          <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white opacity-10" />
-          <div className="mb-0.5 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-white/70">
-            <Wallet size={13} /> Main Balance
+    <div className="space-y-4">
+      {/* Single overview band — no tall empty balance card */}
+      <div className="overflow-hidden rounded-2xl border bg-white shadow-sm" style={{ borderColor: B.border }}>
+        <div className="grid grid-cols-1 lg:grid-cols-12">
+          <div
+            className="relative flex items-center gap-4 px-5 py-4 text-white lg:col-span-3 lg:flex-col lg:items-start lg:justify-center lg:gap-1"
+            style={{ background: role.gradient }}
+          >
+            <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white/10" />
+            <div className="relative min-w-0">
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/70">
+                <Wallet size={12} /> Main Balance
+              </div>
+              <div className="mt-0.5 text-2xl font-bold leading-none tracking-tight">
+                {loading ? "…" : formatInr(primary?.balance ?? "0")}
+              </div>
+            </div>
+            <div className="relative inline-flex items-center gap-1 rounded-md bg-white/15 px-2 py-1 text-[11px] text-white/90 lg:mt-2">
+              <Clock size={10} /> Pending {formatInr(totalPending)}
+            </div>
           </div>
-          <div className="text-2xl font-bold leading-tight">
-            {loading ? "…" : formatInr(primary?.balance ?? "0")}
-          </div>
-          <div className="mt-2 flex items-center gap-2 border-t border-white/15 pt-2">
-            <span className="flex items-center gap-1 text-[11px] text-white/70">
-              <Clock size={11} /> Pending: {formatInr(totalPending)}
-            </span>
-          </div>
-        </div>
 
-        <div className="rounded-2xl border bg-white p-5 lg:col-span-2" style={{ borderColor: B.border }}>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <Store size={18} style={{ color: B.blue }} />
-              <h3 className="truncate font-bold" style={{ color: B.blue }}>
-                Retailer Activity
+          <div className="flex flex-col justify-center gap-3 px-4 py-4 sm:px-5 lg:col-span-9">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Store size={15} style={{ color: B.blue }} />
+                <span className="text-sm font-bold" style={{ color: B.blue }}>
+                  Retailer Activity
+                </span>
                 {selected ? (
-                  <span className="font-semibold" style={{ color: B.muted }}>
-                    {" "}
-                    · {selected.monthLabel}
+                  <span
+                    className="rounded-md px-2 py-0.5 text-[11px] font-semibold"
+                    style={{ background: B.secondary, color: B.muted }}
+                  >
+                    {selected.monthLabel}
                   </span>
                 ) : null}
-              </h3>
-            </div>
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                title="Select month"
-                aria-label="Select month"
-                onClick={() => setMonthPickerOpen((o) => !o)}
-                className="flex h-9 w-9 items-center justify-center rounded-xl border transition hover:bg-slate-50"
-                style={{ borderColor: B.border, color: B.blue }}
-              >
-                <CalendarDays size={18} />
-              </button>
-              {monthPickerOpen && history.length > 0 ? (
-                <div
-                  className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border bg-white shadow-lg"
-                  style={{ borderColor: B.border }}
-                >
-                  {history.map((m) => {
-                    const active = m.month === (selected?.month ?? selectedMonth);
-                    return (
-                      <button
-                        key={m.month}
-                        type="button"
-                        onClick={() => {
-                          setSelectedMonth(m.month);
-                          setMonthPickerOpen(false);
-                        }}
-                        className="flex w-full px-3 py-2.5 text-left text-sm font-medium transition hover:bg-slate-50"
-                        style={{
-                          color: active ? B.blue : B.muted,
-                          background: active ? `${B.blue}10` : undefined,
-                        }}
-                      >
-                        {m.monthLabel}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-          </div>
+              </div>
 
-          {history.length > 0 ? (
-            <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1">
-              {history.map((m) => {
-                const active = m.month === (selected?.month ?? selectedMonth);
-                return (
+              <div className="flex items-center gap-1">
+                {recentMonths.map((m) => {
+                  const active = m.month === (selected?.month ?? selectedMonth);
+                  return (
+                    <button
+                      key={m.month}
+                      type="button"
+                      onClick={() => setSelectedMonth(m.month)}
+                      className="rounded-md px-2 py-1 text-[11px] font-semibold"
+                      style={{
+                        background: active ? B.blue : B.secondary,
+                        color: active ? "#fff" : B.muted,
+                      }}
+                    >
+                      {m.monthLabel.split(" ")[0]}
+                    </button>
+                  );
+                })}
+                <div className="relative ml-0.5">
                   <button
-                    key={`tab-${m.month}`}
                     type="button"
-                    onClick={() => setSelectedMonth(m.month)}
-                    className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition"
-                    style={{
-                      background: active ? B.blue : B.secondary,
-                      color: active ? "#fff" : B.muted,
-                    }}
+                    title="All months"
+                    aria-label="All months"
+                    onClick={() => setMonthPickerOpen((o) => !o)}
+                    className="flex h-7 w-7 items-center justify-center rounded-md border hover:bg-slate-50"
+                    style={{ borderColor: B.border, color: B.blue }}
                   >
-                    {m.monthLabel.split(" ")[0]}
+                    <CalendarDays size={14} />
                   </button>
-                );
-              })}
+                  {monthPickerOpen && history.length > 0 ? (
+                    <div
+                      className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-lg border bg-white shadow-lg"
+                      style={{ borderColor: B.border }}
+                    >
+                      {history.map((m) => {
+                        const active = m.month === (selected?.month ?? selectedMonth);
+                        return (
+                          <button
+                            key={m.month}
+                            type="button"
+                            onClick={() => {
+                              setSelectedMonth(m.month);
+                              setMonthPickerOpen(false);
+                            }}
+                            className="flex w-full px-3 py-2 text-left text-xs font-medium hover:bg-slate-50"
+                            style={{
+                              color: active ? B.blue : B.muted,
+                              background: active ? `${B.blue}12` : undefined,
+                            }}
+                          >
+                            {m.monthLabel}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             </div>
-          ) : null}
 
-          <div className="grid grid-cols-3 gap-3 sm:gap-4">
-            <div className="rounded-xl p-3 text-center sm:p-4" style={{ background: B.secondary }}>
-              <div className="text-2xl font-bold" style={{ color: B.blue }}>
-                {loading ? "…" : (selected?.total ?? stats?.retailers.total ?? 0)}
-              </div>
-              <div className="mt-1 text-xs font-medium" style={{ color: B.muted }}>
-                Total Retailers
-              </div>
-            </div>
-            <div className="rounded-xl p-3 text-center sm:p-4" style={{ background: `${B.green}10` }}>
-              <div className="text-2xl font-bold" style={{ color: B.green }}>
-                {loading ? "…" : (selected?.transacted ?? stats?.retailers.active ?? 0)}
-              </div>
-              <div className="mt-1 text-xs font-medium" style={{ color: B.muted }}>
-                Transacted
-              </div>
-            </div>
-            <div className="rounded-xl p-3 text-center sm:p-4" style={{ background: "#FEF2F2" }}>
-              <div className="text-2xl font-bold" style={{ color: "#DC2626" }}>
-                {loading ? "…" : (selected?.noActivity ?? stats?.retailers.inactive ?? 0)}
-              </div>
-              <div className="mt-1 text-xs font-medium" style={{ color: B.muted }}>
-                No Activity
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="mt-4 grid grid-cols-1 gap-3 border-t pt-4 sm:grid-cols-2"
-            style={{ borderColor: B.border }}
-          >
-            <div className="rounded-xl px-4 py-3" style={{ background: B.secondary }}>
-              <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
-                <BarChart3 size={13} style={{ color: B.blue }} />
-                Today&apos;s Volume
-              </div>
-              <div className="text-xl font-bold" style={{ color: B.blue }}>
-                {loading ? "…" : formatInr(stats?.today.volume ?? "0")}
-              </div>
-              <div className="mt-1 flex items-center gap-1 text-[11px]" style={{ color: B.green }}>
-                <TrendingUp size={11} /> All retailers
-              </div>
-            </div>
-            <div className="rounded-xl px-4 py-3" style={{ background: `${B.green}10` }}>
-              <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: B.muted }}>
-                <IndianRupee size={13} style={{ color: B.green }} />
-                Commission Today
-              </div>
-              <div className="text-xl font-bold" style={{ color: B.green }}>
-                {loading ? "…" : formatInr(stats?.today.commission ?? "0")}
-              </div>
-              <div className="mt-1 text-[11px]" style={{ color: B.muted }}>
-                Your share
-              </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+              <StatChip
+                label="Total"
+                value={loading ? "…" : String(selected?.total ?? stats?.retailers.total ?? 0)}
+                tone="neutral"
+              />
+              <StatChip
+                label="Transacted"
+                value={loading ? "…" : String(selected?.transacted ?? stats?.retailers.active ?? 0)}
+                tone="good"
+              />
+              <StatChip
+                label="No Activity"
+                value={loading ? "…" : String(selected?.noActivity ?? stats?.retailers.inactive ?? 0)}
+                tone="bad"
+              />
+              <StatChip
+                label="Volume Today"
+                value={loading ? "…" : formatInr(stats?.today.volume ?? "0")}
+                tone="neutral"
+                icon={<BarChart3 size={11} />}
+              />
+              <StatChip
+                label="Commission"
+                value={loading ? "…" : formatInr(stats?.today.commission ?? "0")}
+                tone="good"
+                icon={<IndianRupee size={11} />}
+                className="col-span-2 sm:col-span-1"
+              />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Quick Actions — above the fold */}
-      <div className="rounded-2xl border bg-white p-5" style={{ borderColor: B.border }}>
-        <h3 className="mb-4 text-sm font-bold" style={{ color: B.blue }}>
+      <div className="rounded-2xl border bg-white p-4" style={{ borderColor: B.border }}>
+        <h3 className="mb-3 text-sm font-bold" style={{ color: B.blue }}>
           Quick Actions
         </h3>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <QuickAction
-            icon={<UserPlus size={18} />}
+            icon={<UserPlus size={16} />}
             label="Add Retailer"
             desc="Onboard a new retailer"
             onClick={() => router.push("/signup")}
           />
           <QuickAction
-            icon={<ArrowRightLeft size={18} />}
+            icon={<ArrowRightLeft size={16} />}
             label="Fund / Reverse"
-            desc="Send or reverse retailer balance"
+            desc="Send or reverse balance"
             onClick={() => router.push("/wallet")}
           />
           <QuickAction
-            icon={<BarChart3 size={18} />}
+            icon={<BarChart3 size={16} />}
             label="View Reports"
-            desc="Transaction & commission reports"
+            desc="Txn & commission reports"
             onClick={() => router.push("/reports")}
           />
         </div>
       </div>
 
-      {/* Top Performing Retailers + Fund Requests */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border bg-white p-5" style={{ borderColor: B.border }}>
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <TrendingUp size={16} style={{ color: B.blue }} />
-              <h3 className="text-sm font-bold" style={{ color: B.blue }}>
-                Top Retailers (Today)
-              </h3>
-            </div>
+          <div className="mb-4 flex items-center gap-2">
+            <TrendingUp size={16} style={{ color: B.blue }} />
+            <h3 className="text-sm font-bold" style={{ color: B.blue }}>
+              Top Retailers (Today)
+            </h3>
           </div>
           {!stats || stats.topRetailers.length === 0 ? (
             <div className="flex flex-col items-center py-8">
@@ -337,6 +308,34 @@ export function DistributorDashboard() {
   );
 }
 
+function StatChip({
+  label,
+  value,
+  tone,
+  icon,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  tone: "neutral" | "good" | "bad";
+  icon?: ReactNode;
+  className?: string;
+}) {
+  const bg = tone === "good" ? `${B.green}12` : tone === "bad" ? "#FEF2F2" : B.secondary;
+  const fg = tone === "good" ? B.green : tone === "bad" ? "#DC2626" : B.blue;
+  return (
+    <div className={`rounded-xl px-3 py-2.5 ${className}`} style={{ background: bg }}>
+      <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: B.muted }}>
+        {icon}
+        {label}
+      </div>
+      <div className="mt-0.5 truncate text-lg font-bold tabular-nums" style={{ color: fg }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
 function QuickAction({
   icon,
   label,
@@ -352,20 +351,20 @@ function QuickAction({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-3 rounded-xl border p-4 text-left transition-all hover:shadow-md"
+      className="flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition hover:shadow-sm"
       style={{ borderColor: B.border }}
     >
       <div
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
         style={{ background: B.secondary, color: B.blue }}
       >
         {icon}
       </div>
-      <div>
+      <div className="min-w-0">
         <div className="text-sm font-semibold" style={{ color: B.blue }}>
           {label}
         </div>
-        <div className="text-xs" style={{ color: B.muted }}>
+        <div className="truncate text-xs" style={{ color: B.muted }}>
           {desc}
         </div>
       </div>
