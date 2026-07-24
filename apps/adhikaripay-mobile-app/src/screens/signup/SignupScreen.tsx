@@ -210,13 +210,13 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           {
             title: "Outlet location",
-            message: "Adhikari Pay needs your location to register the outlet on InstantPay.",
+            message: "Adhikari Pay needs your current location to register the outlet on InstantPay.",
             buttonPositive: "Allow",
             buttonNegative: "Deny",
           },
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          showAlert("Location denied", "Allow location or enter latitude and longitude manually.");
+          showAlert("Location denied", "Allow location permission, then tap Use current location again.");
           return;
         }
       }
@@ -228,11 +228,11 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
             resolve();
           },
           (err) => reject(err),
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
+          { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
         );
       });
     } catch {
-      showAlert("Location failed", "Could not get GPS. Enter latitude and longitude manually.");
+      showAlert("Location failed", "Could not get GPS. Turn on location and try again.");
     } finally {
       setGeoBusy(false);
     }
@@ -528,9 +528,7 @@ export function SignupScreen({ onBack }: SignupScreenProps) {
               dateOfBirth={dateOfBirth}
               setDateOfBirth={setDateOfBirth}
               latitude={latitude}
-              setLatitude={setLatitude}
               longitude={longitude}
-              setLongitude={setLongitude}
               geoBusy={geoBusy}
               onCaptureLocation={captureLocation}
             />
@@ -892,9 +890,7 @@ function StepOutlet(props: {
   dateOfBirth: string;
   setDateOfBirth: (v: string) => void;
   latitude: string;
-  setLatitude: (v: string) => void;
   longitude: string;
-  setLongitude: (v: string) => void;
   geoBusy: boolean;
   onCaptureLocation: () => void;
 }) {
@@ -1035,42 +1031,42 @@ function StepOutlet(props: {
         />
       </Field>
 
-      <Field label="LATITUDE" tokens={tokens}>
-        <TextInput
-          value={props.latitude}
-          onChangeText={props.setLatitude}
-          placeholder="e.g. 28.6139"
-          keyboardType="decimal-pad"
-          placeholderTextColor={tokens.mute}
-          style={[fieldStyles.input, { color: tokens.txt2, backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}
-        />
-      </Field>
-
-      <Field label="LONGITUDE" tokens={tokens}>
-        <TextInput
-          value={props.longitude}
-          onChangeText={props.setLongitude}
-          placeholder="e.g. 77.2090"
-          keyboardType="decimal-pad"
-          placeholderTextColor={tokens.mute}
-          style={[fieldStyles.input, { color: tokens.txt2, backgroundColor: tokens.inputBg, borderColor: tokens.inputBorder }]}
-        />
-      </Field>
-
       <Pressable
         onPress={props.onCaptureLocation}
         disabled={props.geoBusy}
-        style={[styles.geoBtn, { borderColor: colors.blueFlat }]}
+        style={[
+          styles.geoBtn,
+          {
+            borderColor: props.latitude && props.longitude ? colors.green : colors.blueFlat,
+            backgroundColor: props.latitude && props.longitude ? colors.greenBg : tokens.softBlue,
+          },
+        ]}
       >
         {props.geoBusy ? (
           <ActivityIndicator color={colors.blueFlat} />
         ) : (
           <>
-            <MapPin size={16} color={colors.blueFlat} strokeWidth={2.5} />
-            <Text style={[styles.geoBtnText, { color: colors.blueFlat }]}>Capture outlet location</Text>
+            <MapPin
+              size={16}
+              color={props.latitude && props.longitude ? colors.green : colors.blueFlat}
+              strokeWidth={2.5}
+            />
+            <Text
+              style={[
+                styles.geoBtnText,
+                { color: props.latitude && props.longitude ? colors.greenDark : colors.blueFlat },
+              ]}
+            >
+              {props.latitude && props.longitude
+                ? "Location set — tap to refresh"
+                : "Use current location"}
+            </Text>
           </>
         )}
       </Pressable>
+      <Text style={{ fontSize: 11, color: tokens.mute, marginBottom: 8, marginTop: -2 }}>
+        Lat/long stay hidden and are sent to InstantPay when you register.
+      </Text>
     </View>
   );
 }
@@ -1118,7 +1114,10 @@ function StepReview(props: {
           { k: "Address", v: props.addressFull },
           { k: "City", v: props.city },
           { k: "Pincode", v: props.pincode },
-          { k: "Lat / Long", v: `${props.latitude}, ${props.longitude}` },
+          {
+            k: "Location",
+            v: props.latitude && props.longitude ? "Current location set" : "Not set",
+          },
         ]
       : []),
   ];

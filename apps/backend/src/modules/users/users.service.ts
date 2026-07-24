@@ -20,6 +20,11 @@ export interface DownlineUserView {
   /** AEPS / cash-in wallet; "0" if the user has no aeps wallet row yet. */
   aepsBalance: string;
   createdAt: Date;
+  /** Real field-presence flags (not derived guesses) — drives the KYC completion assistant. */
+  hasPan: boolean;
+  hasAadhaar: boolean;
+  hasOutlet: boolean;
+  hasOutletGeo: boolean;
 }
 
 export interface UplineView {
@@ -47,6 +52,10 @@ export async function getDownline(actorId: string): Promise<DownlineUserView[]> 
       isActive: users.isActive,
       mainBalance: wallets.balance,
       createdAt: users.createdAt,
+      panNumberEncrypted: users.panNumberEncrypted,
+      aadhaarNumberEncrypted: users.aadhaarNumberEncrypted,
+      instantpayOutletId: users.instantpayOutletId,
+      outletLatitude: users.outletLatitude,
     })
     .from(users)
     .innerJoin(wallets, and(eq(wallets.userId, users.id), eq(wallets.walletType, "main")))
@@ -61,8 +70,20 @@ export async function getDownline(actorId: string): Promise<DownlineUserView[]> 
   const aepsByUser = new Map(aepsRows.map((r) => [r.userId, r.balance]));
 
   return rows.map((r) => ({
-    ...r,
+    id: r.id,
+    uid: r.uid,
+    name: r.name,
+    mobile: r.mobile,
+    role: r.role,
+    kycStatus: r.kycStatus,
+    isActive: r.isActive,
+    mainBalance: r.mainBalance,
+    createdAt: r.createdAt,
     aepsBalance: aepsByUser.get(r.id) ?? "0",
+    hasPan: r.panNumberEncrypted !== null,
+    hasAadhaar: r.aadhaarNumberEncrypted !== null,
+    hasOutlet: r.instantpayOutletId !== null,
+    hasOutletGeo: r.outletLatitude !== null,
   }));
 }
 
@@ -83,6 +104,60 @@ async function buildTree(parentId: string): Promise<DownlineTreeNode[]> {
   for (const child of children) {
     const grandChildren = await buildTree(child.id);
     nodes.push({ ...child, children: grandChildren });
+  }
+  return nodes;
+}
+
+/** Admin-only: full org tree from every root (Super Distributor) down — used by Network Tree page. */
+export async function getAdminFullNetworkTree(): Promise<DownlineTreeNode[]> {
+  const roots = await db
+    .select({
+      id: users.id,
+      uid: users.uid,
+      name: users.name,
+      mobile: users.mobile,
+      role: users.role,
+      kycStatus: users.kycStatus,
+      isActive: users.isActive,
+      mainBalance: wallets.balance,
+      createdAt: users.createdAt,
+      panNumberEncrypted: users.panNumberEncrypted,
+      aadhaarNumberEncrypted: users.aadhaarNumberEncrypted,
+      instantpayOutletId: users.instantpayOutletId,
+      outletLatitude: users.outletLatitude,
+    })
+    .from(users)
+    .innerJoin(wallets, and(eq(wallets.userId, users.id), eq(wallets.walletType, "main")))
+    .where(eq(users.role, "master_distributor"));
+
+  const aepsRows = roots.length
+    ? await db
+        .select({ userId: wallets.userId, balance: wallets.balance })
+        .from(wallets)
+        .where(and(inArray(wallets.userId, roots.map((r) => r.id)), eq(wallets.walletType, "aeps")))
+    : [];
+  const aepsByUser = new Map(aepsRows.map((r) => [r.userId, r.balance]));
+
+  const nodes: DownlineTreeNode[] = [];
+  for (const root of roots) {
+    const children = await buildTree(root.id);
+    nodes.push({
+      id: root.id,
+      uid: root.uid,
+      name: root.name,
+      mobile: root.mobile,
+      role: root.role,
+      kycStatus: root.kycStatus,
+      isActive: root.isActive,
+      mainBalance: root.mainBalance,
+      createdAt: root.createdAt,
+      aepsBalance: aepsByUser.get(root.id) ?? "0",
+      hasPan: root.panNumberEncrypted !== null,
+      hasAadhaar: root.aadhaarNumberEncrypted !== null,
+      hasOutlet: root.instantpayOutletId !== null,
+      hasOutletGeo: root.outletLatitude !== null,
+      children,
+    });
   }
   return nodes;
 }
@@ -142,4 +217,35 @@ export async function setDirectChildActive(
   });
 
   return row;
+}
+
+export interface AncestorInfo {
+  id: string;
+  uid: string;
+  name: string;
+  mobile: string;
+  role: string;
+}
+
+/** Walk parentId up to the root — immediate parent first. Used by the Move modal's "Currently under" chain. */
+export async function getUserAncestors(userId: string): Promise<AncestorInfo[]> {
+  const chain: AncestorInfo[] = [];
+  let currentId: string | null = userId;
+  // Hierarchy is at most 3 deep (retailer -> distributor -> master_distributor) — cap iterations
+  // defensively so a bad parentId chain can't loop forever.
+  for (let i = 0; i < 6 && currentId; i++) {
+    const [row] = await db
+      .select({ id: users.id, uid: users.uid, name: users.name, mobile: users.mobile, role: users.role, parentId: users.parentId })
+      .from(users)
+      .where(eq(users.id, currentId));
+    if (!row?.parentId) break;
+    const [parent] = await db
+      .select({ id: users.id, uid: users.uid, name: users.name, mobile: users.mobile, role: users.role })
+      .from(users)
+      .where(eq(users.id, row.parentId));
+    if (!parent) break;
+    chain.push(parent);
+    currentId = parent.id;
+  }
+  return chain;
 }

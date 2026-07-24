@@ -9,7 +9,14 @@ import {
   wallets,
   userCommissionRates,
   userHierarchy,
+  providers,
+  providerServices,
+  auditLogs,
+  providerLogs,
 } from "../../db/postgres/schema";
+import { listAdapterCodes } from "../providers/provider.registry";
+import { aepsAdapterCode } from "../providers/aepsMode";
+import { getAdminFullNetworkTree, getUserAncestors } from "../users/users.service";
 import { HttpError } from "../../utils/httpError";
 import { decryptPII } from "../../utils/aes";
 import { env } from "../../config/env";
@@ -517,10 +524,13 @@ export async function decideKyc(adminId: string, userId: string, decision: "veri
 
 export async function listAdminTransactions(opts: {
   status?: TransactionStatus;
+  userId?: string;
   limit: number;
   offset: number;
 }) {
-  const conditions = opts.status ? [eq(transactions.status, opts.status)] : [];
+  const conditions = [];
+  if (opts.status) conditions.push(eq(transactions.status, opts.status));
+  if (opts.userId) conditions.push(eq(transactions.userId, opts.userId));
 
   return db
     .select({
@@ -574,17 +584,28 @@ export async function listCatalogAdmin() {
 export async function updateServiceSiteControl(
   adminId: string,
   serviceId: string,
-  patch: { badge?: string | null; isActive?: boolean; name?: string },
+  patch: {
+    badge?: string | null;
+    isActive?: boolean;
+    name?: string;
+    minAmount?: string | null;
+    maxAmount?: string | null;
+  },
 ) {
   const [existing] = await db.select().from(services).where(eq(services.id, serviceId));
   if (!existing) throw new HttpError(404, "Service not found", "SERVICE_NOT_FOUND");
 
+  // Policy Engine Lite (2026-07-21): these two fields are already enforced live in
+  // executeServiceTxn (txn.service.ts) — this just exposes editing what was previously
+  // DB-only. No new enforcement logic added, so no new money-path risk.
   const [updated] = await db
     .update(services)
     .set({
       badge: patch.badge === undefined ? existing.badge : patch.badge?.trim() || null,
       isActive: patch.isActive ?? existing.isActive,
       name: patch.name?.trim() || existing.name,
+      minAmount: patch.minAmount === undefined ? existing.minAmount : patch.minAmount?.trim() || null,
+      maxAmount: patch.maxAmount === undefined ? existing.maxAmount : patch.maxAmount?.trim() || null,
     })
     .where(eq(services.id, serviceId))
     .returning();
@@ -609,7 +630,16 @@ export async function getAdminUserCommissions(userId: string) {
   if (!user) throw new HttpError(404, "User not found", "USER_NOT_FOUND");
   if (user.role === "admin") throw new HttpError(400, "Cannot set commission for admin", "INVALID_TARGET");
 
-  const categories = await db.select().from(serviceCategories).orderBy(serviceCategories.displayOrder);
+  // Internal routing categories (AEPS_RAIL, DMT_RAIL — added 2026-07-21 so admin can pick a
+  // provider per rail) are isActive:false specifically to stay out of anything customer/agent-
+  // facing, including this commission editor: commission is set per catalog tile (e.g. "Money
+  // Transfer", "Cash Withdraw" under Banking Services), not per internal operation code like
+  // dmt_remitter_profile.
+  const categories = await db
+    .select()
+    .from(serviceCategories)
+    .where(eq(serviceCategories.isActive, true))
+    .orderBy(serviceCategories.displayOrder);
   const allServices = await db.select().from(services).orderBy(services.displayOrder);
   const rates = await db
     .select()
@@ -729,4 +759,410 @@ export async function upsertAdminUserCommissions(
   });
 
   return getAdminUserCommissions(userId);
+}
+
+// ── Developer Options → Providers (Task 23A) ────────────────────────────────
+// Grouped by CATEGORY (DMT, AEPS, BBPS, ...), not by individual catalog tile — every BBPS
+// biller (Mobile Prepaid, DTH, Electricity, ...) shares one real-world API/provider, so listing
+// 30 identical rows was noise. One row per category, one sub-row per distinct provider actually
+// mapped underneath it; toggling/reordering acts on every service in that category at once via
+// providerServiceIds. Toggling here only flips DB rows — resolveProvidersForService
+// (provider.router.ts) reads them fresh on every call, so changes take effect immediately with
+// no restart.
+//
+// AEPS + DMT (2026-07-21): migrated onto this table — see aepsMode.ts. They appear as normal
+// category rows below (hidden from the retailer catalog via serviceCategories.isActive=false,
+// but still listed here). Nepal remittance + merchant onboarding/eKYC still call
+// InstantPay-specific endpoints directly (no generic adapter method to route through), so they
+// stay on AEPS_PROVIDER_MODE — surfaced via the read-only getAepsDmtRailInfo() banner below so
+// admin isn't left guessing why Nepal isn't in this list.
+//
+// Pinned display order (2026-07-21, user request): AEPS, then DMT, then everything else in
+// catalog displayOrder. Deliberately NOT changing serviceCategories.displayOrder itself for
+// BILL_PAYMENT_BBPS — that field also drives the retailer-facing tile grid ordering
+// (catalog.service.ts), so this panel sorts independently instead of touching shared data.
+const PINNED_CATEGORY_ORDER = ["AEPS_RAIL", "DMT_RAIL"];
+
+export async function listProvidersAdmin() {
+  const categories = await db.select().from(serviceCategories).orderBy(serviceCategories.displayOrder);
+  const allServices = await db.select().from(services);
+  const health = await getProviderHealthStats();
+  const rows = await db
+    .select({
+      providerServiceId: providerServices.id,
+      serviceId: providerServices.serviceId,
+      providerId: providerServices.providerId,
+      isPrimary: providerServices.isPrimary,
+      priority: providerServices.priority,
+      mappingActive: providerServices.isActive,
+      providerCode: providers.code,
+      providerName: providers.name,
+      providerActive: providers.isActive,
+    })
+    .from(providerServices)
+    .innerJoin(providers, eq(providerServices.providerId, providers.id))
+    .orderBy(desc(providerServices.isPrimary), providerServices.priority);
+
+  const registeredCodes = new Set(listAdapterCodes());
+
+  const sortedCategories = [...categories].sort((a, b) => {
+    const ai = PINNED_CATEGORY_ORDER.indexOf(a.code);
+    const bi = PINNED_CATEGORY_ORDER.indexOf(b.code);
+    if (ai !== -1 || bi !== -1) return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    return a.displayOrder - b.displayOrder;
+  });
+
+  return sortedCategories
+    .map((cat) => {
+      const svcsInCat = allServices.filter((s) => s.categoryId === cat.id);
+      const svcIdsInCat = new Set(svcsInCat.map((s) => s.id));
+      const catRows = rows.filter((r) => svcIdsInCat.has(r.serviceId));
+
+      const byProvider = new Map<
+        string,
+        {
+          providerId: string;
+          providerCode: string;
+          providerName: string;
+          isPrimary: boolean;
+          priority: number;
+          isActive: boolean;
+          adapterRegistered: boolean;
+          providerServiceIds: string[];
+          serviceCount: number;
+          successRate: number | null;
+          totalCalls: number;
+        }
+      >();
+      for (const r of catRows) {
+        let g = byProvider.get(r.providerId);
+        if (!g) {
+          g = {
+            providerId: r.providerId,
+            providerCode: r.providerCode,
+            providerName: r.providerName,
+            isPrimary: r.isPrimary,
+            priority: r.priority,
+            isActive: r.mappingActive && r.providerActive,
+            adapterRegistered: registeredCodes.has(r.providerCode),
+            providerServiceIds: [],
+            serviceCount: 0,
+            successRate: health[r.providerCode]?.successRate ?? null,
+            totalCalls: health[r.providerCode]?.totalCalls ?? 0,
+          };
+          byProvider.set(r.providerId, g);
+        }
+        g.providerServiceIds.push(r.providerServiceId);
+        g.serviceCount++;
+      }
+
+      // Per-service breakdown — lets admin toggle ONE biller's provider independently
+      // (e.g. move just "DTH" to PaySprint while the rest of BBPS stays on Eko).
+      //
+      // NOT for AEPS/DMT (2026-07-21, user-flagged risk): those are multi-step sequential
+      // flows (remitter register → verify → KYC → beneficiary → transfer, all sharing a
+      // provider-specific referenceKey/beneficiaryId across steps). Splitting individual steps
+      // across different providers would break mid-flow — transaction failure or a stuck
+      // refund, exactly the risk Part C's financial-safety rules exist to prevent. AEPS/DMT
+      // only get the category-level bulk toggle above (whole rail moves together).
+      const allowPerServiceToggle = cat.code !== "AEPS_RAIL" && cat.code !== "DMT_RAIL";
+      const serviceRows = !allowPerServiceToggle
+        ? []
+        : svcsInCat
+        .map((s) => ({
+          serviceId: s.id,
+          serviceCode: s.code,
+          serviceName: s.name,
+          providers: rows
+            .filter((r) => r.serviceId === s.id)
+            .map((r) => ({
+              providerServiceId: r.providerServiceId,
+              providerId: r.providerId,
+              providerCode: r.providerCode,
+              providerName: r.providerName,
+              isPrimary: r.isPrimary,
+              priority: r.priority,
+              isActive: r.mappingActive && r.providerActive,
+              adapterRegistered: registeredCodes.has(r.providerCode),
+              successRate: health[r.providerCode]?.successRate ?? null,
+            }))
+            .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.priority - b.priority),
+        }))
+        .filter((s) => s.providers.length > 0);
+
+      return {
+        categoryId: cat.id,
+        categoryCode: cat.code,
+        categoryName: cat.name,
+        totalServices: svcIdsInCat.size,
+        providers: [...byProvider.values()].sort(
+          (a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.priority - b.priority,
+        ),
+        services: serviceRows,
+      };
+    })
+    .filter((g) => g.providers.length > 0);
+}
+
+/** Update one provider_services row directly — one biller, one provider. */
+export async function updateProviderServiceRow(
+  adminId: string,
+  providerServiceId: string,
+  patch: { isActive?: boolean; priority?: number },
+) {
+  const [existing] = await db.select().from(providerServices).where(eq(providerServices.id, providerServiceId));
+  if (!existing) throw new HttpError(404, "Provider-service mapping not found", "PROVIDER_SERVICE_NOT_FOUND");
+
+  const [updated] = await db
+    .update(providerServices)
+    .set({
+      isActive: patch.isActive ?? existing.isActive,
+      priority: patch.priority ?? existing.priority,
+    })
+    .where(eq(providerServices.id, providerServiceId))
+    .returning();
+
+  await insertAuditLog({
+    userId: adminId,
+    action: "admin.provider_service_row_update",
+    entityType: "provider_service",
+    entityId: providerServiceId,
+    metadata: patch as Record<string, unknown>,
+  });
+
+  return updated;
+}
+
+/** Update every provider_services row for one provider within one category in a single call. */
+export async function updateProviderForCategory(
+  adminId: string,
+  categoryId: string,
+  providerId: string,
+  patch: { isActive?: boolean; priority?: number },
+) {
+  const rows = await db
+    .select({ id: providerServices.id, isActive: providerServices.isActive, priority: providerServices.priority })
+    .from(providerServices)
+    .innerJoin(services, eq(providerServices.serviceId, services.id))
+    .where(and(eq(services.categoryId, categoryId), eq(providerServices.providerId, providerId)));
+
+  if (!rows.length) throw new HttpError(404, "Provider mapping not found for this category", "PROVIDER_SERVICE_NOT_FOUND");
+
+  await db
+    .update(providerServices)
+    .set({
+      isActive: patch.isActive ?? rows[0]!.isActive,
+      priority: patch.priority ?? rows[0]!.priority,
+    })
+    .where(
+      and(
+        eq(providerServices.providerId, providerId),
+        inArray(
+          providerServices.id,
+          rows.map((r) => r.id),
+        ),
+      ),
+    );
+
+  await insertAuditLog({
+    userId: adminId,
+    action: "admin.provider_category_update",
+    entityType: "provider_service_category",
+    entityId: `${categoryId}:${providerId}`,
+    metadata: { ...patch, affectedRows: rows.length },
+  });
+
+  return { categoryId, providerId, affectedRows: rows.length, ...patch };
+}
+
+/** Bulk "disable all" for one category — e.g. when a whole rail's backend is down. */
+export async function disableAllProvidersForCategory(adminId: string, categoryId: string) {
+  const [cat] = await db.select().from(serviceCategories).where(eq(serviceCategories.id, categoryId));
+  if (!cat) throw new HttpError(404, "Category not found", "CATEGORY_NOT_FOUND");
+
+  const catServiceIds = await db.select({ id: services.id }).from(services).where(eq(services.categoryId, categoryId));
+  if (catServiceIds.length) {
+    await db
+      .update(providerServices)
+      .set({ isActive: false })
+      .where(
+        inArray(
+          providerServices.serviceId,
+          catServiceIds.map((s) => s.id),
+        ),
+      );
+  }
+
+  await insertAuditLog({
+    userId: adminId,
+    action: "admin.provider_category_disable_all",
+    entityType: "service_category",
+    entityId: categoryId,
+    metadata: { categoryCode: cat.code },
+  });
+
+  return { categoryId, disabled: true };
+}
+
+/**
+ * Read-only info for the AEPS/DMT rail — sourced from AEPS_PROVIDER_MODE, NOT provider_services.
+ * Not toggleable from this panel (see module header comment for why).
+ */
+export function getAepsDmtRailInfo() {
+  return {
+    mode: env.AEPS_PROVIDER_MODE,
+    activeProviderCode: aepsAdapterCode(),
+    note: "Nepal remittance + merchant onboarding/eKYC still route via AEPS_PROVIDER_MODE (env) — InstantPay-specific, no generic adapter yet. AEPS/DMT transactions below are provider-agnostic and controlled by the rows underneath.",
+  };
+}
+
+/** Full org tree (every Super Distributor root down) — Network Tree admin page. */
+export async function getNetworkTreeAdmin() {
+  return getAdminFullNetworkTree();
+}
+
+// ── Audit Log Viewer ─────────────────────────────────────────────────────────
+export async function listAuditLogsAdmin(opts: {
+  action?: string;
+  userId?: string;
+  q?: string;
+  limit: number;
+  offset: number;
+}) {
+  const conditions = [];
+  if (opts.action) conditions.push(ilike(auditLogs.action, `%${opts.action}%`));
+  if (opts.userId) conditions.push(eq(auditLogs.userId, opts.userId));
+
+  const actorAlias = alias(users, "audit_actor");
+  const rows = await db
+    .select({
+      id: auditLogs.id,
+      action: auditLogs.action,
+      entityType: auditLogs.entityType,
+      entityId: auditLogs.entityId,
+      metadata: auditLogs.metadata,
+      ipAddress: auditLogs.ipAddress,
+      createdAt: auditLogs.createdAt,
+      actorId: auditLogs.userId,
+      actorName: actorAlias.name,
+      actorUid: actorAlias.uid,
+    })
+    .from(auditLogs)
+    .leftJoin(actorAlias, eq(auditLogs.userId, actorAlias.id))
+    .where(
+      and(
+        ...conditions,
+        opts.q?.trim()
+          ? or(ilike(actorAlias.name, `%${opts.q.trim()}%`), ilike(auditLogs.entityId, `%${opts.q.trim()}%`))
+          : undefined,
+      ),
+    )
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(opts.limit)
+    .offset(opts.offset);
+
+  const [{ value: total } = { value: 0 }] = await db
+    .select({ value: count() })
+    .from(auditLogs)
+    .where(and(...conditions));
+
+  return { rows, total };
+}
+
+// ── Provider Health % (Developer Options → Providers) ────────────────────────
+/** Success rate per provider over a rolling window — surfaces which provider is actually failing. */
+export async function getProviderHealthStats(windowHours = 24) {
+  const since = new Date(Date.now() - windowHours * 60 * 60 * 1000);
+  const rows = await db
+    .select({
+      providerCode: providerLogs.providerCode,
+      status: providerLogs.status,
+      count: count(),
+    })
+    .from(providerLogs)
+    .where(sql`${providerLogs.createdAt} >= ${since}`)
+    .groupBy(providerLogs.providerCode, providerLogs.status);
+
+  const byProvider = new Map<string, { total: number; success: number }>();
+  for (const r of rows) {
+    const entry = byProvider.get(r.providerCode) ?? { total: 0, success: 0 };
+    entry.total += r.count;
+    if (r.status === "success") entry.success += r.count;
+    byProvider.set(r.providerCode, entry);
+  }
+
+  return Object.fromEntries(
+    [...byProvider.entries()].map(([code, { total, success }]) => [
+      code,
+      { totalCalls: total, successRate: total > 0 ? Math.round((success / total) * 1000) / 10 : null },
+    ]),
+  );
+}
+
+/** "Currently under" chain for the Move modal — same data whether opened from Table or Tree view. */
+export async function getUserAncestorsAdmin(userId: string) {
+  return getUserAncestors(userId);
+}
+
+// ── Reconciliation v1 ──────────────────────────────────────────────────────
+// Flags transactions where our internal status disagrees with the provider's own last-logged
+// response for the same txnRef — the exact "internal ledger vs provider" mismatch category from
+// the roadmap. Read-only: never auto-resolves (Part C financial-safety rule).
+export async function listReconciliationMismatches(opts: { limit: number; offset: number }) {
+  const rows = await db.execute(sql`
+    select t.id, t.txn_ref as "txnRef", t.status as "ourStatus", t.amount, t.created_at as "createdAt",
+           u.name as "userName", u.uid as "userUid", s.name as "serviceName",
+           pl.status as "providerStatus", pl.provider_code as "providerCode", pl.created_at as "providerLoggedAt"
+    from transactions t
+    inner join users u on u.id = t.user_id
+    inner join services s on s.id = t.service_id
+    left join lateral (
+      select status, provider_code, created_at
+      from provider_logs
+      where txn_ref = t.txn_ref
+      order by created_at desc
+      limit 1
+    ) pl on true
+    where t.status in ('pending', 'initiated')
+       or (pl.status is not null and pl.status <> t.status)
+    order by t.created_at desc
+    limit ${opts.limit} offset ${opts.offset}
+  `);
+  return rows.rows as unknown as Array<{
+    id: string;
+    txnRef: string;
+    ourStatus: string;
+    amount: string;
+    createdAt: string;
+    userName: string;
+    userUid: string;
+    serviceName: string;
+    providerStatus: string | null;
+    providerCode: string | null;
+    providerLoggedAt: string | null;
+  }>;
+}
+
+// ── Risk / anomaly insights v1 ──────────────────────────────────────────────
+// Real, threshold-based (not a fabricated score — see docs/ROADMAP.md note on why trust/risk
+// *scores* are deferred until there's enough live volume to calibrate them meaningfully).
+// Flags: users with repeated failed transactions in a rolling window.
+export async function listRiskAlerts(opts: { windowHours: number; minFailures: number }) {
+  const since = new Date(Date.now() - opts.windowHours * 60 * 60 * 1000);
+  const rows = await db
+    .select({
+      userId: transactions.userId,
+      userName: users.name,
+      userUid: users.uid,
+      userMobile: users.mobile,
+      failCount: count(),
+    })
+    .from(transactions)
+    .innerJoin(users, eq(transactions.userId, users.id))
+    .where(and(eq(transactions.status, "failed"), sql`${transactions.createdAt} >= ${since}`))
+    .groupBy(transactions.userId, users.name, users.uid, users.mobile)
+    .having(sql`count(*) >= ${opts.minFailures}`)
+    .orderBy(desc(count()));
+
+  return rows;
 }

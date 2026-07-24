@@ -22,6 +22,7 @@ import {
   Database,
   Clock,
   PieChart,
+  History,
 } from "lucide-react";
 import { AdminShell } from "@/components/layout/AdminShell";
 import { OnboardForm } from "@/components/dashboard/OnboardForm";
@@ -30,6 +31,14 @@ import { fetchApi } from "@/lib/api";
 import { B, ROLE_LABEL } from "@/lib/brand";
 import { useAuthStore } from "@/lib/store";
 import { useAuthHydrated } from "@/lib/useAuthHydrated";
+
+interface ActivityRow {
+  id: string;
+  action: string;
+  entityType: string;
+  createdAt: string;
+  actorName: string | null;
+}
 
 interface AdminStats {
   users: {
@@ -59,6 +68,7 @@ export default function DashboardPage() {
 
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activity, setActivity] = useState<ActivityRow[]>([]);
   const [showOnboard, setShowOnboard] = useState(false);
   const [showFundSelf, setShowFundSelf] = useState(false);
 
@@ -72,6 +82,15 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const loadActivity = useCallback(async () => {
+    try {
+      const data = await fetchApi<{ rows: ActivityRow[] }>("/admin/audit-logs", { limit: "8" });
+      setActivity(data.rows);
+    } catch {
+      // Non-critical widget — fail silently, dashboard stats are the priority.
+    }
+  }, []);
+
   useEffect(() => {
     if (!hydrated) return;
     if (!accessToken) {
@@ -79,7 +98,8 @@ export default function DashboardPage() {
       return;
     }
     void loadStats();
-  }, [hydrated, accessToken, router, loadStats]);
+    void loadActivity();
+  }, [hydrated, accessToken, router, loadStats, loadActivity]);
 
   if (!hydrated || !accessToken || !user) return null;
 
@@ -281,6 +301,47 @@ export default function DashboardPage() {
               <HealthRow icon={Clock} label="Last checked" status="now" />
             </div>
           </div>
+        </div>
+
+        {/* Recent Activity */}
+        <div className="rounded-2xl border p-5" style={{ borderColor: B.border, background: B.card }}>
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <History size={16} style={{ color: B.blueLight }} />
+              <h3 className="text-sm font-bold" style={{ color: B.blue }}>Recent Activity</h3>
+            </div>
+            <Link href="/audit-logs" className="text-xs font-semibold" style={{ color: B.green }}>
+              View full log →
+            </Link>
+          </div>
+          {activity.length === 0 ? (
+            <p className="py-4 text-center text-sm" style={{ color: B.muted }}>
+              No recent admin activity
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {activity.map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-center justify-between rounded-lg px-3 py-2 text-sm"
+                  style={{ background: B.secondary }}
+                >
+                  <div className="min-w-0">
+                    <span className="font-mono text-xs font-semibold" style={{ color: B.blueLight }}>
+                      {a.action}
+                    </span>{" "}
+                    <span style={{ color: B.muted }}>on {a.entityType}</span>
+                    {a.actorName && (
+                      <span style={{ color: B.muted }}> — by {a.actorName}</span>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-xs" style={{ color: B.muted }}>
+                    {new Date(a.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Quick Links */}

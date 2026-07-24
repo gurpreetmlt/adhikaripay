@@ -59,7 +59,7 @@ controller/route contract, only the adapter internals.
 ## Known gaps until PaySprint confirms (do not treat as done)
 - UAT base URL (`PAYSPRINT_UAT_BASE_URL` must be set manually — no default)
 - AES mode/padding (defaulted to AES-128-CBC, unconfirmed)
-- JWT timestamp unit (defaulted to ms via `PAYSPRINT_JWT_TIMESTAMP_UNIT`, unconfirmed)
+- ✅ JWT timestamp unit — confirmed **seconds** (2026-07-21, PaySprint Authentication doc prose: "Timestamp is in seconds ... valid for <=5 minutes"); `PAYSPRINT_JWT_TIMESTAMP_UNIT` now defaults to `"s"`
 - Which bank-pipe (Bank1/3/4/5/6) this merchant is onboarded on — adapter defaults to generic Bank4-style `/aeps/v3/.../index` paths, may need to switch to a bank-specific pipe
 - Exact request/response field names — docs mark these "confirm" (OpenAPI-polluted); adapter uses best-effort names (`aadhaar`, `bankiin`, `piddata`, `referenceid`)
 

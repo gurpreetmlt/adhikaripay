@@ -368,7 +368,13 @@ export default function SettingsPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => router.push("/kyc")}
+                  onClick={() =>
+                    router.push(
+                      user?.role === "retailer" && user.hasInstantpayOutlet !== true
+                        ? "/onboarding/outlet"
+                        : "/kyc",
+                    )
+                  }
                   className="flex w-full items-center justify-between rounded-2xl border-2 p-4 transition-all hover:shadow-md"
                   style={{ borderColor: B.blueLight, background: `${B.blue}06` }}
                 >
@@ -381,10 +387,10 @@ export default function SettingsPage() {
                     </div>
                     <div className="text-left">
                       <div className="text-sm font-bold" style={{ color: B.blue }}>
-                        Complete Full KYC Onboarding
+                        Register Now
                       </div>
                       <div className="text-xs" style={{ color: B.muted }}>
-                        Step-wise verification with digital agreement
+                        Go live in minutes — InstantPay outlet verification
                       </div>
                     </div>
                   </div>

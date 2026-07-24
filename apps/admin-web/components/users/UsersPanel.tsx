@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
-import { Search } from "lucide-react";
+import { Search, Table2, GitBranch } from "lucide-react";
 import api, { fetchApi } from "@/lib/api";
 import { B } from "@/lib/brand";
 import { Badge } from "@/components/ui/Badge";
 import { TableActionButtons } from "@/components/ui/TableActionButtons";
+import { NetworkTreeView } from "@/components/users/NetworkTreeView";
+import { MoveAgentModal } from "@/components/users/MoveAgentModal";
 
 export type RoleFilter = "" | "master_distributor" | "distributor" | "retailer";
 type KycFilter = "" | "pending" | "verified" | "rejected";
@@ -56,6 +58,9 @@ export function UsersPanel({ lockedRole = "" }: Props) {
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
   const [toggling, setToggling] = useState<string | null>(null);
+  const [view, setView] = useState<"table" | "tree">("table");
+  const [moveAgents, setMoveAgents] = useState<AdminUser[] | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setRole(lockedRole);
@@ -102,8 +107,35 @@ export function UsersPanel({ lockedRole = "" }: Props) {
     }
   }
 
+  function isMovable(u: AdminUser) {
+    return u.role === "distributor" || u.role === "retailer";
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const selectableUsers = users.filter(isMovable);
+  const allSelected = selectableUsers.length > 0 && selectableUsers.every((u) => selectedIds.has(u.id));
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      if (allSelected) return new Set();
+      return new Set(selectableUsers.map((u) => u.id));
+    });
+  }
+
+  const selectedUsers = users.filter((u) => selectedIds.has(u.id));
+  const selectedRoles = new Set(selectedUsers.map((u) => u.role));
+  const mixedRoles = selectedRoles.size > 1;
+
   const meta = TITLES[lockedRole || ""] ?? TITLES[""];
-  const colSpan = lockedRole ? 6 : 7;
+  const colSpan = lockedRole ? 7 : 8;
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 p-4 md:p-6">
@@ -117,32 +149,65 @@ export function UsersPanel({ lockedRole = "" }: Props) {
       </div>
 
       {!lockedRole && (
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              { key: "" as RoleFilter, label: "All" },
-              { key: "master_distributor", label: "Super Dist" },
-              { key: "distributor", label: "Distributor" },
-              { key: "retailer", label: "Retailer" },
-            ] as const
-          ).map((t) => (
-            <button
-              key={t.key || "all"}
-              type="button"
-              onClick={() => setRole(t.key)}
-              className="rounded-xl px-3 py-2 text-sm font-semibold transition"
-              style={
-                role === t.key
-                  ? { background: B.badgeGrad, color: "#fff" }
-                  : { background: B.secondary, color: B.blueMid }
-              }
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { key: "" as RoleFilter, label: "All" },
+                { key: "master_distributor", label: "Super Dist" },
+                { key: "distributor", label: "Distributor" },
+                { key: "retailer", label: "Retailer" },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.key || "all"}
+                type="button"
+                onClick={() => setRole(t.key)}
+                className="rounded-xl px-3 py-2 text-sm font-semibold transition"
+                style={
+                  role === t.key
+                    ? { background: B.badgeGrad, color: "#fff" }
+                    : { background: B.secondary, color: B.blueMid }
+                }
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-1 rounded-xl p-1" style={{ background: B.secondary }}>
+            {(
+              [
+                { key: "table" as const, label: "Table", icon: Table2 },
+                { key: "tree" as const, label: "Tree", icon: GitBranch },
+              ] as const
+            ).map((t) => {
+              const Icon = t.icon;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setView(t.key)}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition"
+                  style={
+                    view === t.key
+                      ? { background: B.badgeGrad, color: "#fff" }
+                      : { background: "transparent", color: B.blueMid }
+                  }
+                >
+                  <Icon size={14} />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
+      {!lockedRole && view === "tree" ? (
+        <NetworkTreeView />
+      ) : (
+        <>
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <div className="relative min-w-0 flex-1 sm:min-w-[220px]">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: B.muted }} />
@@ -168,6 +233,41 @@ export function UsersPanel({ lockedRole = "" }: Props) {
         </select>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border-2 px-4 py-2.5"
+          style={{ borderColor: B.blueLight, background: `${B.blueLight}0d` }}
+        >
+          <span className="text-sm font-medium" style={{ color: B.blue }}>
+            {selectedIds.size} selected
+            {mixedRoles && (
+              <span className="ml-2 text-xs" style={{ color: "#b45309" }}>
+                — mix of Distributor &amp; Retailer, move them separately
+              </span>
+            )}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="text-xs font-medium"
+              style={{ color: B.muted }}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              disabled={mixedRoles}
+              onClick={() => setMoveAgents(selectedUsers)}
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+              style={{ background: B.badgeGrad }}
+            >
+              Move {selectedIds.size}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Desktop table */}
       <div
         className="hidden overflow-hidden rounded-2xl border bg-white md:block"
@@ -180,6 +280,15 @@ export function UsersPanel({ lockedRole = "" }: Props) {
                 className="border-b text-xs uppercase tracking-wider"
                 style={{ borderColor: B.border, background: B.secondary, color: B.muted }}
               >
+                <th className="w-10 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    disabled={selectableUsers.length === 0}
+                    aria-label="Select all"
+                  />
+                </th>
                 <th className="px-4 py-3 font-semibold">Name</th>
                 <th className="px-4 py-3 font-semibold">UID</th>
                 <th className="px-4 py-3 font-semibold">Mobile</th>
@@ -212,6 +321,16 @@ export function UsersPanel({ lockedRole = "" }: Props) {
                     style={{ borderColor: B.border }}
                     onClick={() => router.push(`/users/${u.id}`)}
                   >
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      {isMovable(u) && (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(u.id)}
+                          onChange={() => toggleSelect(u.id)}
+                          aria-label={`Select ${u.name}`}
+                        />
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-medium" style={{ color: B.blue }}>
                       {u.name}
                     </td>
@@ -239,6 +358,7 @@ export function UsersPanel({ lockedRole = "" }: Props) {
                           !u.isActive && toggling !== u.id ? () => void toggleActive(u) : undefined
                         }
                         onBan={u.isActive && toggling !== u.id ? () => void toggleActive(u) : undefined}
+                        onMove={isMovable(u) ? () => setMoveAgents([u]) : undefined}
                       />
                     </td>
                   </tr>
@@ -297,6 +417,7 @@ export function UsersPanel({ lockedRole = "" }: Props) {
                     !u.isActive && toggling !== u.id ? () => void toggleActive(u) : undefined
                   }
                   onBan={u.isActive && toggling !== u.id ? () => void toggleActive(u) : undefined}
+                  onMove={isMovable(u) ? () => setMoveAgents([u]) : undefined}
                 />
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -307,6 +428,24 @@ export function UsersPanel({ lockedRole = "" }: Props) {
             </div>
           ))}
       </div>
+        </>
+      )}
+
+      {moveAgents && moveAgents.length > 0 && (
+        <MoveAgentModal
+          agents={moveAgents.map((m) => ({
+            id: m.id,
+            name: m.name,
+            mobile: m.mobile,
+            role: m.role as "distributor" | "retailer",
+          }))}
+          onClose={() => setMoveAgents(null)}
+          onMoved={() => {
+            void load();
+            setSelectedIds(new Set());
+          }}
+        />
+      )}
     </div>
   );
 }

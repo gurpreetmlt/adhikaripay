@@ -12,6 +12,7 @@ import {
   User,
   Wallet,
   Network,
+  History,
 } from "lucide-react";
 import { AdminShell } from "@/components/layout/AdminShell";
 import { Badge } from "@/components/ui/Badge";
@@ -22,6 +23,15 @@ import api, { fetchApi } from "@/lib/api";
 import { B, ROLE_LABEL } from "@/lib/brand";
 import { useAuthStore } from "@/lib/store";
 import { useAuthHydrated } from "@/lib/useAuthHydrated";
+
+interface RecentTxn {
+  id: string;
+  txnRef: string;
+  amount: string;
+  status: string;
+  serviceName: string;
+  createdAt: string;
+}
 
 interface AgentDetail {
   id: string;
@@ -62,12 +72,14 @@ export default function AgentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [newParentUid, setNewParentUid] = useState("");
+  const [recentTxns, setRecentTxns] = useState<RecentTxn[]>([]);
 
   const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     try {
       setAgent(await fetchApi<AgentDetail>(`/admin/users/${id}`));
+      setRecentTxns(await fetchApi<RecentTxn[]>("/admin/transactions", { userId: id, limit: "10" }));
     } catch {
       toast.error("Failed to load agent details");
       setAgent(null);
@@ -247,6 +259,39 @@ export default function AgentDetailPage() {
                         <p className="mt-1 text-lg font-bold tabular-nums" style={{ color: B.blue }}>
                           ₹{Number(w.balance).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                         </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </DetailSection>
+
+              <DetailSection title="Recent Transactions" icon={History}>
+                {recentTxns.length === 0 ? (
+                  <p className="text-sm" style={{ color: B.muted }}>
+                    No transactions yet
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {recentTxns.map((t) => (
+                      <div
+                        key={t.id}
+                        className="flex items-center justify-between rounded-xl border px-3 py-2 text-sm"
+                        style={{ borderColor: B.border }}
+                      >
+                        <div className="min-w-0">
+                          <div className="font-medium" style={{ color: B.blue }}>
+                            {t.serviceName}
+                          </div>
+                          <div className="font-mono text-xs" style={{ color: B.muted }}>
+                            {t.txnRef} · {new Date(t.createdAt).toLocaleString("en-IN")}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold tabular-nums" style={{ color: B.blue }}>
+                            ₹{Number(t.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </span>
+                          <Badge status={t.status} />
+                        </div>
                       </div>
                     ))}
                   </div>

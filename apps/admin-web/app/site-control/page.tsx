@@ -17,6 +17,8 @@ interface CatalogService {
   badge: string | null;
   isActive: boolean;
   displayOrder: number;
+  minAmount: string | null;
+  maxAmount: string | null;
 }
 
 interface CatalogCategory {
@@ -43,6 +45,39 @@ export default function SiteControlPage() {
   const [drafts, setDrafts] = useState<Record<string, ServiceDraft>>({});
   const [loading, setLoading] = useState(true);
   const [bulkBusy, setBulkBusy] = useState<Record<string, boolean>>({});
+  // Policy Engine Lite (2026-07-21) — min/max transaction amount per service. Already enforced
+  // live in executeServiceTxn; this is just the admin-editable surface for it. Independent of
+  // the badge/isActive draft flow above so it can't accidentally interfere with that save path.
+  const [limitDrafts, setLimitDrafts] = useState<Record<string, { min: string; max: string; saving: boolean }>>({});
+
+  function limitFor(s: CatalogService) {
+    return limitDrafts[s.id] ?? { min: s.minAmount ?? "", max: s.maxAmount ?? "", saving: false };
+  }
+
+  async function saveLimits(s: CatalogService, min: string, max: string) {
+    setLimitDrafts((prev) => ({ ...prev, [s.id]: { min, max, saving: true } }));
+    try {
+      await api.patch(`/admin/catalog/services/${s.id}`, {
+        minAmount: min.trim() || null,
+        maxAmount: max.trim() || null,
+      });
+      setCategories((prev) =>
+        prev.map((c) => ({
+          ...c,
+          services: c.services.map((svc) =>
+            svc.id === s.id ? { ...svc, minAmount: min.trim() || null, maxAmount: max.trim() || null } : svc,
+          ),
+        })),
+      );
+      toast.success(`${s.name}: limits saved`);
+    } catch (err) {
+      const message =
+        (err as { response?: { data?: { message?: string } } }).response?.data?.message ?? "Save failed";
+      toast.error(message);
+    } finally {
+      setLimitDrafts((prev) => ({ ...prev, [s.id]: { min, max, saving: false } }));
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -381,6 +416,7 @@ export default function SiteControlPage() {
                             <th className="px-4 py-3 font-semibold">Service</th>
                             <th className="px-4 py-3 font-semibold">Code</th>
                             <th className="px-4 py-3 font-semibold">Badge</th>
+                            <th className="px-4 py-3 font-semibold">Limits (₹)</th>
                             <th className="px-4 py-3 text-right font-semibold">Action</th>
                           </tr>
                         </thead>
@@ -430,6 +466,52 @@ export default function SiteControlPage() {
                                       Badge Off
                                     </button>
                                   </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  {(() => {
+                                    const lim = limitFor(s);
+                                    return (
+                                      <div className="flex items-center gap-1.5">
+                                        <input
+                                          type="text"
+                                          inputMode="decimal"
+                                          value={lim.min}
+                                          onChange={(e) =>
+                                            setLimitDrafts((prev) => ({ ...prev, [s.id]: { ...lim, min: e.target.value } }))
+                                          }
+                                          onBlur={() => {
+                                            if (lim.min !== (s.minAmount ?? "") || lim.max !== (s.maxAmount ?? "")) {
+                                              void saveLimits(s, lim.min, lim.max);
+                                            }
+                                          }}
+                                          placeholder="Min"
+                                          disabled={lim.saving}
+                                          className="w-16 rounded-lg border-2 bg-[var(--admin-bg)] px-2 py-1.5 text-xs outline-none disabled:opacity-50"
+                                          style={{ borderColor: B.border, color: B.blue }}
+                                        />
+                                        <span className="text-xs" style={{ color: B.muted }}>
+                                          –
+                                        </span>
+                                        <input
+                                          type="text"
+                                          inputMode="decimal"
+                                          value={lim.max}
+                                          onChange={(e) =>
+                                            setLimitDrafts((prev) => ({ ...prev, [s.id]: { ...lim, max: e.target.value } }))
+                                          }
+                                          onBlur={() => {
+                                            if (lim.min !== (s.minAmount ?? "") || lim.max !== (s.maxAmount ?? "")) {
+                                              void saveLimits(s, lim.min, lim.max);
+                                            }
+                                          }}
+                                          placeholder="Max"
+                                          disabled={lim.saving}
+                                          className="w-16 rounded-lg border-2 bg-[var(--admin-bg)] px-2 py-1.5 text-xs outline-none disabled:opacity-50"
+                                          style={{ borderColor: B.border, color: B.blue }}
+                                        />
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
                                 <td className="px-4 py-3">
                                   <div className="flex items-center justify-end gap-3">

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { toast } from "react-hot-toast";
-import { LayoutDashboard, LayoutGrid, History, HelpCircle, UserCircle, LogOut, Fingerprint, Banknote } from "lucide-react";
+import { LayoutDashboard, LayoutGrid, History, UserCircle, LogOut, Fingerprint, Banknote, ListChecks, Network, ShieldCheck, PiggyBank, LifeBuoy } from "lucide-react";
 import clsx from "clsx";
 import { ROLE_LABELS } from "@adhikaripay/shared-types";
 import { useAuthStore } from "@/lib/store";
@@ -23,12 +23,17 @@ export function Sidebar() {
         { href: "/aeps", label: "AePS", icon: Fingerprint },
         { href: "/dmt", label: "DMT", icon: Banknote },
         { href: "/passbook", label: "History", icon: History },
-        { href: null, label: "Help", icon: HelpCircle },
+        { href: "/support", label: "Support", icon: LifeBuoy },
         { href: null, label: "Account", icon: UserCircle },
       ]
     : [
         { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+        { href: "/network", label: "Network", icon: Network },
+        { href: "/action-queue", label: "Action Queue", icon: ListChecks },
+        { href: "/kyc-assistant", label: "KYC Assistant", icon: ShieldCheck },
+        { href: "/float-planner", label: "Float & Earnings", icon: PiggyBank },
         { href: "/passbook", label: "Passbook", icon: History },
+        { href: "/support", label: "Support", icon: LifeBuoy },
       ];
 
   return (

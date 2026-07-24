@@ -5,8 +5,9 @@ import { logger } from "../../../utils/logger";
 
 /**
  * PaySprint docs (PaySprint/Unimplemented/) leave several implementation details as
- * "confirm with PaySprint": UAT base URL, AES mode/padding, JWT timestamp unit. Defaults
- * below are best-effort per the provider's own sample (AES-128-CBC/PKCS7, ms timestamp) —
+ * "confirm with PaySprint": UAT base URL and AES mode/padding. JWT timestamp unit confirmed
+ * 2026-07-21 (seconds, per Authentication doc prose). AES default below is best-effort
+ * (AES-128-CBC/PKCS7) —
  * verify against a real PaySprint sandbox response before trusting money-moving calls.
  */
 

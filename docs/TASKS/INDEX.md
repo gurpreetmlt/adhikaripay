@@ -30,6 +30,7 @@
 | 17 | Admin dashboard stats | M | [17-admin-dashboard.md](17-admin-dashboard.md) |
 | 18 | KYC module | L | [18-kyc-module.md](18-kyc-module.md) |
 | 19 | Commission schemes | M | [19-commission-schemes.md](19-commission-schemes.md) |
+| 25 | Group AEPS rows on Commission page | M | [25-admin-service-grouping.md](25-admin-service-grouping.md) |
 
 ## Retailer services
 | # | Task | Size | File |

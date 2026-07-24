@@ -201,15 +201,15 @@ export function RetailerDashboard() {
                   {user?.kycStatus === "pending" ? "Pending Verification" : "KYC Rejected"}
                 </p>
                 <p className="text-xs" style={{ color: "#92400E" }}>
-                  Complete your KYC to access all services.
+                  Register your outlet to unlock all services.
                 </p>
                 <button
                   type="button"
                   className="mt-2 text-xs font-semibold underline"
                   style={{ color: B.blue }}
-                  onClick={() => router.push("/kyc")}
+                  onClick={() => router.push("/onboarding/outlet")}
                 >
-                  Complete KYC →
+                  Register Now →
                 </button>
               </div>
             </div>

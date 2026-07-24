@@ -34,28 +34,18 @@ export default function CustomersPage() {
   }, [hydrated, accessToken, router]);
 
   useEffect(() => {
-    if (!accessToken) return;
-    if (isRetailer) {
-      setLoading(false);
-      setDownline([]);
-      return;
+    if (!hydrated || !user) return;
+    if (user.role !== "retailer") {
+      router.replace("/network");
     }
-    let alive = true;
-    (async () => {
-      setLoading(true);
-      try {
-        const data = await fetchApi<DownlineUser[]>("/users/downline");
-        if (alive) setDownline(data);
-      } catch (err) {
-        toast.error(extractApiError(err, "Failed to load network"));
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [accessToken, isRetailer]);
+  }, [hydrated, user, router]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    // Retailers only — upline roles redirect to /network. Customer CRM is placeholder.
+    setLoading(false);
+    setDownline([]);
+  }, [accessToken]);
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();

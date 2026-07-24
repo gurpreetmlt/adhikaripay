@@ -1,6 +1,7 @@
 import { and, count, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "../../db/postgres";
-import { users, transactions, commissionLedger, userHierarchy } from "../../db/postgres/schema";
+import { users, transactions, commissionLedger, userHierarchy, wallets } from "../../db/postgres/schema";
+import { HttpError } from "../../utils/httpError";
 import type { UserRole } from "@adhikaripay/shared-types";
 
 const todayStart = () => {
@@ -313,5 +314,70 @@ async function getSuperDistributorStats(userId: string) {
       todayCommission,
     },
     distributorPerformance: distPerformance,
+  };
+}
+
+/**
+ * "Float" here = own wallet balance (cash you can still deploy) plus the sum of every wallet
+ * balance already deployed into your downline. This is a real ledger read, not a projection —
+ * there's no cost-side/expense data modeled yet, so this stays a float + earnings view, not a
+ * true P&L. Distributor/Super Distributor only (retailers have no downline to deploy float into).
+ */
+export async function getFloatAndEarnings(userId: string, role: UserRole) {
+  if (role !== "distributor" && role !== "master_distributor") {
+    throw new HttpError(403, "Float planner is only available to distributors and Super Distributors", "FORBIDDEN");
+  }
+
+  const today = todayStart();
+  const weekStart = new Date(today);
+  weekStart.setDate(weekStart.getDate() - 6);
+  const monthStart = (() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  })();
+
+  const [ownMain] = await db
+    .select({ balance: wallets.balance })
+    .from(wallets)
+    .where(and(eq(wallets.userId, userId), eq(wallets.walletType, "main")))
+    .limit(1);
+
+  const descendantRows = await db
+    .select({ descendantId: userHierarchy.descendantId })
+    .from(userHierarchy)
+    .where(and(eq(userHierarchy.ancestorId, userId), gte(userHierarchy.depth, 1)));
+  const descendantIds = descendantRows.map((r) => r.descendantId);
+
+  let deployedFloat = "0";
+  if (descendantIds.length > 0) {
+    const [deployed] = await db
+      .select({ total: sql<string>`coalesce(sum(${wallets.balance}), '0')` })
+      .from(wallets)
+      .where(and(inArray(wallets.userId, descendantIds), eq(wallets.walletType, "main")));
+    deployedFloat = deployed?.total ?? "0";
+  }
+
+  async function commissionSince(from: Date): Promise<string> {
+    const [row] = await db
+      .select({ total: sql<string>`coalesce(sum(${commissionLedger.amount}), '0')` })
+      .from(commissionLedger)
+      .where(and(eq(commissionLedger.beneficiaryUserId, userId), gte(commissionLedger.createdAt, from)));
+    return row?.total ?? "0";
+  }
+
+  const [todayCommission, weekCommission, monthCommission] = await Promise.all([
+    commissionSince(today),
+    commissionSince(weekStart),
+    commissionSince(monthStart),
+  ]);
+
+  return {
+    ownBalance: ownMain?.balance ?? "0",
+    deployedFloat,
+    totalFloat: String(Number(ownMain?.balance ?? "0") + Number(deployedFloat)),
+    downlineCount: descendantIds.length,
+    commission: { today: todayCommission, week: weekCommission, month: monthCommission },
   };
 }

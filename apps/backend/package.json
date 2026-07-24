@@ -19,6 +19,7 @@
     "db:studio": "drizzle-kit studio",
     "seed:admin": "tsx scripts/seedAdmin.ts",
     "seed:catalog": "tsx scripts/seedCatalog.ts",
+    "seed:providers": "tsx scripts/seedProviders.ts",
     "seed:mpin": "tsx scripts/seedLoginMpin.ts",
     "seed:txns": "tsx scripts/seedTxns.ts",
     "seed:network": "tsx scripts/seedNetwork.ts"

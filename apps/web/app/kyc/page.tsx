@@ -20,6 +20,7 @@ import { B } from "@/lib/brand";
 import { useAuthStore } from "@/lib/store";
 import { useAuthHydrated } from "@/lib/useAuthHydrated";
 import api from "@/lib/api";
+import { formatAadhaar, stripAadhaar } from "@/lib/aadhaar";
 import type { ApiResponse, AuthUser } from "@adhikaripay/shared-types";
 
 const STEPS = [
@@ -263,8 +264,8 @@ export default function KycPage() {
               <Field
                 label="Aadhaar Number"
                 placeholder="XXXX XXXX XXXX"
-                value={form.aadhaar}
-                onChange={(v) => set("aadhaar", v.replace(/\D/g, "").slice(0, 12))}
+                value={formatAadhaar(form.aadhaar)}
+                onChange={(v) => set("aadhaar", stripAadhaar(v))}
               />
               <p className="text-xs" style={{ color: B.muted }}>
                 OTP verification will be required in production. For now, enter your 12-digit Aadhaar number.

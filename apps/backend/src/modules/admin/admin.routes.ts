@@ -18,6 +18,16 @@ import {
   listAdminTransactions,
   listCatalogAdmin,
   updateServiceSiteControl,
+  listProvidersAdmin,
+  updateProviderForCategory,
+  updateProviderServiceRow,
+  disableAllProvidersForCategory,
+  getAepsDmtRailInfo,
+  getNetworkTreeAdmin,
+  listAuditLogsAdmin,
+  getUserAncestorsAdmin,
+  listReconciliationMismatches,
+  listRiskAlerts,
 } from "./admin.service";
 
 export const adminRouter = Router();
@@ -46,6 +56,10 @@ adminRouter.get("/users", async (req, res) => {
 adminRouter.get("/users/:id", async (req, res) => {
   const detail = await getAdminUserDetail(req.params.id);
   sendSuccess(res, detail);
+});
+
+adminRouter.get("/users/:id/ancestors", async (req, res) => {
+  sendSuccess(res, await getUserAncestorsAdmin(req.params.id));
 });
 
 adminRouter.get("/users/:id/commissions", async (req, res) => {
@@ -119,9 +133,36 @@ adminRouter.get("/transactions", async (req, res) => {
     (TRANSACTION_STATUSES as readonly string[]).includes(req.query.status)
       ? (req.query.status as (typeof TRANSACTION_STATUSES)[number])
       : undefined;
+  const userId = typeof req.query.userId === "string" ? req.query.userId : undefined;
   const limit = Math.min(Number(req.query.limit) || 50, 200);
   const offset = Number(req.query.offset) || 0;
-  sendSuccess(res, await listAdminTransactions({ status, limit, offset }));
+  sendSuccess(res, await listAdminTransactions({ status, userId, limit, offset }));
+});
+
+adminRouter.get("/audit-logs", async (req, res) => {
+  const action = typeof req.query.action === "string" ? req.query.action : undefined;
+  const userId = typeof req.query.userId === "string" ? req.query.userId : undefined;
+  const q = typeof req.query.q === "string" ? req.query.q : undefined;
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const offset = Number(req.query.offset) || 0;
+  const result = await listAuditLogsAdmin({ action, userId, q, limit, offset });
+  sendSuccess(res, result);
+});
+
+adminRouter.get("/reconciliation", async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const offset = Number(req.query.offset) || 0;
+  sendSuccess(res, await listReconciliationMismatches({ limit, offset }));
+});
+
+adminRouter.get("/risk-alerts", async (req, res) => {
+  const windowHours = Math.min(Number(req.query.windowHours) || 24, 168);
+  const minFailures = Math.max(Number(req.query.minFailures) || 3, 1);
+  sendSuccess(res, await listRiskAlerts({ windowHours, minFailures }));
+});
+
+adminRouter.get("/network-tree", async (_req, res) => {
+  sendSuccess(res, await getNetworkTreeAdmin());
 });
 
 adminRouter.get("/catalog", async (_req, res) => {
@@ -135,8 +176,49 @@ adminRouter.patch("/catalog/services/:id", async (req, res) => {
       badge: z.string().max(20).nullable().optional(),
       isActive: z.boolean().optional(),
       name: z.string().min(2).max(120).optional(),
+      minAmount: z.string().max(20).nullable().optional(),
+      maxAmount: z.string().max(20).nullable().optional(),
     })
     .parse(req.body);
   const updated = await updateServiceSiteControl(req.auth.sub, req.params.id, body);
   sendSuccess(res, updated, "Service updated");
+});
+
+adminRouter.get("/providers", async (_req, res) => {
+  sendSuccess(res, { railInfo: getAepsDmtRailInfo(), categories: await listProvidersAdmin() });
+});
+
+adminRouter.patch("/providers/categories/:categoryId/provider/:providerId", async (req, res) => {
+  if (!req.auth) throw new HttpError(401, "Authentication required", "UNAUTHENTICATED");
+  const body = z
+    .object({
+      isActive: z.boolean().optional(),
+      priority: z.number().int().min(0).max(100).optional(),
+    })
+    .parse(req.body);
+  const updated = await updateProviderForCategory(
+    req.auth.sub,
+    req.params.categoryId,
+    req.params.providerId,
+    body,
+  );
+  sendSuccess(res, updated, "Provider updated");
+});
+
+adminRouter.post("/providers/categories/:categoryId/disable-all", async (req, res) => {
+  if (!req.auth) throw new HttpError(401, "Authentication required", "UNAUTHENTICATED");
+  const result = await disableAllProvidersForCategory(req.auth.sub, req.params.categoryId);
+  sendSuccess(res, result, "All providers disabled for this category");
+});
+
+adminRouter.patch("/providers/service/:providerServiceId", async (req, res) => {
+  if (!req.auth) throw new HttpError(401, "Authentication required", "UNAUTHENTICATED");
+  const body = z
+    .object({
+      isActive: z.boolean().optional(),
+      priority: z.number().int().min(0).max(100).optional(),
+    })
+    .parse(req.body);
+  const updated = await updateProviderServiceRow(req.auth.sub, req.params.providerServiceId, body);
+  sendSuccess(res, updated, "Provider updated");
 });

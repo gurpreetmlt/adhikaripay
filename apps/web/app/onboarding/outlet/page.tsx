@@ -7,6 +7,7 @@ import { MapPin, Store } from "lucide-react";
 import type { ApiResponse, AuthUser } from "@adhikaripay/shared-types";
 import { AppShell } from "@/components/layout/AppShell";
 import api from "@/lib/api";
+import { formatAadhaar, stripAadhaar } from "@/lib/aadhaar";
 import { B } from "@/lib/brand";
 import { extractApiError, nextOnboardingPath } from "@/lib/onboarding";
 import { useAuthStore } from "@/lib/store";
@@ -23,6 +24,7 @@ export default function RegisterOutletPage() {
 
   const [loading, setLoading] = useState(false);
   const [geoBusy, setGeoBusy] = useState(false);
+  const [resolvedAddress, setResolvedAddress] = useState("");
   const [form, setForm] = useState({
     name: "",
     mobile: "",
@@ -69,6 +71,38 @@ export default function RegisterOutletPage() {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  /**
+   * Free reverse-geocode (OpenStreetMap Nominatim — no API key/billing needed) so address/city/
+   * pincode auto-fill from GPS, LokalMart-seller-registration style. Best-effort: on failure we
+   * keep the captured lat/long (still usable for the InstantPay outlet geo requirement) and just
+   * leave the address fields for manual entry.
+   */
+  async function reverseGeocode(lat: number, lng: number) {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&addressdetails=1`,
+        { headers: { Accept: "application/json" } },
+      );
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        display_name?: string;
+        address?: Record<string, string>;
+      };
+      const addr = data.address ?? {};
+      const city = addr.city || addr.town || addr.village || addr.suburb || addr.county || "";
+      const pincode = addr.postcode || "";
+      setResolvedAddress(data.display_name ?? "");
+      setForm((f) => ({
+        ...f,
+        addressFull: f.addressFull || data.display_name || "",
+        city: f.city || city,
+        pincode: f.pincode || pincode,
+      }));
+    } catch {
+      // Silent — geolocation itself already succeeded, address autofill is a convenience only.
+    }
+  }
+
   function captureLocation() {
     if (!navigator.geolocation) {
       toast.error("Location not supported on this browser");
@@ -82,6 +116,7 @@ export default function RegisterOutletPage() {
         setForm((f) => ({ ...f, latitude, longitude }));
         setGeoBusy(false);
         toast.success("Current location selected");
+        void reverseGeocode(pos.coords.latitude, pos.coords.longitude);
       },
       (err) => {
         setGeoBusy(false);
@@ -249,9 +284,9 @@ export default function RegisterOutletPage() {
               <input
                 required
                 inputMode="numeric"
-                value={form.aadhaarNumber}
-                onChange={(e) => set("aadhaarNumber", e.target.value.replace(/\D/g, "").slice(0, 12))}
-                placeholder="12 digits"
+                value={formatAadhaar(form.aadhaarNumber)}
+                onChange={(e) => set("aadhaarNumber", stripAadhaar(e.target.value))}
+                placeholder="1234 1234 1234"
                 className={`${inputCls} font-mono`}
                 style={inputStyle}
               />
@@ -331,8 +366,15 @@ export default function RegisterOutletPage() {
                 : "Use current location"}
           </button>
 
+          {resolvedAddress && (
+            <p className="text-xs" style={{ color: B.blue }}>
+              📍 {resolvedAddress}
+            </p>
+          )}
+
           <p className="text-xs" style={{ color: B.muted }}>
-            Location is captured automatically (hidden). Must match InstantPay outlet geo requirements.
+            Address/city/pincode above auto-fill from your location — edit if not accurate. Must
+            match InstantPay outlet geo requirements.
           </p>
 
           <button

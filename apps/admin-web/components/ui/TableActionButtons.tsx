@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Eye, Pencil, Trash2, Ban, CheckCircle, Power } from "lucide-react";
+import { Eye, Pencil, Trash2, Ban, CheckCircle, Power, Move } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const btn =
@@ -20,6 +20,7 @@ export function TableActionButtons({
   onBan,
   onApprove,
   onToggleActive,
+  onMove,
   deleting,
   className,
 }: {
@@ -29,6 +30,7 @@ export function TableActionButtons({
   onBan?: () => void;
   onApprove?: () => void;
   onToggleActive?: () => void;
+  onMove?: () => void;
   deleting?: boolean;
   className?: string;
 }) {
@@ -78,6 +80,17 @@ export function TableActionButtons({
           style={btnStyle}
         >
           <Power className="h-4 w-4" />
+        </button>
+      ) : null}
+      {onMove ? (
+        <button
+          type="button"
+          onClick={onMove}
+          title="Move to different parent"
+          className={cn(btn, "text-violet-500 hover:border-violet-500/40 hover:bg-violet-500/10")}
+          style={btnStyle}
+        >
+          <Move className="h-4 w-4" />
         </button>
       ) : null}
       {onBan ? (

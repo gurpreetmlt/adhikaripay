@@ -52,6 +52,40 @@ history, wallet ledger, reconciliation).
 - **Redesigned to category-level grouping** (2026-07-21, user feedback: 30 individual BBPS tiles was noise since they all share one real provider). `listProvidersAdmin` now returns one row per `service_categories` row (DMT, AEPS, BBPS, ...) with one sub-row per distinct provider underneath — not per catalog tile. New endpoints: `PATCH /admin/providers/categories/:categoryId/provider/:providerId`, `POST /admin/providers/categories/:categoryId/disable-all` (both act on every `provider_services` row in that category at once). Old per-service endpoints removed.
 - `GET /admin/providers` now also returns `railInfo` (`getAepsDmtRailInfo()`) — read-only `{ mode, activeProviderCode, note }` sourced from `AEPS_PROVIDER_MODE`, shown as an info banner above the category list so AEPS/DMT aren't invisible, without pretending they're toggleable through this table.
 
+### 🔴 2026-07-21 — AEPS/DMT migrated onto provider_services (user-approved, read before touching)
+User explicitly asked to migrate AEPS/DMT off the single `AEPS_PROVIDER_MODE` switch so they're
+admin-toggleable like BBPS. Done:
+- `AEPS_ROUTED_SERVICE_CODES` (`aepsMode.ts`) trimmed to **Nepal remittance only** — AEPS/DMT
+  product operations (balance/withdraw/deposit/mini-statement/bank-list/Aadhaar-Pay/agent daily
+  2FA/DMT remitter-beneficiary-transfer-refund) now resolve via the normal multi-provider
+  `resolveProvidersForService` path.
+- **NOT migrated** (deliberately): Nepal remittance (`nepal_*`, `MONEY_TRANSFER`) and merchant
+  onboarding/eKYC (`onboarding.service.ts`) — these call InstantPay-specific endpoints directly,
+  not through `ProviderAdapter`, so there's nothing generic to route to yet. Still governed by
+  `AEPS_PROVIDER_MODE`.
+- `agentAuth.ts`'s daily-2FA core call already went through `resolveProvidersForService("agent_auth")`
+  — safe to migrate. Its `isInstantPayAepsMode()` check is only an optional InstantPay-specific
+  status enrichment (outlet login status), wrapped in try/catch — degrades gracefully under PaySprint.
+- [seedProviders.ts](../../apps/backend/scripts/seedProviders.ts) rewritten: adds two hidden
+  categories (`AEPS_RAIL`, `DMT_RAIL`, `serviceCategories.isActive=false` — never shown in the
+  retailer catalog), seeds a `services` row per AEPS/DMT operation code, and seeds all 3
+  providers (eko/instantpay/paysprint) per operation — **whichever matches the CURRENT
+  `AEPS_PROVIDER_MODE` at seed time is marked primary+active**, the other two present but
+  inactive, so running the seed does not silently change live routing. Re-run after changing
+  `AEPS_PROVIDER_MODE` in a fresh environment to keep them in sync.
+
+### 🟡 2026-07-21 — per-service granularity + pinned order (user feedback)
+- Category order pinned: **AEPS → DMT → everything else** (`PINNED_CATEGORY_ORDER` in `admin.service.ts`) without touching `serviceCategories.displayOrder` (that field also drives the retailer-facing tile grid — deliberately left alone).
+- Each category now also returns a `services[]` breakdown; the panel has a collapsible "View N individual services" sub-table so one biller (e.g. just "DTH") can be moved to a different provider independently of the rest of the rail. New endpoint: `PATCH /admin/providers/service/:providerServiceId` (single-row), alongside the existing category-level bulk endpoint.
+
+### ⚠️ Known gap admin must know before toggling PaySprint on for DMT
+Toggling only works per-category (all-or-nothing bulk), and PaySprint's DMT adapter is
+**partial** (Task 22): `dmtRemitterRegister`/`RegisterVerify`/`Kyc`/`dmtBankList` still throw
+`501 PROVIDER_NOT_IMPLEMENTED` (see `paysprint.adapter.ts`). **Do not activate PaySprint for the
+DMT category in the panel until Task 22's remaining DMT gap is closed** — beneficiary/transfer/
+refund would work, but a brand-new remitter couldn't register at all. AEPS is fully wired for
+PaySprint (all methods real), safe to toggle once UAT-tested.
+
 ## Session order
 Do Part A in its own chat. **Do Part B only after Task 24 ships** (attempt
 history + wallet-ledger UI needs the generalized hold/confirm + audit trail

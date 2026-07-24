@@ -3,7 +3,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, LogOut, Crown, Network, Store, Tags, Percent } from "lucide-react";
+import { ChevronDown, Crown, Network, Store, Tags, Percent, Plug, ScrollText, Scale, ShieldAlert, Wrench, LifeBuoy } from "lucide-react";
 import { AdhikariPayLogo } from "@/components/brand/Logo";
 import { AnimatedNavIcon } from "@/components/ui/AnimatedNavIcon";
 import type { NavIconDef } from "@/lib/iconTypes";
@@ -48,6 +48,23 @@ const SITE_CONTROL: NavItem[] = [
     children: [
       { href: "/site-control", label: "Service Badges", icon: { lib: "lucide", icon: Tags } },
       { href: "/commissions", label: "Commissions", icon: { lib: "lucide", icon: Percent } },
+      { href: "/reconciliation", label: "Reconciliation", icon: { lib: "lucide", icon: Scale } },
+      { href: "/risk-alerts", label: "Risk Alerts", icon: { lib: "lucide", icon: ShieldAlert } },
+      { href: "/recovery-workbench", label: "Recovery Workbench", icon: { lib: "lucide", icon: Wrench } },
+      { href: "/support-tickets", label: "Support Tickets", icon: { lib: "lucide", icon: LifeBuoy } },
+    ],
+  },
+];
+
+const DEVELOPER_OPTIONS: NavItem[] = [
+  {
+    type: "group",
+    id: "developer",
+    label: "Developer Options",
+    icon: { lib: "lucide", icon: Plug },
+    children: [
+      { href: "/developer-options/providers", label: "Providers", icon: { lib: "lucide", icon: Plug } },
+      { href: "/audit-logs", label: "Audit Log", icon: { lib: "lucide", icon: ScrollText } },
     ],
   },
 ];
@@ -186,6 +203,7 @@ function SidebarNav({
         [
           { title: "Full Control", items: OPERATIONS },
           { title: "Platform", items: SITE_CONTROL },
+          { title: "Developer", items: DEVELOPER_OPTIONS },
         ] as const
       ).map((section) => (
         <div key={section.title}>
@@ -219,13 +237,11 @@ function SidebarNav({
 function SidebarPanel({
   openGroups,
   onToggleGroup,
-  onLogout,
   onNavigate,
   userCard,
 }: {
   openGroups: Record<string, boolean>;
   onToggleGroup: (id: string) => void;
-  onLogout: () => void;
   onNavigate?: () => void;
   userCard: ReactNode;
 }) {
@@ -245,25 +261,6 @@ function SidebarPanel({
       </div>
       {userCard}
       <SidebarNav openGroups={openGroups} onToggleGroup={onToggleGroup} onNavigate={onNavigate} />
-      <div className="border-t px-2 py-4" style={{ borderColor: "var(--admin-sidebar-border)" }}>
-        <button
-          type="button"
-          onClick={onLogout}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all"
-          style={{ color: "var(--admin-sidebar-muted)" }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--admin-sidebar-hover)";
-            e.currentTarget.style.color = "var(--admin-sidebar-text-active)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.color = "var(--admin-sidebar-muted)";
-          }}
-        >
-          <LogOut size={18} />
-          <span>Logout</span>
-        </button>
-      </div>
     </aside>
   );
 }
@@ -281,7 +278,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const next: Record<string, boolean> = {};
-    for (const item of [...OPERATIONS, ...SITE_CONTROL]) {
+    for (const item of [...OPERATIONS, ...SITE_CONTROL, ...DEVELOPER_OPTIONS]) {
       if (item.type === "group" && groupActive(pathname, item.children)) {
         next[item.id] = true;
       }
@@ -289,12 +286,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
     if (Object.keys(next).length) setOpenGroups((g) => ({ ...g, ...next }));
     setDrawer(false);
   }, [pathname]);
-
-  async function handleLogout() {
-    const { logoutEverywhere } = await import("@/lib/logout");
-    await logoutEverywhere();
-    window.location.href = "/login";
-  }
 
   function toggleGroup(id: string) {
     setOpenGroups((g) => ({ ...g, [id]: !g[id] }));
@@ -336,7 +327,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
         <SidebarPanel
           openGroups={openGroups}
           onToggleGroup={toggleGroup}
-          onLogout={handleLogout}
           userCard={userCard}
         />
       </div>
@@ -353,7 +343,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <SidebarPanel
               openGroups={openGroups}
               onToggleGroup={toggleGroup}
-              onLogout={handleLogout}
               onNavigate={() => setDrawer(false)}
               userCard={userCard}
             />

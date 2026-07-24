@@ -78,10 +78,9 @@ const envSchema = z.object({
   /** Optional override; default is InstantPay production host for both sandbox and live accounts. */
   INSTANTPAY_BASE_URL: z.string().url().optional(),
   /**
-   * PaySprint AEPS credentials. Docs (PaySprint/Unimplemented/) leave UAT base URL, AES
-   * mode/padding, and JWT timestamp unit as "confirm with PaySprint" — these are best-effort
-   * defaults (ms timestamp, AES-128-CBC/PKCS7) until PaySprint confirms otherwise. Fail-closed:
-   * sandbox/live modes refuse to start without all of these set.
+   * PaySprint AEPS credentials. Docs (PaySprint/Unimplemented/) leave UAT base URL and AES
+   * mode/padding as "confirm with PaySprint" — AES-128-CBC/PKCS7 is a best-effort default until
+   * confirmed. Fail-closed: sandbox/live modes refuse to start without all of these set.
    */
   PAYSPRINT_PARTNER_ID: z.string().optional(),
   PAYSPRINT_JWT_SECRET: z.string().optional(),
@@ -92,8 +91,13 @@ const envSchema = z.object({
   /** Not in docs (marked "confirm with PaySprint") — must be set explicitly before sandbox/live use. */
   PAYSPRINT_UAT_BASE_URL: z.string().url().optional(),
   PAYSPRINT_LIVE_BASE_URL: z.string().url().default("https://api.paysprint.in/service-api/api/v1/service"),
-  /** JWT payload timestamp unit — docs are self-contradictory (ms vs seconds); confirm with PaySprint. */
-  PAYSPRINT_JWT_TIMESTAMP_UNIT: z.enum(["ms", "s"]).default("ms"),
+  /**
+   * JWT payload timestamp unit — PaySprint's Authentication doc prose states "Timestamp is in
+   * seconds ... valid for <=5 minutes" (confirmed 2026-07-21), even though one of their own C#
+   * code samples uses milliseconds. Trusting the prose over the sample code, per the docs' own
+   * gotcha ("trust partner sample over polluted reference material").
+   */
+  PAYSPRINT_JWT_TIMESTAMP_UNIT: z.enum(["ms", "s"]).default("s"),
   /** Max km from registered outlet for AEPS txns (InstantPay best practice: 2–3 km). */
   AEPS_GEOFENCE_KM: z.coerce.number().positive().default(3),
   /** Days without AEPS activity before merchant is treated as dormant. */
