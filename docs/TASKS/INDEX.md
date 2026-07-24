@@ -38,6 +38,9 @@
 | 10 | DMT | L ⚠️ split | [10-retailer-dmt.md](10-retailer-dmt.md) |
 | 14 | BBPS & recharge | M | [14-retailer-bbps-recharge.md](14-retailer-bbps-recharge.md) |
 | 21 | InstantPay adapter | L ⚠️ split | [21-instantpay-adapter.md](21-instantpay-adapter.md) |
+| 22 | PaySprint adapter (DMT+AEPS) | L ⚠️ split | [22-paysprint-adapter.md](22-paysprint-adapter.md) |
+| 23 | Admin: Providers panel + Txns | L ⚠️ split, order 23A→24→23B | [23-provider-admin-panel.md](23-provider-admin-panel.md) |
+| 24 | Financial-safety layer | L ⚠️ split | [24-financial-safety-layer.md](24-financial-safety-layer.md) |
 
 ## Mobile (Android)
 | # | Task | Size | File |

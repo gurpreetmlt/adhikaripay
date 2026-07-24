@@ -1,6 +1,6 @@
 # InstantPay — Overview
 
-> Source: InstantPay developer docs — Overview page. Raw reference for Adhikari Pay agents. Implementation status lives in service-specific docs (`AEPS.md`, `DMT.md`, etc.).
+> Source: InstantPay developer docs — Overview page. Raw reference (not implemented). **Implement cheat-sheet:** [`OVERVIEW_DETAILS.md`](OVERVIEW_DETAILS.md). Implemented rails: `../AEPS.md`, `../DMT.md`, etc.
 
 **Provider:** InstantPay
 **Doc type:** Platform overview (not a rail)

@@ -63,7 +63,9 @@ const envSchema = z.object({
    * - dummy: MockAdapter (eko) — real RD PID + KYC still required; no InstantPay HTTP
    * - instantpay_sandbox / instantpay_live: real InstantPay adapter (fail-closed if creds missing)
    */
-  AEPS_PROVIDER_MODE: z.enum(["dummy", "instantpay_sandbox", "instantpay_live"]).default("dummy"),
+  AEPS_PROVIDER_MODE: z
+    .enum(["dummy", "instantpay_sandbox", "instantpay_live", "paysprint_sandbox", "paysprint_live"])
+    .default("dummy"),
   INSTANTPAY_CLIENT_ID: z.string().optional(),
   INSTANTPAY_CLIENT_SECRET: z.string().optional(),
   /** Auth code header — InstantPay docs use fixed "1". */
@@ -75,6 +77,23 @@ const envSchema = z.object({
   INSTANTPAY_AES_KEY: z.string().optional(),
   /** Optional override; default is InstantPay production host for both sandbox and live accounts. */
   INSTANTPAY_BASE_URL: z.string().url().optional(),
+  /**
+   * PaySprint AEPS credentials. Docs (PaySprint/Unimplemented/) leave UAT base URL, AES
+   * mode/padding, and JWT timestamp unit as "confirm with PaySprint" — these are best-effort
+   * defaults (ms timestamp, AES-128-CBC/PKCS7) until PaySprint confirms otherwise. Fail-closed:
+   * sandbox/live modes refuse to start without all of these set.
+   */
+  PAYSPRINT_PARTNER_ID: z.string().optional(),
+  PAYSPRINT_JWT_SECRET: z.string().optional(),
+  PAYSPRINT_AES_KEY: z.string().optional(),
+  PAYSPRINT_AES_IV: z.string().optional(),
+  /** Required on UAT per provider docs; not required on Live. */
+  PAYSPRINT_AUTHORISED_KEY: z.string().optional(),
+  /** Not in docs (marked "confirm with PaySprint") — must be set explicitly before sandbox/live use. */
+  PAYSPRINT_UAT_BASE_URL: z.string().url().optional(),
+  PAYSPRINT_LIVE_BASE_URL: z.string().url().default("https://api.paysprint.in/service-api/api/v1/service"),
+  /** JWT payload timestamp unit — docs are self-contradictory (ms vs seconds); confirm with PaySprint. */
+  PAYSPRINT_JWT_TIMESTAMP_UNIT: z.enum(["ms", "s"]).default("ms"),
   /** Max km from registered outlet for AEPS txns (InstantPay best practice: 2–3 km). */
   AEPS_GEOFENCE_KM: z.coerce.number().positive().default(3),
   /** Days without AEPS activity before merchant is treated as dormant. */
@@ -94,7 +113,7 @@ export const env = parsed.data;
 
 /** Fail-closed: sandbox/live must have InstantPay credentials — never silent-fallback to dummy. */
 export function assertAepsProviderConfig(): void {
-  if (env.AEPS_PROVIDER_MODE === "dummy") return;
+  if (!isInstantPayAepsMode()) return;
   const missing: string[] = [];
   if (!env.INSTANTPAY_CLIENT_ID) missing.push("INSTANTPAY_CLIENT_ID");
   if (!env.INSTANTPAY_CLIENT_SECRET) missing.push("INSTANTPAY_CLIENT_SECRET");
@@ -109,6 +128,30 @@ export function assertAepsProviderConfig(): void {
 
 export function isInstantPayAepsMode(): boolean {
   return env.AEPS_PROVIDER_MODE === "instantpay_sandbox" || env.AEPS_PROVIDER_MODE === "instantpay_live";
+}
+
+export function isPaySprintAepsMode(): boolean {
+  return env.AEPS_PROVIDER_MODE === "paysprint_sandbox" || env.AEPS_PROVIDER_MODE === "paysprint_live";
+}
+
+/** Fail-closed: PaySprint sandbox/live must have all credentials — never silent-fallback. */
+export function assertPaySprintProviderConfig(): void {
+  if (!isPaySprintAepsMode()) return;
+  const missing: string[] = [];
+  if (!env.PAYSPRINT_PARTNER_ID) missing.push("PAYSPRINT_PARTNER_ID");
+  if (!env.PAYSPRINT_JWT_SECRET) missing.push("PAYSPRINT_JWT_SECRET");
+  if (!env.PAYSPRINT_AES_KEY) missing.push("PAYSPRINT_AES_KEY");
+  if (!env.PAYSPRINT_AES_IV) missing.push("PAYSPRINT_AES_IV");
+  if (env.AEPS_PROVIDER_MODE === "paysprint_sandbox") {
+    if (!env.PAYSPRINT_AUTHORISED_KEY) missing.push("PAYSPRINT_AUTHORISED_KEY");
+    if (!env.PAYSPRINT_UAT_BASE_URL) missing.push("PAYSPRINT_UAT_BASE_URL");
+  }
+  if (missing.length) {
+    throw new Error(
+      `AEPS_PROVIDER_MODE=${env.AEPS_PROVIDER_MODE} requires ${missing.join(", ")}. ` +
+        "Set credentials or switch AEPS_PROVIDER_MODE=dummy. Silent fallback to dummy is not allowed.",
+    );
+  }
 }
 
 /** Never expose OTP over the wire in production, even if the env flag is mis-set. */
