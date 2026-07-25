@@ -28,6 +28,9 @@ apps/login.text
 # Keys, certs, signing
 *.pem
 *.key
+
+# AWS resources (EC2 key pairs, connection scripts with server IPs)
+/AsanPay Aws/
 *.p12
 *.pfx
 *.jks
