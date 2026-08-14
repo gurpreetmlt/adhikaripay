@@ -32,8 +32,8 @@
     "sync:icons": "bash scripts/sync-icons.sh"
   },
   "devDependencies": {
-    "tsx": "^4.19.4",
-    "turbo": "^2.5.4",
-    "typescript": "^5.8.3"
+    "tsx": "^4.23.12",
+    "turbo": "^2.10.9",
+    "typescript": "^7.0.2"
   }
 }
